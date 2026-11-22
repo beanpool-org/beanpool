@@ -125,7 +125,7 @@ describe('find by name: the look-up', () => {
     // Its server refuses every line across to each of them. Mutation (PR body): myHome's one home only -> the last two open a box.
     for (const home of ['b.example', 'oldb.example', 'formerb.example']) {
         it(`a card at ${home}, one of this community's own addresses: they are in this community, and no box opens`, async () => {
-            said.info = { addresses: ['b.example', 'oldb.example'], primaryAddress: 'b.example', formerAddresses: ['formerb.example'] };
+            said.info = { addresses: ['b.example', 'oldb.example'], primaryAddress: 'b.example', formerAddresses: ['formerb.example'], formerExcludesLost: true };
             here.found = await signAddressCard({ key: WREN.key, home, name: 'Wren Tallowmere' }, ed25519Signer(hexToBytes(WREN.seed)));
             render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);
             await find(home, 'wren tallowmere');
@@ -135,8 +135,10 @@ describe('find by name: the look-up', () => {
     }
 
     // #3354 review, round 6: a name this page read as its own that it answers now it isn't (lost), and one it doesn't answer for:
-    // the card's own box, as ever. Mutation (PR body): what the page read decides -> no box opens.
-    for (const [why, now] of [['it answers without it now', { addresses: ['b.example'], primaryAddress: 'b.example' }], ['it does not answer', null]] as const) {
+    // the card's own box, as ever. So is one an older server lists only as a name it had, which may be lost (it doesn't say the lost
+    // ones are left out). Mutation (PR body): what the page read decides -> no box opens.
+    for (const [why, now] of [['it answers without it now', { addresses: ['b.example'], primaryAddress: 'b.example' }], ['it does not answer', null],
+        ['an older server answers only that it had it before', { addresses: ['b.example'], primaryAddress: 'b.example', formerAddresses: ['oldb.example'] }]] as const) {
         it(`a card at a name this page read as this community's own, and ${why}: on to the box`, async () => {
             said.info = { addresses: ['b.example', 'oldb.example'], primaryAddress: 'b.example' };
             said.now = now;

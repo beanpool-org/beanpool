@@ -12,8 +12,9 @@
  *
  * **The invariant** (#3354 review, round 4: each round had found one more chat Message opened that no line could go from):
  * Message never opens, picks as the existing chat, or makes a chat the member can't write in now. A direct chat is writable
- * where the member is. A chat across is only while all three hold, and {@link messagePathFor} asks them of every one: Chat
- * lists it ({@link acrossChatListed}); the community that carries it takes messages from other communities and has an address
+ * where the member is (a community that removed them is none the device holds: the app leaves it out of `held`). A chat
+ * across is only while all three hold, and {@link messagePathFor} asks them of every one: Chat lists it ({@link
+ * acrossChatListed}); the community that carries it takes messages from other communities and has an address
  * of its own to send from (`takesAcross`; community-homes.ts saysNoHome); and its person is for certain in none of the
  * communities the device shares with them (`whose`: community-homes.ts whoseName, the address card's rule). Its carrier
  * refuses every line to one of its own names for good, and in another the direct chat there is the one to write in. A chat

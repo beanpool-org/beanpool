@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { readRecoveryCopiesRule, type RecoveryCopiesRule } from './vault-config';
-import { featureModeFor, normaliseLang, saysNoHome, shapeFeaturesOf, word, type FeatureMode, type Lang, type ShowcaseFeature, type WordKey } from '@beanpool/core';
+import { addressOf, featureModeFor, normaliseLang, saysNames, saysNoHome, shapeFeaturesOf, word, type FeatureMode, type Lang, type SaidAddresses, type ShowcaseFeature, type WordKey } from '@beanpool/core';
 
 /** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
 export { GLOBAL_NODE_URL };
@@ -241,16 +241,49 @@ export interface NodeProfile {
      * host this phone uses, the phone offers to follow it, after checking it is the same community (utils/address-follow.ts).
      */
     primaryAddress?: string;
-    /**
-     * The names it had before (`formerAddresses` in its info), when it had any: its server still answers as them, and they
-     * are never an address to go to. A contact saved at one is in this community (utils/community-homes.ts), nothing more.
-     */
+    /** The names it had before (`formerAddresses` in its info), when it had any: never an address to go to. */
     formerAddresses?: string[];
+    /**
+     * What it says of its own names, whole, as @beanpool/core reads an address ({@link OwnNames}): what utils/community-homes.ts
+     * weighs. `addresses` above are the hosts a link can be. Null: heard, and it says nothing of them, or more than are kept.
+     * Absent only from a copy an older build kept, and read from its hosts (getCachedNodeProfile).
+     */
+    ownNames?: OwnNames | null;
     /**
      * It said it knows no address of its own now (core saysNoHome: none published, or `primaryAddress` null), so its server
      * sends nothing to another community (utils/message-anyone.ts). Absent: it has one, or doesn't say.
      */
     noHome?: true;
+}
+
+/**
+ * A community's own names as its info says them, each in core's one spelling (address-list.ts addressOf, as its signed list
+ * has them), an IPv6 number included. One left out would read as none of its names, whatever its signed list says (#3354
+ * review, final re-check), so nothing else is asked of one.
+ */
+export interface OwnNames {
+    addresses: string[];
+    primaryAddress?: string;
+    formerAddresses: string[];
+    /** It says it leaves the names it lost out of `formerAddresses` (core community-homes.ts). */
+    formerExcludesLost?: true;
+}
+
+/** More names than this are not kept, and not cut short either: the info then says nothing of them. */
+const MAX_OWN_NAMES = 64;
+
+/** {@link OwnNames} of an info answer, or of the copy of one this phone keeps; null when it says nothing of its names. */
+function readOwnNames(said: SaidAddresses): OwnNames | null {
+    if (!saysNames(said)) return null;
+    const addresses = said.addresses as unknown[];
+    const former = Array.isArray(said.formerAddresses) ? said.formerAddresses as unknown[] : [];
+    if (addresses.length + former.length > MAX_OWN_NAMES) return null;
+    const homes = (list: readonly unknown[]) => [...new Set(list.flatMap((a) => (typeof a === 'string' ? addressOf(a) ?? [] : [])))];
+    const main = typeof said.primaryAddress === 'string' ? addressOf(said.primaryAddress) : null;
+    return {
+        addresses: homes(addresses), ...(main ? { primaryAddress: main } : {}), formerAddresses: homes(former),
+        ...(said.formerExcludesLost === true ? { formerExcludesLost: true as const } : {}),
+    };
 }
 
 /** A bare host as a node's info names its own: letters, digits, hyphens and dots, an optional port, nothing else. */
@@ -314,7 +347,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
     const b = body as {
         profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown; addresses?: unknown; primaryAddress?: unknown; formerAddresses?: unknown;
-        recoveryCopies?: unknown; pollOther?: unknown; noHome?: unknown;
+        recoveryCopies?: unknown; pollOther?: unknown; noHome?: unknown; formerExcludesLost?: unknown; ownNames?: unknown;
     };
     const features: NodeFeatures = {};
     // Said beside `features` by the node (routes/community.ts), kept among them here.
@@ -344,6 +377,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         ...(language ? { language } : {}),
         recoveryCopies: readRecoveryCopiesRule(b.recoveryCopies),
         ...ownAddresses(b.addresses, b.primaryAddress, b.formerAddresses),
+        ownNames: readOwnNames(b.ownNames && typeof b.ownNames === 'object' ? b.ownNames as SaidAddresses : b),
         ...(b.noHome === true || saysNoHome(b) ? { noHome: true as const } : {}),
     };
 }
@@ -382,6 +416,9 @@ export async function getCachedNodeProfile(url: string | null | undefined): Prom
     if (profile && !('recoveryCopies' in cached)) delete profile.recoveryCopies;
     // Said by the node, never worked out from the copy: the addresses kept leave out one no link can be (ownHosts).
     if (profile && cached.noHome !== true) delete profile.noHome;
+    // Heard by this build, and it says nothing of its names, whole: none are worked out from the hosts kept, which may be a list
+    // cut short. A copy an older build kept has no `ownNames`: its hosts are names it said, and only add doubt (community-homes.ts).
+    if (profile && 'ownNames' in cached && !cached.ownNames) profile.ownNames = null;
     return profile;
 }
 

@@ -64,8 +64,10 @@ const mem = vi.hoisted(() => ({
     // The held handles closed again (db.ts closeHeldCopies), #3302 review F3.
     closes: 0,
     // What the community in use says of its addresses, asked now (#3354 review round 4); and each other one, by its address.
-    saysNow: {} as { addresses?: string[]; primaryAddress?: string; formerAddresses?: string[]; noHome?: true },
+    saysNow: {} as { addresses?: string[]; primaryAddress?: string; formerAddresses?: string[]; formerExcludesLost?: true; noHome?: true },
     saysThere: {} as Record<string, { addresses?: string[]; primaryAddress?: string; formerAddresses?: string[] }>,
+    // A held community's answer to the membership probe: status and body. Not said: the account is a member there.
+    standing: {} as Record<string, [number, unknown]>,
 }));
 // The store loads Expo's file system, AsyncStorage and the share sheet with require() (utils/contacts-store.ts
 // phoneContactsDeps, use-contacts.ts shareContactsFile), which vi.mock doesn't reach: Node's loader hands these out instead.
@@ -195,7 +197,14 @@ vi.mock('../outside-chat-live', () => ({
     outsideMessagesHere: async () => mem.outsideOn,
     // What a community answers now (#3354 review round 4): its switch, and its addresses.
     answerNow: async (at: string) => (at === 'https://riverside.example' || mem.saysThere[at]
-        ? { profile: 'local', features: { outsideMessages: mem.outsideOn }, checkedAt: '2026-11-22T00:00:00.000Z', ...(mem.saysThere[at] ?? mem.saysNow) } : null),
+        ? (await import('../node-profile')).readNodeProfile({ profile: 'local', features: { outsideMessages: mem.outsideOn }, ...(mem.saysThere[at] ?? mem.saysNow) }) : null),
+}));
+// How the account stands in a held community Message would go to (utils/message-anyone.ts standingNow).
+vi.mock('../membership-probe', () => ({
+    fetchMembership: async (community: string) => {
+        const [status, body] = mem.standing[community] ?? [200, { isMember: true, callsign: 'me' }];
+        return new Response(JSON.stringify(body), { status });
+    },
 }));
 // The real outside-mail.ts loads for its chatsShown: its signing (utils/crypto.ts) needs expo-crypto, never asked here.
 vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
@@ -250,6 +259,7 @@ vi.mock('../nodes', () => ({
 import { newContactId, nodeHomeOf, putContact, removeEveryContact, emptyContactsList, type ContactsList } from '@beanpool/core';
 import ContactsScreen from '../../app/contacts';
 import type { HereChat } from '../message-anyone';
+import { readNodeProfile } from '../node-profile';
 import { makeCommunityRecord, resetCommunityIndexForTests, setCommunityIndex } from '../community-index';
 import { changeContacts, emptySyncState, loadContacts, phoneContactsDeps } from '../contacts-store';
 import { syncContacts } from '../contacts-sync';
@@ -317,7 +327,7 @@ const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhon
 // Message's readers load on first use (utils/message-anyone.ts imports them lazily): loaded once here, so no row's settle()
 // is spent loading them and a first tap never lands in the next row.
 beforeAll(async () => {
-    await Promise.all([import('../held-chats'), import('../outside-mail'), import('../block-rules'), import('../dm-blocked'), import('../outside-chat-live')]);
+    await Promise.all([import('../held-chats'), import('../outside-mail'), import('../block-rules'), import('../dm-blocked'), import('../outside-chat-live'), import('../membership-probe')]);
 });
 beforeEach(() => {
     mem.former = false; mem.formerDeleted = 0; mem.deleteAnswer = { here: true, complete: true }; mem.chats = []; mem.friends = []; mem.events.clear();
@@ -327,7 +337,7 @@ beforeEach(() => {
     mem.book = []; mem.queries.length = 0; mem.picked = null; mem.settings = 0;
     mem.chatsHere = []; mem.heldDirect = {}; mem.acrossHere = []; mem.heldAcross = {}; mem.noAcrossContext = false; mem.outsideOn = true;
     mem.acrossBlocked = false; mem.cards = [];
-    mem.seenThere = []; mem.once = []; mem.listsUnreadable = false; mem.closes = 0; mem.saysNow = {}; mem.saysThere = {};
+    mem.seenThere = []; mem.once = []; mem.listsUnreadable = false; mem.closes = 0; mem.saysNow = {}; mem.saysThere = {}; mem.standing = {};
     resetCommunityIndexForTests();
     mem.store.set('beanpool_anchor_url', RIVERSIDE);
     vi.mocked(syncContacts).mockClear();
@@ -710,16 +720,23 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
             mem.saysNow = { addresses: ['riverside.example', 'oldriver.example'], primaryAddress: 'riverside.example' };
             mem.saysThere[RIVERBEND] = { addresses: ['riverbend.example', 'oldbend.example'], primaryAddress: 'riverbend.example' };
         };
-        const SAYS = (more: Record<string, unknown>, community = RIVERSIDE) => mem.store.set('beanpool_node_profiles', JSON.stringify({
-            [community]: { profile: 'local', features: { outsideMessages: true }, checkedAt: '2026-11-22T00:00:00.000Z', ...more },
-        }));
+        /** What a community says, as this phone keeps it (node-profile.ts). */
+        const keptOf = (more: Record<string, unknown>) => readNodeProfile({ profile: 'local', features: { outsideMessages: true }, ...more });
+        const SAYS = (more: Record<string, unknown>, community = RIVERSIDE) => mem.store.set('beanpool_node_profiles', JSON.stringify({ [community]: keptOf(more) }));
+        /** Each answers with its older name, which the copies an older build kept hold too: hosts alone, nothing of `ownNames`. */
+        const OLDER_BUILD_KEPT = () => {
+            MOVED_AND_SAYS_SO();
+            setCommunityIndex([]);
+            const copy = (said: Record<string, unknown>) => ({ profile: 'local', features: { outsideMessages: true }, checkedAt: '2026-11-20T00:00:00.000Z', recoveryCopies: 'vault', ...said });
+            mem.store.set('beanpool_node_profiles', JSON.stringify({ [RIVERSIDE]: copy(mem.saysNow), [RIVERBEND]: copy(mem.saysThere[RIVERBEND]) }));
+        };
         const OFF = () => { SAYS({ features: { outsideMessages: false } }); mem.outsideOn = false; };
         const DIRECT_HERE = { pushed: '/chat/conv-1', started: [['dm', [ME.publicKey, ANA], ME.publicKey]] };
         const IN_PLACE = { pushed: { pathname: '/chat/[id]', params: { id: 'conv-1', community: RIVERBEND, communityName: 'Riverbend' } }, started: [['dm', [ME.publicKey, ANA], ME.publicKey, undefined, undefined, RIVERBEND]] };
         const ROWS: Array<{ name: string; link: string; set: () => void; pushed?: unknown; started?: unknown[]; alert?: string }> = [
             { name: 'a contact at the older main address of the community in use: the direct chat here', link: OLD_MAIN, set: MOVED_AND_SAYS_SO, ...DIRECT_HERE },
             { name: 'another of its addresses, by its info: the direct chat here', link: ALIAS, set: () => { mem.saysNow = { addresses: ['riverside.example', 'river.example'] }; SAYS(mem.saysNow); }, ...DIRECT_HERE },
-            { name: 'a name it had before, by its info: the direct chat here', link: OLD_MAIN, set: () => { mem.saysNow = { addresses: ['riverside.example'], formerAddresses: ['oldriver.example'] }; SAYS(mem.saysNow); }, ...DIRECT_HERE },
+            { name: 'a name it had before, by its info: the direct chat here', link: OLD_MAIN, set: () => { mem.saysNow = { addresses: ['riverside.example'], formerAddresses: ['oldriver.example'], formerExcludesLost: true }; SAYS(mem.saysNow); }, ...DIRECT_HERE },
             { name: 'its info says so only now (a move this phone has not heard of): nothing made, the direct chat here', link: ALIAS,
                 set: () => { SAYS({ addresses: ['riverside.example'] }); mem.saysNow = { addresses: ['riverside.example', 'river.example'], primaryAddress: 'river.example' }; }, ...DIRECT_HERE },
             { name: 'a dead chat across from before (its home is an older main): the direct chat here, never that chat', link: OLD_MAIN,
@@ -733,6 +750,12 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
                 set: () => { OFF(); mem.acrossHere = [{ id: 'x-open', peerKey: ANA, peerHome: 'faraway.example', state: 'open' }]; }, ...DIRECT_HERE },
             { name: 'the same, with no community shared: refused, and says why', link: FARAWAY,
                 set: () => { OFF(); mem.acrossHere = [{ id: 'x-open', peerKey: ANA, peerHome: 'faraway.example', state: 'open' }]; }, alert: "This community doesn't take messages from other communities." },
+            // The copy an older build kept (#3359 review): no record, no signed list, the name on that copy alone.
+            { name: 'a dead chat across kept with a name only the info an older build kept holds: the direct chat here, never that chat', link: RIVERSIDE,
+                set: () => { OLDER_BUILD_KEPT(); mem.acrossHere = [{ id: 'x-dead', peerKey: ANA, peerHome: 'oldriver.example', state: 'open' }]; }, ...DIRECT_HERE },
+            { name: 'the same of a held community, in its file: the direct chat there, in place', link: RIVERBEND,
+                set: () => { HELD(); OLDER_BUILD_KEPT(); mem.heldAcross[RIVERBEND] = [{ id: 'x-dead', peerKey: ANA, peerHome: 'oldbend.example', state: 'open' }]; }, ...IN_PLACE },
+            { name: 'a contact at such a name of a held community, no chat: the direct chat there, in place', link: HELD_OLD, set: () => { HELD(); OLDER_BUILD_KEPT(); }, ...IN_PLACE },
             { name: 'on a guest\'s look, a direct chat the member already has there opens', link: RIVERSIDE,
                 set: () => { HELD(); mem.store.set('beanpool_guest_nodes', JSON.stringify([RIVERSIDE])); mem.chatsHere = [hereDm('d-guest', ANA)]; }, pushed: '/chat/d-guest' },
             { name: 'on a guest\'s look, no chat there: none is started or made', link: RIVERSIDE,
@@ -762,7 +785,9 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
             { name: 'a held one, which does not answer; its record alone holds it', link: HELD_OLD, community: 'oldbend.example', set: () => { HELD(); MOVED(); } },
             { name: 'both answer that it is theirs', link: ALIAS, community: 'river.example',
                 set: () => { HELD(); mem.saysNow = { addresses: ['riverside.example', 'river.example'] }; mem.saysThere[RIVERBEND] = { addresses: ['riverbend.example', 'river.example'] };
-                    mem.store.set('beanpool_node_profiles', JSON.stringify({ [RIVERSIDE]: { features: {}, addresses: ['river.example'] }, [RIVERBEND]: { features: {}, addresses: ['river.example'] } })); } },
+                    mem.store.set('beanpool_node_profiles', JSON.stringify({ [RIVERSIDE]: keptOf({ addresses: ['river.example'] }), [RIVERBEND]: keptOf({ addresses: ['river.example'] }) })); } },
+            { name: 'an older server lists it as one it had before, and doesn\'t say the lost ones are left out', link: OLD_MAIN, community: 'oldriver.example',
+                set: () => { mem.saysNow = { addresses: ['riverside.example'], formerAddresses: ['oldriver.example'] }; SAYS(mem.saysNow); } },
             { name: 'said only as the chat across is made, of an address that answered this phone as something else', link: ALIAS, community: 'river.example',
                 set: () => { setCommunityIndex([{ ...makeCommunityRecord(RIVERSIDE), refused: { [ALIAS]: { at: 1, why: 'key' } } }]); mem.saysNow = { addresses: ['riverside.example', 'river.example'] }; } },
         ];
@@ -782,6 +807,30 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
             expect(switchCommunity).not.toHaveBeenCalled();
             await answer('Switch');
             expect(vi.mocked(switchCommunity).mock.calls.map((c) => c[0])).toEqual([at]);
+        });
+
+        /**
+         * A held community that removed the member stays on the phone, its chats too, and refuses the account everything: Message
+         * goes on as for a community the phone doesn't hold. Mutation (PR body): never asked -> the chat there opens.
+         */
+        it.each([
+            { name: 'the direct chat there', set: () => { mem.heldDirect[RIVERBEND] = [{ id: 'd-held', type: 'dm', peerPubkey: ANA, peerKeys: [ANA] }]; } },
+            { name: 'a chat across kept in its file', set: () => { mem.heldAcross[RIVERBEND] = [{ id: 'x-held', peerKey: ANA, state: 'open' }]; } },
+            { name: 'no chat there yet', set: () => {} },
+        ])('removed from the held community the contact is in ($name): a chat across to them, nothing opened or started there', async ({ set }) => {
+            HELD();
+            set();
+            mem.standing[RIVERBEND] = [403, { error: 'closed', code: 'account_closed' }];
+            await seedList((l) => putContact(l, person('Ana Li', { links: [link(ANA, RIVERBEND, 'ana')] })));
+            await render();
+            const { createConversationApi } = await import('../db');
+            vi.mocked(createConversationApi).mockClear();
+            mem.pushed.length = 0;
+            await press('Message');
+            expect(mem.alerts).toEqual([]);
+            expect(mem.cards).toEqual([{ key: ANA, home: 'riverbend.example', name: 'Ana Li' }]);
+            expect(mem.pushed).toEqual([`/outside-chat/across-${ANA.slice(0, 4)}`]);
+            expect(vi.mocked(createConversationApi).mock.calls).toEqual([]);
         });
 
         it('a name it lost, still on its record: its community answers without it, so across to the one that has it now', async () => {

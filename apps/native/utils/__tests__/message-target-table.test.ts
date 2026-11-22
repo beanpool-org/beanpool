@@ -3,7 +3,8 @@
  * the member could not write in, so the class is closed here): (the contact's address: the community in use and a held one, at
  * its main, an older main, another of its names, one it had before, one on its signed list only; a name either of them LOST, to
  * a community the phone does not hold or to the other one, still on this phone's copies of it; one two of them say is theirs;
- * another community) x (what they answer now: what their names are / nothing) x (the chats there are: none, direct here, direct
+ * another community; and the names only an older server says it had before, which may be lost) x (what they answer now: what their
+ * names are / nothing) x (how the account stands in the held community: a member, a visitor, removed) x (the chats there are: none, direct here, direct
  * held, across open / request / declined, across dead because its person is here, across to a held community or to a lost
  * name, and the same in a held community's file) x (the community in use: a member's or a guest's look, taking messages from
  * other communities or not, or with no address of its own to send from) x (a block: on the phone's list, seen only on another
@@ -18,7 +19,8 @@
  * what this phone KEEPS of it are three tables, each written out (round 5: the names a server answers as were made from the
  * list it publishes; round 6: no lost name was ever on the kept signed list, so the list was a way in that no row asked).
  * Then rows for what the table's fixed world can't hold: info heard only now, a saved row of the same community, a community
- * that claims another's address.
+ * that claims another's address, the info an older build kept (its own table: the copy x where else the name is held x the
+ * chats x answered or not).
  *
  * Real: message-anyone, community-homes, community-index, held-chats, outside-chat-live, outside-mail's list and card, dm-blocked,
  * node-profile, nodes, core. In memory: the database module's reads, the phone's storage, and the info a server answers.
@@ -39,6 +41,8 @@ const phone = vi.hoisted(() => ({
     files: new Map<string, Map<string, any>>(),
     /** What each server answers of itself now, by origin; absent: no answer. */
     info: new Map<string, unknown>(),
+    /** Every request a community was sent, in order: its info (the names), or the account's own standing there. */
+    asked: [] as string[],
     /** The people this phone's copy of a community has as members (its sync): that server's, unless a row says otherwise. */
     copyOf: (_community: string): Set<string> => new Set(),
 }));
@@ -51,6 +55,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
+// Signed at no cost: the probe's own signing is membership-probe's, and these rows ask it thousands of times.
+vi.mock('../crypto', async (importOriginal) => ({ ...(await importOriginal<typeof import('../crypto')>()), buildSignedHeaders: async () => ({}) }));
 vi.mock('../identity', () => ({ loadIdentity: async () => ({ publicKey: ME, privateKey: 'f0'.repeat(32), callsign: 'Me' }) }));
 vi.mock('../blocklist', () => ({
     getBlockedUsers: async () => phone.blocked, isUserBlocked: async (k: string) => phone.blocked.includes(k),
@@ -102,6 +108,8 @@ interface Server {
     /** Whether it has an address to sign as (ownNodeHome): without one it answers every send 503 no_home. */
     home: boolean;
     members: Set<string>;
+    /** Accounts it removed (state-engine.ts: the row pruned): every request of theirs is refused, 403 account_closed. */
+    removed: Set<string>;
 }
 /** lakeside: a community this phone does not hold; it holds names that Riverside and Hillside lost. */
 let SERVERS: Record<'riverside' | 'hillside' | 'faraway' | 'lakeside', Server>;
@@ -121,6 +129,8 @@ function whyNotWritable(t: Opened | { at: 'switch'; address: string }): string |
         const server = t.at === 'here' ? SERVERS.riverside : SERVERS.hillside;
         const there = (t.at === 'here' ? phone.directHere : phone.directHeld).some((c) => c.peerPubkey === t.key);
         if (t.existing && !there) return 'no such chat there';
+        // A member it removed writes nothing there at all, in a chat it already has or a new one.
+        if (server.removed.has(ME)) return 'its server takes nothing of a member it removed (403 account_closed)';
         // A visitor may write in a chat it already has, and starts none; a member starts one with a member.
         if (!server.members.has(ME)) return t.existing ? null : 'a visitor starts no chat';
         return server.members.has(t.key) ? null : 'they are not there';
@@ -128,6 +138,7 @@ function whyNotWritable(t: Opened | { at: 'switch'; address: string }): string |
     const [server, file] = t.at === 'openHeld' ? [SERVERS.hillside, HILLSIDE] as const : [SERVERS.riverside, RIVERSIDE] as const;
     const chat = phone.files.get(file)?.get(t.chat);
     if (!chat || chat.peerKey !== t.key) return 'no such chat in that file';
+    if (server.removed.has(ME)) return 'its server takes nothing of a member it removed (403 account_closed)';
     if (!server.members.has(ME)) return 'its server takes a line across from members alone';
     if (chat.state !== 'open' && chat.state !== 'request') return `a ${chat.state} chat has no composer`;
     if (!server.takesAcross) return 'its server takes no messages from other communities';
@@ -162,37 +173,44 @@ const record = (id: string, using: string, peerId: string, list: string[] | null
 });
 /**
  * What each community answers of its own names now (its info), written out, never read from SERVERS: every name its server
- * answers as, as a real server lists them. Both are servers from before round 5 for the names taken*: each still lists as a
- * name it had before one it lost, which the other goes by now.
+ * answers as, as a real server lists them. For the names taken* neither has heard yet that it lost one: each still lists as a
+ * name it had before one the other goes by now.
  */
 interface Told { addresses: string[]; primaryAddress: string | null; formerAddresses: string[] }
 let TOLD: Record<'riverside' | 'hillside', Told>;
+/**
+ * Both run a server from before `formerExcludesLost` (version skew): its info doesn't say it, and lists a name it lost among
+ * the ones it had before (AGED). One that says it may list a lost name still only until it hears it lost it (taken*).
+ */
+let OLDER = false;
+const AGED = { riverside: 'agedriver.example', hillside: 'agedhill.example' };
 /** What each said when this phone last heard its info; its signed list (LISTS) and its record (PROVED) are older or newer, each as it was then. */
 const KEPT: Record<'riverside' | 'hillside', Told> = {
     riverside: { addresses: ['riverside.example', 'oldriver.example', 'river.example', 'goneriver.example', 'wentriver.example', 'wenthill.example', 'takenhill.example'], primaryAddress: 'riverside.example', formerAddresses: ['beforeriver.example', 'takenriver.example'] },
     hillside: { addresses: ['hillside.example', 'oldhill.example', 'hill.example', 'gonehill.example', 'wenthill.example', 'wentriver.example', 'takenriver.example'], primaryAddress: 'hillside.example', formerAddresses: ['beforehill.example', 'takenhill.example'] },
 };
 const LISTS = {
-    riverside: ['oldriver.example', 'river.example', 'listedriver.example', 'lostriver.example', 'goneriver.example', 'wentriver.example'],
-    hillside: ['oldhill.example', 'hill.example', 'listedhill.example', 'losthill.example', 'gonehill.example', 'wenthill.example'],
+    riverside: ['oldriver.example', 'river.example', 'listedriver.example', 'lostriver.example', 'goneriver.example', 'wentriver.example', 'agedriver.example'],
+    hillside: ['oldhill.example', 'hill.example', 'listedhill.example', 'losthill.example', 'gonehill.example', 'wenthill.example', 'agedhill.example'],
 };
 const PROVED = {
-    riverside: ['beforeriver.example', 'lostriver.example', 'goneriver.example', 'wentriver.example'],
-    hillside: ['beforehill.example', 'losthill.example', 'gonehill.example', 'wenthill.example'],
+    riverside: ['beforeriver.example', 'lostriver.example', 'goneriver.example', 'wentriver.example', 'agedriver.example'],
+    hillside: ['beforehill.example', 'losthill.example', 'gonehill.example', 'wenthill.example', 'agedhill.example'],
 };
-const infoOf = (server: Server, told: Told) => ({
-    profile: 'local', features: { outsideMessages: server.takesAcross }, checkedAt: '2026-11-22T00:00:00.000Z',
-    addresses: [...told.addresses], primaryAddress: server.home ? told.primaryAddress : null, formerAddresses: [...told.formerAddresses],
+const infoOf = (side: 'riverside' | 'hillside', told: Told) => ({
+    profile: 'local', features: { outsideMessages: SERVERS[side].takesAcross }, checkedAt: '2026-11-22T00:00:00.000Z',
+    addresses: [...told.addresses], primaryAddress: SERVERS[side].home ? told.primaryAddress : null,
+    ...(OLDER ? { formerAddresses: [...told.formerAddresses, AGED[side]] } : { formerAddresses: [...told.formerAddresses], formerExcludesLost: true }),
 });
 /** What each answers, asked now. */
 function saysNow(): void {
-    phone.info.set(RIVERSIDE, infoOf(SERVERS.riverside, TOLD.riverside));
-    phone.info.set(HILLSIDE, infoOf(SERVERS.hillside, TOLD.hillside));
+    phone.info.set(RIVERSIDE, infoOf('riverside', TOLD.riverside));
+    phone.info.set(HILLSIDE, infoOf('hillside', TOLD.hillside));
 }
 const keep = (infos: Iterable<[string, unknown]>) =>
     phone.store.set('beanpool_node_profiles', JSON.stringify(Object.fromEntries([...infos].map(([at, said]) => [at, readNodeProfile(said)]))));
 /** As this phone last heard each (node-profile.ts): the table's own KEPT. */
-const kept = () => keep([[RIVERSIDE, infoOf(SERVERS.riverside, KEPT.riverside)], [HILLSIDE, infoOf(SERVERS.hillside, KEPT.hillside)]]);
+const kept = () => keep([[RIVERSIDE, infoOf('riverside', KEPT.riverside)], [HILLSIDE, infoOf('hillside', KEPT.hillside)]]);
 /** This phone heard what each answers now. */
 const heard = () => keep(phone.info);
 
@@ -202,12 +220,13 @@ const RECORDS = () => [record('https://oldriver.example', RIVERSIDE, 'peer-river
 beforeEach(() => {
     phone.store.clear();
     phone.blocked = []; phone.seenThere = []; phone.directHere = []; phone.directHeld = [];
-    phone.files.clear(); phone.info.clear();
+    phone.files.clear(); phone.info.clear(); phone.asked = [];
+    OLDER = false;
     SERVERS = {
-        riverside: { names: ['riverside.example', 'oldriver.example', 'river.example', 'listedriver.example', 'beforeriver.example', 'wenthill.example', 'takenhill.example'], takesAcross: true, home: true, members: new Set([ME]) },
-        hillside: { names: ['hillside.example', 'oldhill.example', 'hill.example', 'listedhill.example', 'beforehill.example', 'wentriver.example', 'takenriver.example'], takesAcross: true, home: true, members: new Set([ME]) },
-        faraway: { names: ['faraway.example'], takesAcross: true, home: true, members: new Set() },
-        lakeside: { names: ['lakeside.example', 'lostriver.example', 'losthill.example', 'goneriver.example', 'gonehill.example'], takesAcross: true, home: true, members: new Set() },
+        riverside: { names: ['riverside.example', 'oldriver.example', 'river.example', 'listedriver.example', 'beforeriver.example', 'wenthill.example', 'takenhill.example'], takesAcross: true, home: true, members: new Set([ME]), removed: new Set() },
+        hillside: { names: ['hillside.example', 'oldhill.example', 'hill.example', 'listedhill.example', 'beforehill.example', 'wentriver.example', 'takenriver.example'], takesAcross: true, home: true, members: new Set([ME]), removed: new Set() },
+        faraway: { names: ['faraway.example'], takesAcross: true, home: true, members: new Set(), removed: new Set() },
+        lakeside: { names: ['lakeside.example', 'lostriver.example', 'losthill.example', 'goneriver.example', 'gonehill.example', 'agedriver.example', 'agedhill.example'], takesAcross: true, home: true, members: new Set(), removed: new Set() },
     };
     TOLD = {
         riverside: { addresses: ['riverside.example', 'oldriver.example', 'river.example', 'listedriver.example', 'wenthill.example', 'takenhill.example'], primaryAddress: 'riverside.example', formerAddresses: ['beforeriver.example', 'takenriver.example'] },
@@ -220,11 +239,24 @@ beforeEach(() => {
     // Both moved to a new main address once, and the phone followed each (addresses S4).
     setCommunityIndex(RECORDS());
     vi.stubGlobal('fetch', async (url: string) => {
+        phone.asked.push(url);
         const said = phone.info.get(new URL(url).origin);
         if (!said) throw new Error('no answer');
-        return new Response(JSON.stringify(said), { status: 200 });
+        return url.includes(MEMBERSHIP) ? membershipAnswer(serverNamed(hostOf(url))!) : new Response(JSON.stringify(said), { status: 200 });
     });
 });
+const MEMBERSHIP = '/api/community/membership/';
+/** A server's answer to the account's own membership probe (routes/community.ts; a removed account's: https-server.ts's signature gate). */
+const membershipAnswer = (server: Server): Response => (server.removed.has(ME)
+    ? new Response(JSON.stringify({ error: 'closed', code: 'account_closed' }), { status: 403 })
+    : new Response(JSON.stringify({ isMember: server.members.has(ME), callsign: null, isRecovering: false }), { status: 200 }));
+/** How the account stands in the held community. A removed member, and a visitor, are none of its members. */
+const REMOVE = () => { SERVERS.hillside.members.delete(ME); SERVERS.hillside.removed.add(ME); };
+const HELD_AS = {
+    'a member of the held one': () => {},
+    'a visitor in the held one': () => { SERVERS.hillside.members.delete(ME); },
+    'removed from the held one': REMOVE,
+} as const;
 
 /** Every across chat on the phone, by file. */
 const onDisk = () => [...phone.files].flatMap(([file, chats]) => [...chats.values()].map((c) => ({ file, ...c })));
@@ -234,13 +266,15 @@ type Who = 'in use' | 'held' | 'foreign' | 'unsure';
 /** The chats that put the person in a copy this phone keeps: with a name that community lost, where they are is then in doubt. */
 const IN_RIVERSIDE = ['direct here', 'across, dead: its home is an older main here', 'across, dead: its home is another name here'];
 const IN_HILLSIDE = ['direct held', 'across, to a held community', 'across, to a name two say is theirs', 'across in the held file, dead: its home is another name there'];
+/** Both servers older than `formerExcludesLost`: a name each lists only as one it had before may be lost, so it is unsure. */
+const OLD = { who: 'unsure', quiet: 'unsure', older: true } as const;
 /**
  * `who`: whose it is by what they answer now. `quiet`: by what this phone keeps when neither answers (left out: not in the
  * quiet rows, below the table). `server`: the server that has the person, where it isn't `who`'s. `doubt`: the chats with which
  * it is unsure though they answer (the person has a row in the copy of the community that lost it). Kept, for each: R the
  * record, L the signed list, I the last info.
  */
-const ADDRESSES: Array<{ name: string; who: Who; quiet?: Who; url: string; server?: keyof typeof SERVERS; doubt?: string[] }> = [
+const ADDRESSES: Array<{ name: string; who: Who; quiet?: Who; url: string; server?: keyof typeof SERVERS; doubt?: string[]; older?: boolean }> = [
     { name: 'in use, its main', who: 'in use', quiet: 'in use', url: RIVERSIDE },
     { name: 'in use, an older main (R L I)', who: 'in use', quiet: 'in use', url: 'https://oldriver.example' },
     { name: 'in use, another of its names (L I)', who: 'in use', quiet: 'unsure', url: 'https://river.example', server: 'riverside' },
@@ -257,8 +291,14 @@ const ADDRESSES: Array<{ name: string; who: Who; quiet?: Who; url: string; serve
     { name: 'a name the held one lost, to another community, nothing heard since (R L I)', who: 'foreign', url: 'https://gonehill.example', server: 'lakeside', doubt: IN_HILLSIDE },
     { name: 'a name the one in use lost, to the held one (R L I; the held one\'s I)', who: 'held', quiet: 'unsure', url: 'https://wentriver.example', server: 'hillside', doubt: IN_RIVERSIDE },
     { name: 'a name the held one lost, to the one in use (R L I; the one in use\'s I)', who: 'in use', quiet: 'unsure', url: 'https://wenthill.example', server: 'riverside', doubt: IN_HILLSIDE },
-    { name: 'two say it: the held one goes by it, the one in use lists it as a name it had (an older server)', who: 'unsure', quiet: 'unsure', url: 'https://takenriver.example', server: 'hillside' },
-    { name: 'two say it: the one in use goes by it, the held one lists it as a name it had (an older server)', who: 'unsure', quiet: 'unsure', url: 'https://takenhill.example', server: 'riverside' },
+    { name: 'two say it: the held one goes by it, the one in use lists it as a name it had (it has not heard it lost it)', who: 'unsure', quiet: 'unsure', url: 'https://takenriver.example', server: 'hillside' },
+    { name: 'two say it: the one in use goes by it, the held one lists it as a name it had (it has not heard it lost it)', who: 'unsure', quiet: 'unsure', url: 'https://takenhill.example', server: 'riverside' },
+    { name: 'two say it: the held one goes by it, the one in use lists it as a name it had (an older server)', url: 'https://takenriver.example', server: 'hillside', ...OLD },
+    { name: 'two say it: the one in use goes by it, the held one lists it as a name it had (an older server)', url: 'https://takenhill.example', server: 'riverside', ...OLD },
+    { name: 'an older server in use: a name it had before and answers as still (R I)', url: 'https://beforeriver.example', server: 'riverside', ...OLD },
+    { name: 'an older server held: a name it had before and answers as still (R I)', url: 'https://beforehill.example', server: 'hillside', ...OLD },
+    { name: 'an older server in use: a name it lost to another community, listed still as one it had (R L I)', url: 'https://agedriver.example', server: 'lakeside', ...OLD },
+    { name: 'an older server held: a name it lost to another community, listed still as one it had (R L I)', url: 'https://agedhill.example', server: 'lakeside', ...OLD },
     { name: 'another community', who: 'foreign', quiet: 'foreign', url: FARAWAY },
 ];
 const HOME_OF: Record<Who, 'riverside' | 'hillside' | 'faraway'> = { 'in use': 'riverside', held: 'hillside', foreign: 'faraway', unsure: 'faraway' };
@@ -286,25 +326,30 @@ const STATES = {
 type Wants = [string, string, string];
 const NONE: Wants = ['here held new switch', 'here held off switch', 'no-community held no-community switch'];
 const ALL = (one: string): Wants => [0, 1, 2].map(() => Array(4).fill(one).join(' ')) as Wants;
-const CHATS: Record<string, { set: () => void; WANT: Wants; QUIET?: Wants }> = {
+/**
+ * OUT: the same where the account was removed from the held community, or is a visitor there: it is none of the member's, its
+ * people are in another community, and no chat of it counts but, a visitor's, a direct one (VISITOR; left out: as OUT).
+ */
+const NONE_OUT: Wants = ['here new new switch', 'here off off switch', 'no-community no-community no-community switch'];
+const CHATS: Record<string, { set: () => void; WANT: Wants; QUIET?: Wants; OUT: Wants; VISITOR?: Wants }> = {
     //              member, on / member, off / a guest's look
-    'none': { set: () => {}, WANT: NONE },
-    'direct here': { set: () => { phone.directHere = [dm('d-here')]; SERVERS.riverside.members.add(K); }, WANT: ALL('here') },
-    'direct held': { set: () => { phone.directHeld = [dm('d-held')]; SERVERS.hillside.members.add(K); }, WANT: ALL('held') },
-    'across, open': { set: across(RIVERSIDE, 'faraway.example'), WANT: ['open open open open', NONE[1], NONE[2]] },
-    'across, a request': { set: across(RIVERSIDE, 'faraway.example', 'request'), WANT: ['open open open open', NONE[1], NONE[2]] },
-    'across, declined': { set: across(RIVERSIDE, 'faraway.example', 'declined'), WANT: NONE },
-    'across, dead: its home is an older main here': { set: across(RIVERSIDE, 'oldriver.example'), WANT: ['here held here here', 'here held here here', NONE[2]] },
-    'across, dead: its home is another name here': { set: across(RIVERSIDE, 'river.example'), WANT: ['here held here here', 'here held here here', NONE[2]], QUIET: NONE },
-    'across, open: its home is a name the one in use lost': { set: across(RIVERSIDE, 'lostriver.example'), WANT: ['open open open open', NONE[1], NONE[2]], QUIET: NONE },
-    'across, to a held community': { set: across(RIVERSIDE, 'oldhill.example'), WANT: ['here held held held', 'here held held held', NONE[2]] },
-    'across, to a name two say is theirs': { set: across(RIVERSIDE, 'takenriver.example'), WANT: NONE },
-    'across in the held file, open': { set: across(HILLSIDE, 'faraway.example'), WANT: ALL('openHeld') },
-    'across in the held file, a request': { set: across(HILLSIDE, 'faraway.example', 'request'), WANT: ALL('openHeld') },
-    'across in the held file, declined': { set: across(HILLSIDE, 'faraway.example', 'declined'), WANT: NONE },
-    'across in the held file, dead: its home is another name there': { set: across(HILLSIDE, 'hill.example'), WANT: ['here held held held', 'here held held held', 'held held held held'], QUIET: NONE },
-    'across in the held file, open, the held community takes none': { set: () => { across(HILLSIDE, 'faraway.example')(); SERVERS.hillside.takesAcross = false; }, WANT: NONE },
-    'across in the held file, open, the held community has no address of its own to send from': { set: () => { across(HILLSIDE, 'faraway.example')(); SERVERS.hillside.home = false; }, WANT: NONE },
+    'none': { set: () => {}, WANT: NONE, OUT: NONE_OUT },
+    'direct here': { set: () => { phone.directHere = [dm('d-here')]; SERVERS.riverside.members.add(K); }, WANT: ALL('here'), OUT: ALL('here') },
+    'direct held': { set: () => { phone.directHeld = [dm('d-held')]; SERVERS.hillside.members.add(K); }, WANT: ALL('held'), OUT: NONE_OUT, VISITOR: ALL('held') },
+    'across, open': { set: across(RIVERSIDE, 'faraway.example'), WANT: ['open open open open', NONE[1], NONE[2]], OUT: ['open open open open', NONE_OUT[1], NONE_OUT[2]] },
+    'across, a request': { set: across(RIVERSIDE, 'faraway.example', 'request'), WANT: ['open open open open', NONE[1], NONE[2]], OUT: ['open open open open', NONE_OUT[1], NONE_OUT[2]] },
+    'across, declined': { set: across(RIVERSIDE, 'faraway.example', 'declined'), WANT: NONE, OUT: NONE_OUT },
+    'across, dead: its home is an older main here': { set: across(RIVERSIDE, 'oldriver.example'), WANT: ['here held here here', 'here held here here', NONE[2]], OUT: ['here here here here', 'here here here here', NONE_OUT[2]] },
+    'across, dead: its home is another name here': { set: across(RIVERSIDE, 'river.example'), WANT: ['here held here here', 'here held here here', NONE[2]], QUIET: NONE, OUT: ['here here here here', 'here here here here', NONE_OUT[2]] },
+    'across, open: its home is a name the one in use lost': { set: across(RIVERSIDE, 'lostriver.example'), WANT: ['open open open open', NONE[1], NONE[2]], QUIET: NONE, OUT: ['open open open open', NONE_OUT[1], NONE_OUT[2]] },
+    'across, to a held community': { set: across(RIVERSIDE, 'oldhill.example'), WANT: ['here held held held', 'here held held held', NONE[2]], OUT: ['open open open open', NONE_OUT[1], NONE_OUT[2]] },
+    'across, to a name two say is theirs': { set: across(RIVERSIDE, 'takenriver.example'), WANT: NONE, OUT: NONE_OUT },
+    'across in the held file, open': { set: across(HILLSIDE, 'faraway.example'), WANT: ALL('openHeld'), OUT: NONE_OUT },
+    'across in the held file, a request': { set: across(HILLSIDE, 'faraway.example', 'request'), WANT: ALL('openHeld'), OUT: NONE_OUT },
+    'across in the held file, declined': { set: across(HILLSIDE, 'faraway.example', 'declined'), WANT: NONE, OUT: NONE_OUT },
+    'across in the held file, dead: its home is another name there': { set: across(HILLSIDE, 'hill.example'), WANT: ['here held held held', 'here held held held', 'held held held held'], QUIET: NONE, OUT: NONE_OUT },
+    'across in the held file, open, the held community takes none': { set: () => { across(HILLSIDE, 'faraway.example')(); SERVERS.hillside.takesAcross = false; }, WANT: NONE, OUT: NONE_OUT },
+    'across in the held file, open, the held community has no address of its own to send from': { set: () => { across(HILLSIDE, 'faraway.example')(); SERVERS.hillside.home = false; }, WANT: NONE, OUT: NONE_OUT },
 };
 const WHO: Who[] = ['in use', 'held', 'foreign', 'unsure'];
 const BLOCKS = {
@@ -314,20 +359,24 @@ const BLOCKS = {
 } as const;
 const ANSWERS = { 'they answer': true, 'neither answers': false } as const;
 
-const ROWS = ADDRESSES.flatMap((address) => Object.entries(ANSWERS).flatMap(([answer, answers]) => (!answers && !address.quiet ? [] : Object.entries(CHATS).flatMap(([chats, { set, WANT, QUIET }]) =>
-    Object.entries(STATES).flatMap(([state, s]) => Object.entries(BLOCKS).map(([block, b]) => {
+/** Not a member of the held one: it says so only where it answers, and a block is asked before anything (one column of it). */
+const STANDINGS = (answers: boolean) => Object.entries(HELD_AS).filter(([held]) => answers || held === 'a member of the held one');
+const ROWS = ADDRESSES.flatMap((address) => Object.entries(ANSWERS).flatMap(([answer, answers]) => (!answers && !address.quiet ? [] : Object.entries(CHATS).flatMap(([chats, { set, WANT, QUIET, OUT, VISITOR }]) =>
+    Object.entries(STATES).flatMap(([state, s]) => STANDINGS(answers).flatMap(([held, stand]) => Object.entries(BLOCKS).filter(([block]) => stand === HELD_AS['a member of the held one'] || block === 'no block').map(([block, b]) => {
         const who = answers ? (address.doubt?.includes(chats) ? 'unsure' : address.who) : address.quiet!;
-        const code = (answers ? WANT : QUIET ?? WANT)[s.column].split(' ')[WHO.indexOf(who)];
-        return { row: `${address.name} x ${answer} x ${chats} x ${state} x ${block}`, address, answers, set, state: s, block: b, want: b.refused ? 'blocked' : code === 'off' ? s.off : code };
-    }))))));
+        const wants = !answers ? QUIET ?? WANT : held === 'a member of the held one' ? WANT : held === 'removed from the held one' ? OUT : VISITOR ?? OUT;
+        const code = wants[s.column].split(' ')[WHO.indexOf(who)];
+        return { row: `${address.name} x ${answer} x ${chats} x ${state} x ${held} x ${block}`, address, answers, set, state: s, stand, block: b, want: b.refused ? 'blocked' : code === 'off' ? s.off : code };
+    })))))));
 
 describe('Message on the phone: where it goes, and a line can go from there', () => {
-    it('the table is the whole of it: every address, answer, chat, state and block', () => {
-        expect(ROWS.length).toBe((19 + 17) * 17 * 5 * 3);
+    it('the table is the whole of it: every address, answer, chat, state, standing in the held one, and block', () => {
+        expect(ROWS.length).toBe(((25 + 23) * 3 + 25 * 2) * 17 * 5);
     });
 
     // Named in full: a title made by it.each is cut short.
-    for (const { row, address, answers, set, state, block, want } of ROWS) it(row, async () => {
+    for (const { row, address, answers, set, state, stand, block, want } of ROWS) it(row, async () => {
+        OLDER = address.older === true;
         SERVERS[address.server ?? HOME_OF[address.who]].members.add(K);
         SERVERS.riverside.takesAcross = state.on;
         SERVERS.riverside.home = state.home;
@@ -336,6 +385,7 @@ describe('Message on the phone: where it goes, and a line can go from there', ()
             phone.store.set('beanpool_guest_nodes', JSON.stringify([RIVERSIDE]));
         }
         set();
+        stand();
         kept();
         if (answers) saysNow();
         block.set();
@@ -629,8 +679,11 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         saysNow(); heard();
         vi.stubGlobal('fetch', async (url: string) => { asked.push(url); throw new Error('no answer'); });
         expect(word(await message(at(RIVERSIDE)))).toBe('here');
-        expect(word(await message(at(HILLSIDE)))).toBe('held');
         expect(asked).toEqual([]);
+        // Of its names, nothing is asked of a held one at its address either: only how the account stands there.
+        expect(word(await message(at(HILLSIDE)))).toBe('held');
+        expect(asked).toEqual([`${HILLSIDE}${MEMBERSHIP}${ME}`]);
+        asked.length = 0;
         expect(word(await message(at('https://river.example')))).toBe('switch');
         expect(asked).toEqual([`${RIVERSIDE}/api/community/info`]);
     });
@@ -642,6 +695,295 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         vi.stubGlobal('fetch', async (url: string) => { asked.push(url); throw new Error('no answer'); });
         for (const url of ['https://lostriver.example', 'https://takenriver.example', 'https://river.example']) expect(word(await message(at(url)))).toBe('here');
         expect(asked).toEqual([]);
+    });
+
+    // ── a held community the member was removed from: it stays on the phone, its chats too ──
+    const STANDS = `${HILLSIDE}${MEMBERSHIP}${ME}`;
+    it.each([
+        { name: 'it answers that it closed the account', set: REMOVE, want: 'new' },
+        { name: 'retired there as an empty duplicate', set: () => {}, says: [403, { code: 'account_retired' }], want: 'new' },
+        { name: 'its key there replaced by a re-key', set: () => {}, says: [403, { code: 'key_invalidated' }], want: 'new' },
+        { name: 'a visitor there: the chat is theirs to answer in', set: () => { SERVERS.hillside.members.delete(ME); }, want: 'held' },
+        { name: 'a member there', set: () => {}, want: 'held' },
+        { name: 'a stranger to it, its reads for members only', set: () => { SERVERS.hillside.members.delete(ME); }, says: [403, { code: 'members_only' }], want: 'held' },
+        { name: 'a recovery under way there for the key: not settled', set: () => {}, says: [200, { isMember: false, isRecovering: true }], want: 'held' },
+        { name: 'it answers with something else: as this phone holds it', set: () => {}, says: [500, { error: 'busy' }], want: 'held' },
+        { name: 'it answers with no JSON: as this phone holds it', set: () => {}, says: [200, null], want: 'held' },
+        { name: 'no chat there yet, a member there', set: () => {}, none: true, want: 'held' },
+        { name: 'no chat there yet, a visitor there (it would start none)', set: () => { SERVERS.hillside.members.delete(ME); }, none: true, want: 'new' },
+        { name: 'no chat there yet, removed', set: REMOVE, none: true, want: 'new' },
+        { name: 'no chat there yet, its key there replaced by a re-key', set: () => {}, says: [403, { code: 'key_invalidated' }], none: true, want: 'new' },
+        { name: 'no chat there yet, a recovery under way: not settled, as this phone holds it', set: () => {}, says: [200, { isMember: false, isRecovering: true }], none: true, want: 'held' },
+        { name: 'no chat there yet, signed by another key as far as it can tell: no answer', set: () => {}, says: [403, { code: 'not_your_key' }], none: true, want: 'held' },
+    ] as Array<{ name: string; set: () => void; says?: [number, unknown]; none?: boolean; want: string }>)('a direct chat in a held community: $name -> $want', async ({ set, says, none, want }) => {
+        saysNow(); heard();
+        SERVERS.hillside.members.add(K); SERVERS.faraway.members.add(K);
+        if (!none) phone.directHeld = [dm('d-held')];
+        set();
+        const real = fetch;
+        vi.stubGlobal('fetch', async (url: string) => {
+            if (says && url === STANDS) return new Response(says[1] === null ? '<html>' : JSON.stringify(says[1]), { status: says[0] });
+            return real(url);
+        });
+        const got = await message(at(none ? HILLSIDE : FARAWAY));
+        expect(word(got)).toBe(want);
+        if (!says) expect(nowhere(got)).toBeNull();
+    });
+
+    it('removed, and that community does not answer: nothing on this phone says so, so its chat opens, as Chat opens it; asked again at the next tap', async () => {
+        saysNow(); heard(); REMOVE();
+        phone.directHeld = [dm('d-held')]; SERVERS.hillside.members.add(K); SERVERS.faraway.members.add(K);
+        phone.info.delete(HILLSIDE);
+        const got = await message(at(FARAWAY));
+        expect(word(got)).toBe('held');
+        // The one thing this leaves: a line there is refused, with words, once its server answers.
+        expect(nowhere(got)).toBe('its server takes nothing of a member it removed (403 account_closed)');
+        saysNow();
+        expect(word(await message(at(FARAWAY)))).toBe('new');
+    });
+
+    it('asked at most once a tap, and only where it decides: never beside a chat here, nor for a contact of neither with no chat', async () => {
+        saysNow(); heard(); SERVERS.faraway.members.add(K);
+        expect(word(await message(at(FARAWAY)))).toBe('new');
+        expect(phone.asked.filter((u) => u.includes(MEMBERSHIP))).toEqual([]);
+        phone.directHere = [dm('d-here')]; phone.directHeld = [dm('d-held')]; SERVERS.riverside.members.add(K); SERVERS.hillside.members.add(K);
+        expect(word(await message(at(HILLSIDE)))).toBe('here');
+        expect(phone.asked.filter((u) => u.includes(MEMBERSHIP))).toEqual([]);
+        phone.directHere = [];
+        expect(word(await message(at('https://hill.example')))).toBe('held');
+        expect(phone.asked.filter((u) => u.includes(MEMBERSHIP))).toEqual([STANDS]);
+    });
+
+    it('a standing that does not come in time: as this phone holds it, after the deadline and no later', async () => {
+        saysNow(); heard();
+        phone.directHeld = [dm('d-held')]; SERVERS.hillside.members.add(K);
+        // The first one loads the modules it needs, before the clock is held.
+        expect(word(await message(at(FARAWAY)))).toBe('held');
+        vi.useFakeTimers();
+        try {
+            vi.stubGlobal('fetch', (_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+            }));
+            let got: Target | null = null;
+            void message(at(FARAWAY)).then((t) => { got = t; });
+            await vi.advanceTimersByTimeAsync(4_900);
+            expect(got).toBeNull();
+            await vi.advanceTimersByTimeAsync(200);
+            expect(got && word(got)).toBe('held');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('removed from the first of two held communities: the chat in the second', async () => {
+        saysNow(); heard();
+        REMOVE();
+        phone.store.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE }, { url: HILLSIDE }, { url: FARAWAY }]));
+        phone.directHeld = [dm('d-held')];
+        SERVERS.hillside.members.add(K); SERVERS.faraway.members.add(K); SERVERS.faraway.members.add(ME);
+        phone.info.set(FARAWAY, { profile: 'local', features: { outsideMessages: true }, addresses: ['faraway.example'], primaryAddress: 'faraway.example' });
+        expect(await message([{ community: HILLSIDE, key: K }, { community: FARAWAY, key: K }], [HILLSIDE, FARAWAY])).toMatchObject({ at: 'held', existing: false, route: FARAWAY });
+    });
+
+    it('removed from a held one, the contact there: the chat across goes to its people, from the community in use, and Chat\'s own rows stay', async () => {
+        saysNow(); heard(); REMOVE();
+        phone.directHeld = [dm('d-held')]; SERVERS.hillside.members.add(K);
+        const got = await message(at(HILLSIDE));
+        expect(word(got)).toBe('new');
+        expect(nowhere(got)).toBeNull();
+        expect(made()).toEqual([expect.objectContaining({ peerHome: 'hillside.example', state: 'open' })]);
+        expect(phone.directHeld).toHaveLength(1);
+        // Again: the chat made.
+        expect(word(await message(at(HILLSIDE)))).toBe('open');
+    });
+
+    // ── the address it is reached at is where its requests go: the one set to, or the saved row, never the record's `using` ──
+    const LEFT_BEHIND = (list: string[]) => setCommunityIndex([record('https://leftriver.example', 'https://leftriver.example', 'peer-riverside', list, ['riverside.example'])]);
+    it('a member\'s own switch left the record\'s `using` behind, and the community lost that name since: across, never a direct chat here', async () => {
+        LEFT_BEHIND(['riverside.example']);
+        SERVERS.lakeside.names.push('leftriver.example'); SERVERS.lakeside.members.add(K);
+        saysNow(); heard();
+        const got = await message(at('https://leftriver.example'));
+        expect(word(got)).toBe('new');
+        expect(nowhere(got)).toBeNull();
+    });
+
+    it('the same, its own address: here with nothing asked', async () => {
+        LEFT_BEHIND(['riverside.example']);
+        SERVERS.riverside.members.add(K);
+        expect(word(await message(at(RIVERSIDE)))).toBe('here');
+        expect(phone.asked).toEqual([]);
+    });
+
+    it('the same, no answer: the info kept at the address it is reached at is weighed, not the one kept at the address left behind', async () => {
+        LEFT_BEHIND(['leftriver.example', 'riverside.example']);
+        SERVERS.lakeside.names.push('leftriver.example'); SERVERS.lakeside.members.add(K);
+        keep([
+            ['https://leftriver.example', { features: {}, addresses: ['leftriver.example', 'riverside.example'], primaryAddress: 'leftriver.example' }],
+            [RIVERSIDE, { features: {}, addresses: ['riverside.example'], primaryAddress: 'riverside.example' }],
+        ]);
+        expect(await message(at('https://leftriver.example'))).toEqual({ at: 'switch', address: 'https://leftriver.example' });
+    });
+
+    // ── its own names as core reads an address, never as hosts a link can be ──
+    const SPELLED = [
+        { name: 'an IPv6 number', host: '[2001:db8::7]', said: '[2001:db8::7]' },
+        { name: 'an IPv6 number its info spells otherwise', host: '[2001:db8::7]', said: '[2001:DB8:0::7]' },
+        { name: 'a name with an underscore', host: 'river_side.example', said: 'river_side.example' },
+    ];
+    /** What this phone knows of the name before it asks. A held community is asked of its names only where something here holds one. */
+    const KNOWN = { 'in its info as heard': { info: true, list: false, held: 'held' }, 'on its signed list alone': { info: false, list: true, held: 'held' }, 'nowhere': { info: false, list: false, held: 'new' } } as const;
+    it.each(SPELLED.flatMap((of) => (['riverside', 'hillside'] as const).flatMap((side) => (Object.keys(KNOWN) as Array<keyof typeof KNOWN>).flatMap((known) =>
+        [true, false].map((row) => ({ ...of, side, known, row, title: `${of.name}, of ${side}, kept ${known}, a row for them ${row ? 'in' : 'not in'} its copy` }))))))('its own name is $title: never a chat across its server refuses', async ({ host, said, side, known, row }) => {
+        SERVERS[side].names.push(host); SERVERS[side].members.add(K);
+        if (!row) phone.copyOf = () => new Set();
+        if (KNOWN[known].list) setCommunityIndex(RECORDS().map((r) => (r.peerId === `peer-${side}` ? record(r.id, r.using, r.peerId!, [...LISTS[side], host], PROVED[side]) : r)));
+        saysNow();
+        if (!KNOWN[known].info) heard();
+        TOLD[side].addresses.push(said);
+        saysNow();
+        if (KNOWN[known].info) heard();
+        const got = await message(at(`https://${host}`));
+        expect(word(got)).toBe(side === 'riverside' ? 'here' : KNOWN[known].held);
+        expect(nowhere(got)).toBeNull();
+        if (word(got) !== 'new') expect(made()).toEqual([]);
+    });
+
+    it('its main is an IPv6 number: the contact there is here, and one it had before too, from a server that says lost ones are left out', async () => {
+        SERVERS.riverside.members.add(K);
+        for (const older of [false, true]) {
+            const says = { profile: 'local', features: { outsideMessages: true }, addresses: ['[2001:db8::1]'], primaryAddress: '[2001:db8::1]', formerAddresses: ['[2001:db8::2]'], ...(older ? {} : { formerExcludesLost: true }) };
+            phone.info.set(RIVERSIDE, says); heard();
+            expect(word(await message(at('https://[2001:db8::1]')))).toBe('here');
+            expect(word(await message(at('https://[2001:db8::2]')))).toBe(older ? 'switch' : 'here');
+        }
+        expect(made()).toEqual([]);
+    });
+
+    it('more names than this phone keeps: the info says nothing of them (never a list cut short, which reads as if the rest were none of its own)', async () => {
+        SERVERS.riverside.members.add(K);
+        const many = Array.from({ length: 80 }, (_, i) => `n${i}.example`);
+        phone.info.set(RIVERSIDE, { profile: 'local', features: { outsideMessages: true }, addresses: [...many, 'oldriver.example', 'river.example'], primaryAddress: 'riverside.example' });
+        heard();
+        // The record and the signed list hold the one; the list alone holds the other.
+        expect(word(await message(at('https://oldriver.example')))).toBe('here');
+        expect(word(await message(at('https://river.example')))).toBe('switch');
+        expect(made()).toEqual([]);
+    });
+
+    // ── the info an older build kept: every install of this one that is an update has them (#3359 review) ──
+    /** A copy as the release before this build wrote it: the hosts a link can be and the main, nothing of `ownNames`, nor the names it had before. */
+    const OLDER_BUILD = ({ profile, features, checkedAt, addresses, primaryAddress }: ReturnType<typeof infoOf>) => ({ profile, features, checkedAt, recoveryCopies: 'vault', addresses, primaryAddress });
+    /** What this phone keeps of both, heard by `build`; `more`: names beyond the table's own KEPT that each copy of `side`'s holds. */
+    const keptBy = (build: 'this build' | 'an older build', side: 'riverside' | 'hillside', more: string[]) => {
+        const infos = (['riverside', 'hillside'] as const).map((s) => infoOf(s, s === side ? { ...KEPT[s], addresses: [...KEPT[s].addresses, ...more] } : KEPT[s]));
+        if (build === 'this build') keep([[RIVERSIDE, infos[0]], [HILLSIDE, infos[1]]]);
+        else phone.store.set('beanpool_node_profiles', JSON.stringify({ [RIVERSIDE]: OLDER_BUILD(infos[0]), [HILLSIDE]: OLDER_BUILD(infos[1]) }));
+    };
+    const SIDES = {
+        riverside: { host: 'saidriver.example', main: RIVERSIDE, at: 'here', direct: () => { phone.directHere = [dm('d-here')]; } },
+        hillside: { host: 'saidhill.example', main: HILLSIDE, at: 'held', direct: () => { phone.directHeld = [dm('d-held')]; } },
+    } as const;
+    /** The other copies that hold the name, and where Message goes with no answer: its info kept `holds` it, or `lacks` it (null: nothing claims it, so not these rows). */
+    const ELSEWHERE = {
+        'no other copy': { list: false, record: false, quiet: { holds: 'switch', lacks: null } },
+        'its signed list': { list: true, record: false, quiet: { holds: 'switch', lacks: 'switch' } },
+        'its record': { list: false, record: true, quiet: { holds: 'switch', lacks: 'switch' } },
+        'both': { list: true, record: true, quiet: { holds: 'own', lacks: 'switch' } },
+    } as const;
+    const holdElsewhere = (side: 'riverside' | 'hillside', { list, record: proved }: { list: boolean; record: boolean }) => setCommunityIndex(RECORDS().map((r) => (r.peerId !== `peer-${side}` ? r
+        : record(r.id, r.using, r.peerId!, list ? [...LISTS[side], SIDES[side].host] : LISTS[side], proved ? [...PROVED[side], SIDES[side].host] : PROVED[side]))));
+    /** The chats there are with them: none, one across (open) whose home is that name, in either file, or the direct one. */
+    const NAMED_CHATS = { 'no chat': null, 'a chat across in the file in use': RIVERSIDE, 'a chat across in the held file': HILLSIDE, 'the direct chat': 'direct' } as const;
+    const KEPT_COPIES = [
+        { copy: 'kept by this build', build: 'this build', holds: true }, { copy: 'kept by an older build', build: 'an older build', holds: true },
+        { copy: 'kept by an older build, from before it had the name', build: 'an older build', holds: false },
+    ] as const;
+    const NAMED = (['riverside', 'hillside'] as const).flatMap((side) => KEPT_COPIES.flatMap((k) => Object.entries(ELSEWHERE).flatMap(([elsewhere, e]) => (!k.holds && !e.quiet.lacks ? []
+        : Object.entries(NAMED_CHATS).flatMap(([chats, chat]) => [true, false].flatMap((answers) => [true, false].map((atName) => {
+            const quiet = k.holds ? e.quiet.holds : e.quiet.lacks;
+            const want = answers || !atName || chat === 'direct' || quiet === 'own' ? SIDES[side].at : 'switch';
+            return { row: `${side}, its info ${k.copy}, the name on ${elsewhere} besides, ${chats}, ${answers ? 'both answer' : 'neither answers'}, the contact at ${atName ? 'that name' : 'its main'}`, side, k, e, chat, answers, atName, want };
+        })))))));
+    it('every copy, every other place the name is held, every chat, answered or not', () => {
+        expect(NAMED).toHaveLength(2 * (4 + 4 + 3) * 4 * 2 * 2);
+    });
+    // The review's four are the rows of an older build's copy where both answer; each made or opened a chat across at 7601493d.
+    for (const { row, side, k, e, chat, answers, atName, want } of NAMED) it(`one of its own names: ${row}`, async () => {
+        const { host, main, direct } = SIDES[side];
+        SERVERS[side].names.push(host); SERVERS[side].members.add(K);
+        holdElsewhere(side, e);
+        keptBy(k.build, side, k.holds ? [host] : []);
+        TOLD[side].addresses.push(host);
+        if (answers) saysNow();
+        if (chat === 'direct') direct(); else if (chat) across(chat, host)();
+        const before = onDisk();
+        const got = await message(at(atName ? `https://${host}` : main));
+        expect(word(got)).toBe(want);
+        expect(nowhere(got)).toBeNull();
+        if (got.at === 'held' && !got.existing) expect(got.route).toBe(main);
+        if (got.at === 'switch') expect(got.address).toBe(`https://${host}`);
+        expect(onDisk()).toEqual(before);
+    });
+
+    it.each((['riverside', 'hillside'] as const).flatMap((side) => (['this build', 'an older build'] as const).flatMap((build) => Object.entries(ELSEWHERE).map(([elsewhere, e]) => ({ side, build, elsewhere, e })))))(
+        'a name $side lost since $build heard its info, on $elsewhere besides: asked, so across to the one that has it now; with no answer it opens nothing, but where every copy agrees', async ({ side, build, e }) => {
+            const { host } = SIDES[side];
+            SERVERS.lakeside.names.push(host); SERVERS.lakeside.members.add(K);
+            holdElsewhere(side, e);
+            keptBy(build, side, [host]);
+            if (e.quiet.holds === 'switch') expect(await message(at(`https://${host}`))).toEqual({ at: 'switch', address: `https://${host}` });
+            expect(made()).toEqual([]);
+            saysNow();
+            const got = await message(at(`https://${host}`));
+            expect(word(got)).toBe('new');
+            expect(nowhere(got)).toBeNull();
+        });
+
+    it.each([
+        { side: 'riverside', url: 'https://beforeriver.example', want: 'here' },
+        { side: 'hillside', url: 'https://beforehill.example', want: 'held' },
+    ] as const)('a name $side had before, on an older build\'s copy that kept those ones too, its signed list and its record: it never said the lost ones are left out, so unsure until it answers', async ({ side, url, want }) => {
+        SERVERS[side].members.add(K);
+        setCommunityIndex(RECORDS().map((r) => (r.peerId === `peer-${side}` ? record(r.id, r.using, r.peerId!, [...LISTS[side], hostOf(url)], PROVED[side]) : r)));
+        phone.store.set('beanpool_node_profiles', JSON.stringify({
+            [RIVERSIDE]: { ...OLDER_BUILD(infoOf('riverside', KEPT.riverside)), formerAddresses: KEPT.riverside.formerAddresses },
+            [HILLSIDE]: { ...OLDER_BUILD(infoOf('hillside', KEPT.hillside)), formerAddresses: KEPT.hillside.formerAddresses },
+        }));
+        expect(await message(at(url))).toEqual({ at: 'switch', address: url });
+        saysNow();
+        const got = await message(at(url));
+        expect(word(got)).toBe(want);
+        expect(nowhere(got)).toBeNull();
+        expect(made()).toEqual([]);
+    });
+
+    // ── version skew ──
+    it.each([
+        { name: 'the one in use', side: 'riverside', url: 'https://beforeriver.example', want: 'here' },
+        { name: 'a held one', side: 'hillside', url: 'https://beforehill.example', want: 'held' },
+    ] as const)('$name is updated while this phone keeps its older info: asked now, so its word decides', async ({ side, url, want }) => {
+        OLDER = true; kept();
+        OLDER = false; saysNow();
+        SERVERS[side].members.add(K);
+        expect(word(await message(at(url)))).toBe(want);
+        // And the other way: rolled back to an older server, its kept info does not stand in for its answer.
+        OLDER = false; saysNow(); heard();
+        OLDER = true; saysNow();
+        expect(await message(at(url))).toEqual({ at: 'switch', address: url });
+        expect(made()).toEqual([]);
+    });
+
+    it('an older server in use, as the chat across is made: refused, nothing made', async () => {
+        OLDER = true; saysNow(); heard();
+        for (const home of ['agedriver.example', 'beforeriver.example']) expect(await openAcrossChat({ key: K, home, name: 'Ana' })).toEqual({ refused: 'uncertain' });
+        expect(made()).toEqual([]);
+    });
+
+    it('an older server in use, the address card: the box, as ever (its server says so where the address is its own)', async () => {
+        OLDER = true; kept(); saysNow();
+        for (const home of ['agedriver.example', 'beforeriver.example']) expect(await cardRefusal(RIVERSIDE, { key: K, home }, 'riverside.example')).toBeNull();
+        expect(await cardRefusal(RIVERSIDE, { key: K, home: 'river.example' }, 'riverside.example')).toBe('here');
     });
 
     it('the address card: here, no address of its own to send from, or on to the box, as Message has it; unsure is the box, as ever', async () => {
@@ -660,7 +1002,7 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         expect(await cardRefusal(RIVERSIDE, card('river.example'), null)).toBe('here');
     });
 
-    it('a name an older server lists as former that a held community goes by now: never the community in use, as the chat is made', async () => {
+    it('a name the one in use lists as former that a held community goes by now: never the community in use, as the chat is made', async () => {
         saysNow(); heard(); SERVERS.hillside.members.add(K);
         expect(await openAcrossChat({ key: K, home: 'takenriver.example', name: 'Ana' })).toEqual({ refused: 'uncertain' });
         expect(made()).toEqual([]);
@@ -678,7 +1020,7 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         kept(); saysNow();
         SERVERS.hillside.names = ['hillside.example', 'beforehill.example']; SERVERS.lakeside.names.push('oldhill.example');
         SERVERS.lakeside.members.add(K);
-        phone.info.set(HILLSIDE, { profile: 'local', features: { outsideMessages: true }, addresses: [], primaryAddress: null, formerAddresses: ['beforehill.example'] });
+        phone.info.set(HILLSIDE, { profile: 'local', features: { outsideMessages: true }, addresses: [], primaryAddress: null, formerAddresses: ['beforehill.example'], formerExcludesLost: true });
         const got = await message(at('https://oldhill.example'));
         expect(word(got)).toBe('new');
         expect(nowhere(got)).toBeNull();

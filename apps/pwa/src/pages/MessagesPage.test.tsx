@@ -2035,6 +2035,32 @@ describe('MessagesPage: private contacts in Chat (DESIGN-private-contacts-fable.
         fireEvent.click(row);
         expect(await screen.findByTestId('contacts-page')).toBeInTheDocument();
     });
+
+    // #3354 review, final re-check: the page's own list had no deadline, so every Message in Contacts waited on it. How to ask for
+    // it is handed on, and lib/message-anyone.ts gives it the one deadline (message-target-table.test.ts). Mutation: awaited here -> red.
+    it('Message on a contact in another community before the list has come: not waited for here, and it can be tapped again after', async () => {
+        const [anyone, contacts] = [await import('../lib/message-anyone'), await import('./ContactsPage')];
+        const sent = vi.spyOn(anyone, 'messageOnWeb').mockResolvedValue({ elsewhere: 'https://faraway.example' });
+        const answers: Array<string | null> = [];
+        const page = vi.spyOn(contacts, 'ContactsPage').mockImplementation(({ onMessageAcross }) => (
+            <button type="button" onClick={() => { void onMessageAcross?.([{ key: 'ab'.repeat(32), community: 'https://faraway.example' }], 'Ana').then((a) => answers.push(a)); }}>go</button>
+        ));
+        vi.mocked(getConversations).mockImplementation(() => new Promise<never>(() => {}));
+        try {
+            render(<MessagesPage identity={mockIdentity} onNavigate={vi.fn()} />);
+            fireEvent.click(await screen.findByTestId('contacts-button'));
+            fireEvent.click(await screen.findByRole('button', { name: 'go' }));
+            await waitFor(() => expect(answers).toEqual(['https://faraway.example']));
+            const listed = sent.mock.calls[0][2];
+            expect(typeof listed).toBe('function');
+            const asked = vi.mocked(getConversations).mock.calls.length;
+            void (listed as () => unknown)();
+            expect(vi.mocked(getConversations).mock.calls.length).toBe(asked + 1);
+        } finally {
+            sent.mockRestore(); page.mockRestore();
+            vi.mocked(getConversations).mockReset();
+        }
+    });
 });
 
 describe('MessagesPage: the Chat tab\'s Chats · Forum switch (pages/ChatTabPage.tsx, slice T0)', () => {

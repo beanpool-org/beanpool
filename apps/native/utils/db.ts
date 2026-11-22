@@ -2756,14 +2756,16 @@ export async function markConversationReadLocally(conversationId: string, myPubk
         [myPubkey, conversationId, myPubkey]
     );
     if (!hasUnread) return 0;
+    // A message request for me isn't in that community's number (its server lists it apart): none of its lines are counted.
     const counted = copy.inPlace ? await database.getFirstAsync<{ n: number }>(
         `SELECT COUNT(m.id) AS n FROM messages m
          JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
+         JOIN conversations c ON c.id = m.conversation_id AND ${NOT_A_REQUEST_FOR_ME('c.request')} = 1
          WHERE m.conversation_id = ?
            AND m.author_pubkey != ?
            AND m.timestamp > IFNULL(cp.last_read_at, '2000-01-01')
            AND ${countsAsUnreadSql('m')}`,
-        [myPubkey, conversationId, myPubkey, myPubkey],
+        [myPubkey, myPubkey, conversationId, myPubkey, myPubkey],
     ).catch(() => null) : null;
 
     const now = new Date().toISOString();

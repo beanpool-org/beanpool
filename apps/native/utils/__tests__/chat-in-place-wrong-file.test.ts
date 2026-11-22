@@ -1322,4 +1322,17 @@ describe('a direct chat read in place: its lines leave that community\'s number 
         expect(await readNoticeCounts(storage)).toEqual({ [A]: 2 });
         await db.leaveChatInPlace(A);
     });
+
+    it('a message request for me read in place (slice S3): its server never counted it, so A\'s number stays as A said it', async () => {
+        const { noteServerUnread, readNoticeCounts } = await import('../notice-counts');
+        h.store.set('beanpool_saved_nodes', JSON.stringify([{ url: A }, { url: B }]));
+        const sql = new DatabaseSync(fileOn(A_FILE));
+        try { sql.prepare('UPDATE conversations SET request = ? WHERE id = ?').run(JSON.stringify({ from: peer.publicKey, state: 'pending' }), dm.id); } finally { sql.close(); }
+        await noteServerUnread(storage, A, 3, 3);
+        db.enterChatInPlace(A);
+        await db.markConversationRead(dm.id, me.publicKey, A);
+        await settle();
+        expect(await readNoticeCounts(storage)).toEqual({ [A]: 3 });
+        await db.leaveChatInPlace(A);
+    });
 });

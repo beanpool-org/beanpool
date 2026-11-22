@@ -17,8 +17,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { t } from '@beanpool/core';
-// Static colours: the carousel's frame and dots (surface.subtle, surface.card, text.inverse) are module-level styles, drawn light in both schemes today. Moving them to the theme hook changes Classic dark, which colour themes T2 does not do: left for a slice that looks at it in dark.
-import { colors } from '../constants/colors';
+import { palette } from '../constants/colors';
+import { useTheme } from '../app/ThemeContext';
 
 interface Props {
     photos: string[];
@@ -36,6 +36,9 @@ function isValid(p: any): p is string {
 }
 
 export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen }: Props) {
+    // The empty frame is the page's, in the colour set being drawn (walk 148: a near-white box in Dark until a photo drew). The
+    // counter and the dots sit on the photo itself, and stay white in every set.
+    const frame = useTheme().colors.surface.subtle;
     const [width, setWidth] = useState(0);
     const [index, setIndex] = useState(0);
     const scroller = useRef<ScrollView>(null);
@@ -63,7 +66,7 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
     };
 
     return (
-        <View style={[styles.wrap, { height, borderRadius }]} onLayout={onLayout}>
+        <View style={[styles.wrap, { height, borderRadius, backgroundColor: frame }]} onLayout={onLayout} testID="photo-carousel">
             <ScrollView
                 ref={scroller}
                 horizontal
@@ -116,7 +119,7 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
 }
 
 const styles = StyleSheet.create({
-    wrap: { backgroundColor: colors.surface.subtle, overflow: 'hidden' },
+    wrap: { overflow: 'hidden' },
     counter: {
         position: 'absolute',
         top: 10,
@@ -126,7 +129,7 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 12,
     },
-    counterText: { color: colors.text.inverse, fontSize: 12, fontWeight: '700' },
+    counterText: { color: palette.white, fontSize: 12, fontWeight: '700' },
     dots: {
         position: 'absolute',
         bottom: 10,
@@ -143,5 +146,5 @@ const styles = StyleSheet.create({
         borderRadius: 4,
         backgroundColor: 'rgba(255,255,255,0.55)',
     },
-    dotActive: { backgroundColor: colors.surface.card, width: 18 },
+    dotActive: { backgroundColor: palette.white, width: 18 },
 });

@@ -7,6 +7,8 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { listSheetLayout } from '../utils/bottom-sheet-layout';
 import { billLines, dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, notSeenOfDeal, notSeenWords, standingHistoryLine, standingLines, standingLoweredHistoryLine, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { LISTING_MOMENT, takeNotifyMoment, useNotifyLine } from './NotifyLine';
@@ -64,6 +66,9 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
     const [markOpen, setMarkOpen] = useState(false);
     const openMark = () => setMarkOpen(true);
     const { colors, theme } = useTheme();
+    // The room the sheet is drawn in, measured: on Android the Modal covers the navigation bar, which the window's height leaves out.
+    const [room, setRoom] = useState(SCREEN_HEIGHT);
+    const sheetLayout = listSheetLayout(room, useSafeAreaInsets());
     // The held and pending cards' tones: light keeps its tints; dark takes the scheme's success and warning tones, with
     // each status line in its tone's ink, so every text on them reads at 4.5:1 or more (my-deals-dark-render.test.ts).
     const isDark = theme === 'dark';
@@ -86,8 +91,6 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
             padding: 20,
-            paddingBottom: 40,
-            maxHeight: SCREEN_HEIGHT * 0.75,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: 0.1,
@@ -133,16 +136,21 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         },
 
         // Tab bar
+        // Each tab is as wide as its words, and the tabs fill the bar; where they don't fit one line (320 dp at 1.3x, a longer
+        // language) they take a second, so a tab's name is never broken inside a word (walk 148: "In Pro / gress").
         tabBar: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             backgroundColor: colors.surface.subtle,
             borderRadius: 12,
             padding: 4,
             marginBottom: 16,
         },
         tab: {
-            flex: 1,
+            flexGrow: 1,
+            maxWidth: '100%',
             paddingVertical: 10,
+            paddingHorizontal: 4,
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: 8,
@@ -157,7 +165,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             shadowRadius: 2,
             elevation: 1,
         },
-        // Wraps inside its third of the bar (a longer name in another language), never past it.
+        // A name longer than the whole bar wraps inside it, never past it.
         tabText: {
             fontSize: 13,
             fontWeight: '700',
@@ -622,7 +630,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         {dealsTab === 'pending' && (
                             <Text testID={`deal-state-${item.id}`} accessibilityRole={standing?.warning ? 'alert' : undefined}
                                 style={[styles.dealStateText, standing?.warning && { color: colors.feedback.warning.fg, fontWeight: '800' }]}
-                                numberOfLines={standing ? 3 : 1}>
+                                numberOfLines={3}>
                                 {standing ? standing.status : dealStateWords(step, partnerCallsign)}
                             </Text>
                         )}
@@ -763,8 +771,8 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
 
     return (
         <Modal visible={visible} transparent animationType="slide">
-            <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.overlay} onPress={onClose}>
-                <Pressable accessibilityRole="button" style={styles.sheet} onPress={e => e.stopPropagation()}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.overlay} onPress={onClose} onLayout={e => setRoom(e.nativeEvent.layout.height)}>
+                <Pressable accessibilityRole="button" style={[styles.sheet, sheetLayout]} onPress={e => e.stopPropagation()} testID="deals-sheet">
                     {/* Handle bar */}
                     <View style={styles.handleBar} />
 
@@ -780,7 +788,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                     </View>
 
                     {/* Tab bar */}
-                    <View style={styles.tabBar}>
+                    <View style={styles.tabBar} testID="deals-tabs">
                         {[
                             { id: 'pending' as const, label: t('In Progress'), badge: pendingCount },
                             { id: 'active' as const, label: t('My Posts') },

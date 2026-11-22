@@ -38,6 +38,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { whileAccountLeaves } from './account-leaving';
 import { communitySwitched } from './community-switch';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
@@ -482,10 +483,13 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
     // unregisters' 4 s. Never a reason Sign Out stops.
     const forgetting = await forgetThisPhoneForMailBeforeLeaving(account, db);
     const { clearDB } = db;
-    // The identity leaves this phone: what it knew of its groups' keys goes with it (utils/db.ts clearDB).
-    await clearDB({ identityLeaves: true });
-    await releaseAccountFromPhone(account, AsyncStorage, { keepDmMemoryOf });
-    await wipeIdentity();
+    // The identity leaves this phone: what it knew of its groups' keys goes with it (utils/db.ts clearDB), and none of it is
+    // written again until the key has gone (account-leaving.ts).
+    await whileAccountLeaves(async () => {
+        await clearDB({ identityLeaves: true });
+        await releaseAccountFromPhone(account, AsyncStorage, { keepDmMemoryOf });
+        await wipeIdentity();
+    });
     // No community and no account on the phone now: the update screen's block, if one was up, comes down
     // (utils/community-switch.ts).
     communitySwitched();
@@ -503,8 +507,10 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
 export async function deleteAccountFromThisPhone(account: LeavingAccount | null): Promise<void> {
     await stopPushAlerts(account);
     const { clearDB } = await import('./db');
-    await clearDB({ identityLeaves: true });
-    await removeEveryCommunityCopy(await communitiesOnThisPhone());
-    await wipeIdentity();
+    await whileAccountLeaves(async () => {
+        await clearDB({ identityLeaves: true });
+        await removeEveryCommunityCopy(await communitiesOnThisPhone());
+        await wipeIdentity();
+    });
     communitySwitched();
 }

@@ -28,6 +28,7 @@ import {
 import { clearPendingOnboarding } from './onboarding-state';
 import { assertPlainNodeAddress } from './node-url';
 import { communitiesOnThisPhone, forgetCommunities, releaseAccountFromPhone } from './account-leaves-phone';
+import { whileAccountLeaves } from './account-leaving';
 import { communitySwitched } from './community-switch';
 import { moveCommunityAddress } from './community-move-lock';
 import { forgetTheLook } from './look-around';
@@ -123,8 +124,10 @@ export async function saveRestoredAccount({ identity, replacesAnother }: Cleared
     assertPlainNodeAddress(anchorUrl);
     try {
         if (replacesAnother) {
-            await releaseAccountFromPhone(await leavingAccount(identity));
-            await wipeIdentityScopedStorage(AsyncStorage);
+            await whileAccountLeaves(async () => {
+                await releaseAccountFromPhone(await leavingAccount(identity));
+                await wipeIdentityScopedStorage(AsyncStorage);
+            });
         } else {
             // Onto a phone with no account that looked around first (slice S12): that look's guest mark is not this account's.
             await forgetTheLook();

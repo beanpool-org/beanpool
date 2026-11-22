@@ -88,8 +88,10 @@ export async function addGroupKeyState(from: SqliteLike, into: SqliteLike & { ex
     }
 }
 
-export function sqliteGroupKeyStore(getDb: () => Promise<SqliteLike>): GroupKeyStore {
+/** `copy`: the file `getDb` hands out, by its name (GroupKeyStore `copy`). */
+export function sqliteGroupKeyStore(getDb: () => Promise<SqliteLike>, copy?: string): GroupKeyStore {
     return {
+        copy,
         async load(groupId) {
             const db = await getDb();
             const rows = await db.getAllAsync<{ epoch: number; record: string; wrap: string | null }>(

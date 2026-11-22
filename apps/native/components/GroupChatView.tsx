@@ -471,7 +471,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     // never counted as done (review of #1844, finding 4). Only once the keys are read: before that nothing is known.
     const lockedRowCount: number = messages.find(m => m.id === LOCKED_HISTORY_ROW_ID)?.metadata?.lockedCount ?? 0;
     useEffect(() => {
-        if (kind !== 'group' || !thread || at) return;
+        // In place, the old-words screen (the community in use's) counts nothing of another community's.
+        if (at) return;
+        if (kind !== 'group' || !thread) return;
         noteLockedHistoryRow(id, lockedRowCount).catch(() => {});
     }, [kind, id, thread, lockedRowCount, at]);
 

@@ -488,12 +488,21 @@ describe('what opens in place (the route), and the list that names a group', () 
         }
     });
 
-    it('two asks at once (Chat opens as a count changes) ask each community once each turn and keep one set of rows', async () => {
+    it('two asks at once (Chat opens as a count changes): the first answers and the second finds no signal, and the rows of the first stay', async () => {
+        // Two held communities, as on a phone with three: with one, the second ask always finds the first's list made.
+        await switchPhoneTo(C);
+        await switchPhoneTo(B);
+        const realFetch = (globalThis as any).fetch;
+        let n = 0;
+        (globalThis as any).fetch = async (url: string, init: any) => {
+            if (String(url) === `${A}/api/your-groups` && ++n > 1) throw new Error('no signal');
+            return realFetch(url, init);
+        };
         await Promise.all([heldGroups.refresh(me.publicKey), heldGroups.refresh(me.publicKey)]);
+        (globalThis as any).fetch = realFetch;
+        expect(n).toBe(2);
         expect(heldGroups.getState().map((r) => r.conversationId)).toEqual([g]);
-        const row = heldGroups.at(A);
-        await Promise.all([heldGroups.refresh(me.publicKey), heldGroups.refresh(me.publicKey)]);
-        expect(heldGroups.at(A), 'the same community keeps its one list').toBe(row);
+        // Mutation: each ask works the communities out for itself -> the second makes A's list again, empty, and the first's is dropped.
     });
 
     it('a group left in place stays gone while its community can\'t be asked, and comes back only when that community lists it again', async () => {
@@ -522,6 +531,22 @@ describe('what opens in place (the route), and the list that names a group', () 
         asked = [];
         expect(await db.fetchHeldYourGroups(was, A)).toBeNull();
         expect(asked.filter((r) => r.url.endsWith('/api/your-groups'))).toEqual([]);
+    });
+
+    it('a list whose account left while it was on its way is nobody\'s: not handed back, and it names no group', async () => {
+        into(A_FILE, (sql) => { for (const t of ['conversations', 'group_chat_key_state', 'group_chat_epochs']) sql.prepare(`DELETE FROM ${t}`).run(); });
+        let seen!: () => void;
+        let go!: () => void;
+        const asking = new Promise<void>((r) => { seen = r; });
+        hold = { matches: (m, p) => m === 'GET' && p === '/api/your-groups', seen: () => seen(), go: new Promise((r) => { go = r; }), used: false };
+        const was = h.me;
+        const answering = db.fetchHeldYourGroups(me.publicKey, A);
+        await asking;
+        h.me = { ...person() };
+        go();
+        expect(await answering).toBeNull();
+        h.me = was;
+        expect(((await chatInPlaceRoute(me.publicKey, g, A)) as any).open).toBe('move');
     });
 
     it('a community that doesn\'t answer keeps its rows; another account sees none of them', async () => {

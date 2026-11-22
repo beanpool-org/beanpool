@@ -182,7 +182,7 @@ describe('Talk → Groups: a group of another community this phone holds', () =>
         it(`${dark ? 'dark' : 'light'}, 320 dp × 1.3: its community's name in grey, whole (it wraps), its own count, and no switch said`, async () => {
             theme.dark = dark;
             await render(createElement(YourGroupsRows, { items: groupsListed([OWN], [HELD]), myPubkey: ME, showUnread: true }));
-            const rows = [...host.querySelectorAll('button')];
+            const rows = Array.from(host.querySelectorAll('button'));
             // Newest line first: the held one, then this community's own.
             expect(rows.map((r) => r.textContent?.includes('Garden Crew'))).toEqual([true, false]);
             const where = host.querySelector('[data-testid="held-group-community"]')!;
@@ -203,7 +203,7 @@ describe('Talk → Groups: a group of another community this phone holds', () =>
         const read = vi.fn();
         const at = vi.spyOn(heldGroups, 'at').mockReturnValue({ markRead: read, noteSent: () => { }, setMute: () => { } });
         await render(createElement(YourGroupsRows, { items: groupsListed([OWN], [HELD]), myPubkey: ME, showUnread: true }));
-        const [held, own] = [...host.querySelectorAll('button')];
+        const [held, own] = Array.from(host.querySelectorAll('button'));
         await act(async () => { held.click(); });
         expect(nav.push.mock.calls).toEqual([[{ pathname: '/chat/[id]', params: { id: G, community: A, communityName: LONG, group: '1', name: 'Garden Crew' } }]]);
         expect(at.mock.calls).toEqual([[A]]);
@@ -318,16 +318,16 @@ describe('a group\'s chat in place (GroupChatView inPlace)', () => {
 
     it('the group\'s header opens no page (the community in use\'s, of the same id, least of all) and says it opens none', async () => {
         await open();
-        const said = [...host.querySelectorAll('[aria-label]')].map((b) => b.getAttribute('aria-label')!);
+        const said = Array.from(host.querySelectorAll('[aria-label]')).map((b) => b.getAttribute('aria-label')!);
         expect(said.filter((l) => l.includes('Opens the group page'))).toEqual([]);
         expect(host.textContent).not.toContain('tap for info');
-        const title = [...host.querySelectorAll('span')].find((x) => x.textContent?.endsWith('Garden Crew'))!;
+        const title = Array.from(host.querySelectorAll('span')).find((x) => x.textContent?.endsWith('Garden Crew'))!;
         await act(async () => { (title.closest('button') as HTMLElement).click(); });
         expect([nav.push.mock.calls, host.querySelector('[data-info]')]).toEqual([[], null]);
         // Contrast: in use, the header is the way to the group's page, and says so.
         await act(async () => { root.render(null); });
         await open(null);
-        expect([...host.querySelectorAll('[aria-label]')].some((b) => b.getAttribute('aria-label')!.includes('Opens the group page'))).toBe(true);
+        expect(Array.from(host.querySelectorAll('[aria-label]')).some((b) => b.getAttribute('aria-label')!.includes('Opens the group page'))).toBe(true);
         expect(host.textContent).toContain('tap for info');
     });
 

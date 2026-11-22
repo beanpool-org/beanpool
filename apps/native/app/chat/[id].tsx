@@ -32,6 +32,7 @@ import { GroupChatView } from '../../components/GroupChatView';
 import { routeChat, screenIdOf, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
 import { chatInPlaceRoute, type ChatInPlaceRoute } from '../../utils/held-chats';
 import { openInCommunity } from '../../utils/open-in-community';
+import { postRoute } from '../../utils/post-after-join';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { dmPeerName, isDmBlocked } from '../../utils/dm-blocked';
@@ -97,8 +98,16 @@ function keepKeys(prev: string[], next: string[]): string[] {
 }
 
 /** In place (slice S6c): the deals with the person that their own community has answered, by id, and how the asking stands. */
-interface DealsThere { ids: ReadonlyMap<string, { postAuthorPublicKey?: string | null; postType?: string | null }>; state: 'asking' | 'answered' | 'failed' }
+interface DealsThere { ids: ReadonlyMap<string, { postAuthorPublicKey?: string | null; postType?: string | null; status?: string | null }>; state: 'asking' | 'answered' | 'failed' }
 const DEALS_UNASKED: DealsThere = { ids: new Map(), state: 'asking' };
+/**
+ * In place: whether a deal's own community has answered about it this visit, and its row reads as that answer said (its
+ * status as the node gave it; a node that gave none: any). A row the copy held before the answer was read back offers nothing.
+ */
+function answeredThere(there: DealsThere, deal: { txId: string; status?: string | null }): boolean {
+    const said = there.ids.get(deal.txId);
+    return !!said && (!said.status || said.status === deal.status);
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promise<T> {
     return Promise.race([
@@ -749,8 +758,11 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 ask.again = false;
                 const ids = await syncDealsBetween(me, peerPubkey, at).catch(() => null);
                 if (!inViewRef.current) return;
-                setDealsThere(prev => (ids ? { ids, state: 'answered' } : prev.state === 'answered' ? prev : { ids: prev.ids, state: 'failed' }));
+                // The copy as that answer wrote it is read back first: a step shows only on the deal as its community now says
+                // it is, never on the row the copy held before (a release made elsewhere drew Release for one read: #3363 N1).
                 await loadDeals();
+                if (!inViewRef.current) return;
+                setDealsThere(prev => (ids ? { ids, state: 'answered' } : prev.state === 'answered' ? prev : { ids: prev.ids, state: 'failed' }));
             } while (ask.again && inViewRef.current);
         })().finally(() => { ask.running = null; });
         return ask.running;
@@ -1359,10 +1371,10 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         [shownDeals, myKey]
     );
     // The deals a money step may show on: in place (slice S6c), those their own community has answered this visit.
-    const actDeals = React.useMemo(() => (at ? shownDeals.filter(d => dealsThere.ids.has(d.txId)) : shownDeals), [shownDeals, dealsThere, at]);
+    const actDeals = React.useMemo(() => (at ? shownDeals.filter(d => answeredThere(dealsThere, d)) : shownDeals), [shownDeals, dealsThere, at]);
     // A standing deal's panel is on its listing's page, which doesn't open in place: there it is here, over the cards.
     const standing = React.useMemo(() => (at && myKey ? shownDeals.filter(d => isLiveStanding(localDealRow(d, myKey))) : []), [shownDeals, at, myKey]);
-    const standingThere = standing.filter(d => dealsThere.ids.has(d.txId));
+    const standingThere = standing.filter(d => answeredThere(dealsThere, d));
 
     // The inline bar's deal, as core reads it: Release and Cancel only where dealMoves offers them. A deal the phone hasn't
     // read yet shows no bar (never a button the node would refuse).
@@ -1508,17 +1520,20 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     // there through the one switch (utils/open-in-community.ts). A second tap while it moves does nothing.
     const movingThere = useRef(false);
     const openThere = async (postId: string, txId?: string) => {
-        if (!inPlace || !identity?.publicKey || movingThere.current) return;
+        // Its id is that community's data: only one in the shape of a listing's id makes a route (#3363 N2).
+        const route = postRoute(postId);
+        if (!inPlace || !identity?.publicKey || !route || movingThere.current) return;
         movingThere.current = true;
         try {
-            const moved = await openInCommunity(inPlace.community, `/post/${postId}${txId ? `?txId=${encodeURIComponent(txId)}` : ''}`, identity.publicKey, recheck);
+            const moved = await openInCommunity(inPlace.community, `${route}${txId ? `?txId=${encodeURIComponent(txId)}` : ''}`, identity.publicKey, recheck);
             if (moved !== 'switched') Alert.alert(inPlace.name, t('Something went wrong. Try again in a moment.'));
         } finally {
             movingThere.current = false;
         }
     };
     const offerThere = async (title: string | null | undefined, postId: string, txId?: string) => {
-        if (!inPlace) return;
+        // No move is offered for an id that is no listing's.
+        if (!inPlace || !postRoute(postId)) return;
         await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
         Alert.alert(inPlace.name, t('{title} is in {community}. Opens that community.', { title: title || t('Deal'), community: inPlace.name }), [
             { text: t('Cancel'), style: 'cancel' },
@@ -2080,10 +2095,10 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                                 )}
                                 {(() => {
                                 // In place, no step before the deal's own community has answered about it this visit.
-                                const acts = !at || dealsThere.ids.has(d.txId);
+                                const acts = !at || answeredThere(dealsThere, d);
                                 const moves = acts ? localDealMoves(d, identity!.publicKey) : null;
                                 // What is done only there, said on the card: a request to answer, a deal that community didn't name.
-                                const onlyThere = !!inPlace && !!d.postId && (acts ? !!moves?.answer : dealsThere.state === 'answered');
+                                const onlyThere = !!inPlace && !!postRoute(d.postId) && (acts ? !!moves?.answer : dealsThere.state === 'answered');
                                 return (
                                 <View style={styles.dealCardActions}>
                                     {onlyThere && (

@@ -26,6 +26,7 @@ import { LISTED_ADDRESS_FIELDS } from './listed-address-fields';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError, readDmSeen } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode, getSavedNodes, isGuestCopy } from './nodes';
+import { isMuted } from './your-groups';
 import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -47,6 +48,7 @@ import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
 import { DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
+import { chatLetsInKey, letInByFacts, memberTookPart, type LetInChat, type LetInDeal, type LetInFacts } from '@beanpool/core';
 import type { StandingAsk, StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
 import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
 // Old chat's photos and cards: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the web opens them).
@@ -2197,70 +2199,85 @@ const MEMBERS_OWN_LINE_SQL = (m: string) => `${m}.author_pubkey = ? AND IFNULL($
       AND (CASE WHEN json_valid(${m}.metadata) THEN json_extract(${m}.metadata, '$.${DM_FROM_ADMINS_KEY}') IS NOT 1 ELSE 1 END)`;
 
 /**
- * A chat `c` (a conversations row) the member took part in themselves (#3319 review at 1697ff89, R2-F1; Marty 21 Nov 2026:
- * "chatted with" counts only chats where the member wrote or accepted themselves): they wrote a line in it
- * ({@link MEMBERS_OWN_LINE_SQL}), or accepted its request by their own act, the node's `acceptedByYou` (engine/dm-requests.ts
- * RequestView), which this phone's row keeps from the node's answer to their Accept (decideMessageRequest, requestDecided).
- * Never a chat only the other person or the node wrote in: one opened by someone taking up the member's Offer (the trade
- * accepts it as nobody's act), a message that arrived straight away where requests are off and was never answered, a notice
- * from the node's inbox. Its one `?` is my key. Let in once's `dm` row ({@link LET_IN_SQL}) and "Add people I've chatted with
- * and my friends" (getChattedWithMembers) both read this one test, so that button never links someone the let-in would not.
+ * Whether the member wrote a line in chat `c` (a conversations row), as 1 or 0: a line of theirs by
+ * {@link MEMBERS_OWN_LINE_SQL}. Its one `?` is my key. With {@link MEMBER_ACCEPTED_SQL}, the two facts core's rule
+ * (@beanpool/core let-in.ts memberTookPart; #3319 review at 1697ff89, R2-F1; Marty 21 Nov 2026: "chatted with" counts only
+ * chats where the member wrote or accepted themselves) reads of a chat. Let in once ({@link LET_IN_SQL}) and "Add people I've
+ * chatted with and my friends" (getChattedWithMembers) both read these two facts and that one rule, so that button never
+ * links someone the let-in would not.
  */
-const MEMBERS_OWN_CHAT_SQL = (c: string) => `(EXISTS (SELECT 1 FROM messages own_line WHERE own_line.conversation_id = ${c}.id AND ${MEMBERS_OWN_LINE_SQL('own_line')})
-           OR (CASE WHEN json_valid(${c}.request)
-                    THEN json_extract(${c}.request, '$.state') = 'accepted' AND json_extract(${c}.request, '$.acceptedByYou') IS 1 ELSE 0 END))`;
+const MEMBER_WROTE_SQL = (c: string) => `(CASE WHEN EXISTS (SELECT 1 FROM messages own_line WHERE own_line.conversation_id = ${c}.id AND ${MEMBERS_OWN_LINE_SQL('own_line')}) THEN 1 ELSE 0 END)`;
 
 /**
- * The people this member let in, as one copy holds them (slice S3b, DESIGN-no-switch-messaging-fable.md §3 "Let in once"):
- * derived at each read, never stored or sent. Only a step the member took lets anyone in (#3319 review F1, the director's
- * call of 21 Nov 2026 on the rule "one person's word doesn't count": a stranger must not skip the door by his own act), so
- * each row is one the member made:
- * - `dm`: a direct chat the member took part in themselves ({@link MEMBERS_OWN_CHAT_SQL}): they wrote a line in it
- *   ({@link MEMBERS_OWN_LINE_SQL}: a sealed line of theirs, from any of their devices; never a line the node wrote in their
- *   name, as a notice from the node's inbox is, #3319 review N1), or accepted its request themselves: the node's
- *   `acceptedByYou` (engine/dm-requests.ts RequestView), never a request that reads accepted by the other's act, a trade's
- *   (acceptOnTrade: someone taking up the member's Offer, even one they Ignored), the node's own line's (nodeLineInRequest)
- *   or a node from before the field. letInOfRows takes the chat's pinned key.
- * - `key`: a friend the member added (owner_pubkey is the signer); a deal (pending or completed: one only asked, declined
- *   or cancelled before that is one person's word) where the member took a step: as its buyer (on an Offer they took it up
- *   or asked for it; on their own Need they approved the other's offer: only the buyer's act makes either), or as the
- *   seller on the buyer's own Need (the member offered, the buyer approved: the listing as this copy holds it names the
- *   buyer its author). A deal on the member's own Offer never counts on its own: a 1-step take-up (escrow.ts acceptPost)
- *   puts it at 'pending' with nothing from the seller, and only the buyer completes; whether the member approved a request
- *   instead is not on the phone. And someone the member paid (from_pubkey is theirs). A payment received is not here:
- *   anyone can send a member a Bean.
- * Binds my key seven times: the chat's other people, the participant row, my line, friends, my buys, my sales, my payments.
+ * Whether the member accepted chat `c`'s request by their own act, as 1 or 0: the node's `acceptedByYou`
+ * (engine/dm-requests.ts RequestView), which this phone's row keeps from the node's answer to their Accept
+ * (decideMessageRequest, requestDecided). Never a request that reads accepted by the other's act: one opened by someone taking
+ * up the member's Offer (the trade accepts it as nobody's act), nor a node from before the field.
+ */
+const MEMBER_ACCEPTED_SQL = (c: string) => `(CASE WHEN json_valid(${c}.request)
+                    AND json_extract(${c}.request, '$.state') = 'accepted' AND json_extract(${c}.request, '$.acceptedByYou') IS 1 THEN 1 ELSE 0 END)`;
+
+/**
+ * What one copy holds for let in once (slice S3b, DESIGN-no-switch-messaging-fable.md §3 "Let in once"), as plain facts:
+ * read at each read, never stored or sent. Whom they let in is core's rule (@beanpool/core let-in.ts letInByFacts, S5 part
+ * 3: the web reads the same rule over its own facts), never decided here. Each row is the member's own:
+ * - `dm`: each direct chat the member is in, its other people (`keys`), whether they wrote a line in it
+ *   ({@link MEMBER_WROTE_SQL}) and whether they accepted its request themselves ({@link MEMBER_ACCEPTED_SQL});
+ *   letInFactsOfRows adds the key its pin says it is sealed to.
+ * - `friend`: each friend row the member is in, either way round (`a` added `b`).
+ * - `deal`: each deal the member is a party to, whatever its state (`a` the buyer, `b` the seller), with the author of the
+ *   listing it is on as this copy holds it.
+ * - `pay`: each payment the member is a party to, either way (`a` paid `b`), once a pair.
+ * Binds my key nine times: the chat's other people, my line, the participant row, friends twice, deals twice, payments twice.
  */
 const LET_IN_SQL = `
-    SELECT 'dm' AS kind, c.id AS id, ${otherKeysSql()} AS keys FROM conversations c
+    SELECT 'dm' AS kind, c.id AS id, ${otherKeysSql()} AS keys, ${MEMBER_WROTE_SQL('c')} AS wrote, ${MEMBER_ACCEPTED_SQL('c')} AS accepted,
+           NULL AS a, NULL AS b, NULL AS status, NULL AS listing_author
+    FROM conversations c
     WHERE (c.type IS NULL OR c.type = 'dm')
       AND c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
-      AND ${MEMBERS_OWN_CHAT_SQL('c')}
-    UNION ALL SELECT 'key', NULL, friend_pubkey FROM friends WHERE owner_pubkey = ?
-    UNION ALL SELECT 'key', NULL, seller_pubkey FROM marketplace_transactions WHERE buyer_pubkey = ? AND status IN ('pending', 'completed')
-    UNION ALL SELECT 'key', NULL, t.buyer_pubkey FROM marketplace_transactions t WHERE t.seller_pubkey = ? AND t.status IN ('pending', 'completed')
-      AND EXISTS (SELECT 1 FROM posts p WHERE p.id = t.post_id AND p.author_pubkey = t.buyer_pubkey)
-    UNION ALL SELECT 'key', NULL, to_pubkey FROM transactions WHERE from_pubkey = ?
+    UNION ALL SELECT DISTINCT 'friend', NULL, NULL, 0, 0, owner_pubkey, friend_pubkey, NULL, NULL FROM friends
+      WHERE owner_pubkey = ? OR friend_pubkey = ?
+    UNION ALL SELECT DISTINCT 'deal', NULL, NULL, 0, 0, t.buyer_pubkey, t.seller_pubkey, t.status,
+           (SELECT p.author_pubkey FROM posts p WHERE p.id = t.post_id)
+      FROM marketplace_transactions t WHERE t.buyer_pubkey = ? OR t.seller_pubkey = ?
+    UNION ALL SELECT DISTINCT 'pay', NULL, NULL, 0, 0, from_pubkey, to_pubkey, NULL, NULL FROM transactions
+      WHERE from_pubkey = ? OR to_pubkey = ?
 `;
-const letInParams = (me: string): string[] => [me, me, me, me, me, me, me];
+const letInParams = (me: string): string[] => [me, me, me, me, me, me, me, me, me];
 
 /**
- * The keys one copy's {@link LET_IN_SQL} rows let in. A direct chat lets in only the key it is sealed to: its pin's (never a
- * key pinned before it, nor one a listing offers), or with no pin its one other person; none when its rows name several.
+ * A `dm` row's chat, as core's rule reads one: its other people, the key its pin says it is sealed to (never a key pinned
+ * before it, nor one a listing offers), and the member's two steps in it.
  */
-function letInOfRows(rows: readonly any[], pins: DmPeerPins | null, me: string): string[] {
-    const out = new Set<string>();
+function dmChatOfRow(row: any, pins: DmPeerPins | null): LetInChat {
+    const pinned = pins ? dmPinFor(pins, String(row.id)) : null;
+    return {
+        others: typeof row.keys === 'string' && row.keys ? row.keys.split(',') : [],
+        sealedTo: pinned?.peer ?? null,
+        memberWrote: Number(row.wrote) === 1,
+        acceptedByMember: Number(row.accepted) === 1,
+    };
+}
+
+/** One copy's {@link LET_IN_SQL} rows as the facts core's rule reads. */
+function letInFactsOfRows(rows: readonly any[], pins: DmPeerPins | null): LetInFacts {
+    const chats: LetInChat[] = [];
+    const friends: { owner: string; friend: string }[] = [];
+    const deals: LetInDeal[] = [];
+    const payments: { from: string; to: string }[] = [];
     for (const row of rows) {
-        if (row.kind === 'key') {
-            if (typeof row.keys === 'string' && row.keys && row.keys !== me) out.add(row.keys);
-            continue;
-        }
-        const pinned = pins ? dmPinFor(pins, String(row.id)) : null;
-        const others = typeof row.keys === 'string' && row.keys ? row.keys.split(',') : [];
-        const key = pinned?.peer ?? (others.length === 1 ? others[0] : null);
-        if (key && key !== me) out.add(key);
+        if (row.kind === 'dm') chats.push(dmChatOfRow(row, pins));
+        else if (row.kind === 'friend') friends.push({ owner: String(row.a ?? ''), friend: String(row.b ?? '') });
+        else if (row.kind === 'deal') deals.push({ buyer: String(row.a ?? ''), seller: String(row.b ?? ''), status: String(row.status ?? ''), listingAuthor: typeof row.listing_author === 'string' ? row.listing_author : null });
+        else if (row.kind === 'pay') payments.push({ from: String(row.a ?? ''), to: String(row.b ?? '') });
     }
-    return [...out];
+    return { chats, friends, deals, payments };
+}
+
+/** The keys one copy's {@link LET_IN_SQL} rows let in, by core's rule (@beanpool/core let-in.ts letInByFacts). */
+function letInOfRows(rows: readonly any[], pins: DmPeerPins | null, me: string): string[] {
+    return [...letInByFacts(me, letInFactsOfRows(rows, pins))];
 }
 
 /**
@@ -2741,11 +2758,15 @@ export async function oldestUnreadAt(conversationId: string, myPubkey: string, c
     }
 }
 
-/** The phone's own read marker (the Talk tab's badge counts from it); no request. */
-export async function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity) {
+/**
+ * The phone's own read marker (the Talk tab's badge counts from it); no request. Resolves, for a direct chat read in place
+ * (`community`), to how many of the lines it marked that community counts as unread (as its held row counts them: core
+ * countsAsUnreadSql); 0 otherwise.
+ */
+export async function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity): Promise<number> {
     const copy = await chatReadFor(community);
     // In place, only a direct chat that community's copy holds (#3305 review F1): nothing marked for any other id.
-    if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return;
+    if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return 0;
     const database = copy.database;
     const hasUnread = await database.getFirstAsync<{ id: string }>(
         `SELECT m.id FROM messages m
@@ -2756,7 +2777,18 @@ export async function markConversationReadLocally(conversationId: string, myPubk
          LIMIT 1`,
         [myPubkey, conversationId, myPubkey]
     );
-    if (!hasUnread) return;
+    if (!hasUnread) return 0;
+    // A message request for me isn't in that community's number (its server lists it apart): none of its lines are counted.
+    const counted = copy.inPlace ? await database.getFirstAsync<{ n: number }>(
+        `SELECT COUNT(m.id) AS n FROM messages m
+         JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id AND cp.public_key = ?
+         JOIN conversations c ON c.id = m.conversation_id AND ${NOT_A_REQUEST_FOR_ME('c.request')} = 1
+         WHERE m.conversation_id = ?
+           AND m.author_pubkey != ?
+           AND m.timestamp > IFNULL(cp.last_read_at, '2000-01-01')
+           AND ${countsAsUnreadSql('m')}`,
+        [myPubkey, myPubkey, conversationId, myPubkey, myPubkey],
+    ).catch(() => null) : null;
 
     const now = new Date().toISOString();
     await database.runAsync(
@@ -2764,10 +2796,19 @@ export async function markConversationReadLocally(conversationId: string, myPubk
         [now, conversationId, myPubkey]
     );
     emitAppEvent(CONVERSATION_READ_LOCALLY_EVENT, { conversationId, myPubkey });
+    return Math.max(0, Number(counted?.n) || 0);
 }
 
+/**
+ * `file\nconversationId` → a direct chat's lines read here in place that its community's server hasn't taken the read of yet:
+ * they leave that community's number (the "· Switch" line's, notice-counts.ts noteReadInPlace) once its mark-read answers.
+ */
+const _readInPlaceOwed = new Map<string, number>();
+
 export async function markConversationRead(conversationId: string, myPubkey: string, community?: ChatCommunity) {
-    await markConversationReadLocally(conversationId, myPubkey, community);
+    const lines = await markConversationReadLocally(conversationId, myPubkey, community);
+    const owedKey = community ? `${getDatabaseFilenameForNode(community)}\n${conversationId}` : null;
+    if (owedKey && lines > 0) _readInPlaceOwed.set(owedKey, (_readInPlaceOwed.get(owedKey) ?? 0) + lines);
 
     // Push the read cursor to the server so the PEER's device can render the
     // double-tick. Without this the receipt loop never leaves this phone. A chat open in place: to its own community.
@@ -2777,6 +2818,14 @@ export async function markConversationRead(conversationId: string, myPubkey: str
         chatCopyForRequest(community)
             .then((here) => onlyDmInPlace(here, conversationId))
             .then((here) => _signedRequest('/api/messages/mark-read', { pubkey: myPubkey, conversationId }, here.anchorUrl))
+            .then(() => {
+                const owed = owedKey ? _readInPlaceOwed.get(owedKey) ?? 0 : 0;
+                if (!owedKey || !community || owed <= 0) return;
+                _readInPlaceOwed.delete(owedKey);
+                // A push told of each of its lines, unless the chat is muted as this phone last heard it.
+                const pushed = isMuted(getKnownChatMute(conversationId)) ? 0 : owed;
+                void import('./notice-counts').then((m) => m.noteReadInPlace(AsyncStorage, community, owed, pushed)).catch(() => {});
+            })
             .catch(() => { _lastReadPushAt[conversationId] = 0; /* offline — retry on next call */ });
     }
 }
@@ -10777,10 +10826,12 @@ async function dealStep(
         if (!stays()) throw new Error(OTHER_ACCOUNT_SINCE_CHAT_OPENED_TEXT);
         if (here.inPlace && !here.openNow()) throw new NoCopyInPlaceError();
     };
-    // No await from this look to the note below: of two taps at once, one asks.
+    // No await from this look to the note below: of two taps at once, one asks. One that joins a step on its way gets that
+    // step's answer with its OWN copy: a tap in use beside one in place on the same file refreshes the balance and the
+    // screens in use as its own step would (#3363 N3).
     const key = [here.file, me, endpoint, JSON.stringify(payload)].join('\n');
     const running = _dealStepsInFlight.get(key);
-    if (running) return running;
+    if (running) return running.then(({ res }) => ({ res, here }));
     const run = (async () => {
         const res = await _signedRequest(endpoint, payload, { address: here.anchorUrl ?? '', leaving, signer: me });
         if (kept) {
@@ -10802,24 +10853,36 @@ async function dealStep(
     return run;
 }
 
+/**
+ * Tell the screens in use of a deal step the node has answered. It never throws: the step is done by then, and a refresh
+ * that fails must not report a release or a cancel the node took as refused (the member would tap again).
+ */
+function tellScreensOfDealStep(...events: string[]): void {
+    try {
+        const { DeviceEventEmitter } = require('react-native');
+        for (const e of events) DeviceEventEmitter.emit(e);
+    } catch (e: any) {
+        console.warn(`[Escrow] Could not tell the screens of a deal step: ${e?.message || e}`);
+    }
+}
+
 /** Release a deal's Beans (its payer). `community`: a deal of a chat open in place, asked of its own community ({@link dealStep}). */
 export async function completeMarketplaceTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, community?: ChatCommunity) {
     // Awaits the local write so callers (and any screen they navigate to) read a consistent status.
-    const { res, here } = await dealStep(community, confirmerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/complete', { transactionId, confirmerPublicKey, finalHours }, async (database, at) => {
+    const { res, here } = await dealStep(community, confirmerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/complete', { transactionId, confirmerPublicKey, finalHours }, async (database) => {
         const postParam = await database.getFirstAsync<{ repeatable: number, id: string }>('SELECT id, repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
         if (postParam && postParam.repeatable !== 1) {
             await database.runAsync("UPDATE posts SET status = 'completed' WHERE pending_transaction_id = ?", [transactionId]);
         }
         await database.runAsync("UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?", [new Date().toISOString(), transactionId]);
-        if (at.inPlace) return;
-        // Emit events so Ledger screen refreshes immediately
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('transaction_completed');
-        DeviceEventEmitter.emit('sync_data_updated');
     });
     console.log(`[Escrow] Server complete response: success=${res?.success}, txId=${res?.transaction?.id}`);
-    // A balance is asked of the community in use: another community's deal (in place, or the phone has moved on) asks it for none.
-    if (here.inPlace || !here.openNow()) return res;
+    // The screens in use hear of a step in use (this caller's own copy, never a shared step's: #3363 N3), and so does the
+    // balance; a deal in place, or one the phone has moved on from, asks the community in use for none.
+    if (here.inPlace) return res;
+    // Emit events so Ledger screen refreshes immediately
+    tellScreensOfDealStep('transaction_completed', 'sync_data_updated');
+    if (!here.openNow()) return res;
     // Balance refreshes are network round-trips — keep them off the caller's critical path
     const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
     const sellerPubkey = res?.transaction?.sellerPublicKey || null;
@@ -10831,16 +10894,15 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
 
 /** Cancel a hold (either side): the Beans go back to the payer. `community`: as {@link completeMarketplaceTransaction}. */
 export async function cancelMarketplaceTransaction(transactionId: string, cancellerPublicKey: string, community?: ChatCommunity) {
-    const { res } = await dealStep(community, cancellerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/cancel', { transactionId, cancellerPublicKey }, async (database, at) => {
+    const { res, here } = await dealStep(community, cancellerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/cancel', { transactionId, cancellerPublicKey }, async (database) => {
         const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
         if (postParam && postParam.repeatable !== 1) {
             await database.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE pending_transaction_id = ?", [transactionId]);
         }
         await database.runAsync("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?", [transactionId]);
-        if (at.inPlace) return;
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('sync_data_updated');
     });
+    // As a release: the screens in use hear of this caller's own step in use.
+    if (!here.inPlace) tellScreensOfDealStep('sync_data_updated');
     return res;
 }
 
@@ -10852,7 +10914,7 @@ export async function cancelMarketplaceTransaction(transactionId: string, cancel
  * community's to keep it (the chat left, the phone switched, an account leaving): nothing then shows as that community's word.
  * In use: nothing asked (the phone's own sync keeps those).
  */
-export async function syncDealsBetween(myPubkey: string, peerPubkey: string, community: ChatCommunity): Promise<Map<string, { postAuthorPublicKey?: string | null; postType?: string | null }> | null> {
+export async function syncDealsBetween(myPubkey: string, peerPubkey: string, community: ChatCommunity): Promise<Map<string, { postAuthorPublicKey?: string | null; postType?: string | null; status?: string | null }> | null> {
     if (!community) return null;
     const stays = accountStays();
     const controller = new AbortController();
@@ -10874,7 +10936,8 @@ export async function syncDealsBetween(myPubkey: string, peerPubkey: string, com
         } finally {
             releaseSyncLock();
         }
-        return new Map(ours.map((r: any) => [r.id as string, { postAuthorPublicKey: r.postAuthorPublicKey ?? null, postType: r.postType ?? null }]));
+        // Its status too: a step is offered only on a deal its copy holds as this answer says it is (#3363 N1).
+        return new Map(ours.map((r: any) => [r.id as string, { postAuthorPublicKey: r.postAuthorPublicKey ?? null, postType: r.postType ?? null, status: typeof r.status === 'string' ? r.status : null }]));
     } catch (e: any) {
         console.warn(`[Deals] Could not read the deals of a chat in place: ${e?.message || e}`);
         return null;
@@ -11648,10 +11711,10 @@ export async function fetchFriendsFromServer(publicKey: string): Promise<any[]> 
  * Everyone this member has chatted with in a chat of two on this phone, a Market chat too: "Add people I've chatted with and
  * my friends" (private contacts C6, utils/contacts-former.ts), which links each of them by hand, and a linked contact is let
  * in on every community this phone holds (let-in.ts). So only a chat the member took part in themselves counts, by the same
- * test let in once reads ({@link MEMBERS_OWN_CHAT_SQL}: a line they wrote, or a request they accepted themselves; #3319
+ * rule let in once reads (core let-in.ts memberTookPart over {@link MEMBER_WROTE_SQL} and {@link MEMBER_ACCEPTED_SQL}: a line they wrote, or a request they accepted themselves; #3319
  * review at 1697ff89, R2-F1, Marty 21 Nov 2026): never a chat only the other person wrote in, nor one opened by someone
  * taking up the member's Offer, nor a request someone sent them that they haven't accepted. And only the key let in once
- * takes from such a chat ({@link letInOfRows}; #3319 final review, R3-F1): its pin's, else its one other person, nobody when
+ * takes from such a chat (core let-in.ts chatLetsInKey; #3319 final review, R3-F1): its pin's, else its one other person, nobody when
  * its rows name several, never a key pinned before nor one on offer. Each with a card in this copy, and with `keys`, every
  * key that chat knows them by (dm-blocked.ts dmPeerKeys), so a block under any of them holds (blocklist.ts
  * withoutBlockedPeople, slice S7b). Throws when this copy or its DM pins can't be read: nobody is offered on a guess.
@@ -11659,16 +11722,16 @@ export async function fetchFriendsFromServer(publicKey: string): Promise<any[]> 
 export async function getChattedWithMembers(myPubkey: string): Promise<{ publicKey: string; callsign: string; keys: string[] }[]> {
     const here = await chatCopyForRequest();
     const pins = await dmPins.peekReadable(myPubkey, here.file);
-    const rows = await here.database.getAllAsync<{ id: string; keys: string | null }>(
-        `SELECT c.id AS id, ${otherKeysSql()} AS keys FROM conversations c
+    const rows = await here.database.getAllAsync<{ id: string; keys: string | null; wrote: number; accepted: number }>(
+        `SELECT c.id AS id, ${otherKeysSql()} AS keys, ${MEMBER_WROTE_SQL('c')} AS wrote, ${MEMBER_ACCEPTED_SQL('c')} AS accepted FROM conversations c
          WHERE c.type = 'dm' AND c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
-           AND ${NOT_A_REQUEST_FOR_ME('c.request')}
-           AND ${MEMBERS_OWN_CHAT_SQL('c')}`,
+           AND ${NOT_A_REQUEST_FOR_ME('c.request')}`,
         [myPubkey, myPubkey, myPubkey, myPubkey]
     );
     const people = new Map<string, string[]>();
     for (const row of rows) {
-        const [key] = letInOfRows([{ kind: 'dm', id: row.id, keys: row.keys }], pins, myPubkey);
+        const chat = dmChatOfRow(row, pins);
+        const key = memberTookPart(chat) ? chatLetsInKey(chat, myPubkey) : null;
         if (!key) continue;
         const keys = dmPeerKeys(row.keys ?? '', pins ? dmPinFor(pins, String(row.id)) : null);
         people.set(key, [...new Set([...(people.get(key) ?? []), ...keys])]);

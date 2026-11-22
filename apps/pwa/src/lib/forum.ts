@@ -32,6 +32,15 @@ export interface ForumTopic {
      * title, or a placeholder holding its kind alone. The page draws only this, never a title kept or made up for a placeholder.
      */
     links?: ForumLink[];
+    /**
+     * Whether the reader may reply now, as the node's replyInForum takes it (apps/server/src/engine/forum.ts replyRuleOf): the
+     * topic open, its section not archived, and the reader writes in that section (a group's: its convenors and members; anyone
+     * else who reads it reads only). In a topic's own read only, never in a list row. The topic view draws the reply box, Reply,
+     * the line that says why there is none and the follow line from it (review of #3339).
+     */
+    canReply?: boolean;
+    /** Its section is archived, so it takes no replies though it isn't closed itself: in a topic's own read only, beside canReply. */
+    sectionArchived?: boolean;
 }
 /** A topic that links one thing (GET /api/forum/linked): "Talked about in the forum", "Topics about this group". */
 export interface ForumLinkedTopic { id: string; sectionId: string; title: string; replyCount: number; lastActivityAt: string }

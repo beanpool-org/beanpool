@@ -26,7 +26,14 @@ export interface YourGroupsState {
     loading: boolean;
 }
 
-export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>, now: () => number = Date.now) {
+/**
+ * The lists Talk → Groups draws as one (the community in use's, and each other community's this phone holds, slice S6): where
+ * each one's chats stand. A line sent in any of them takes the top of them all, whatever this phone's clock says.
+ */
+export const TALK_GROUPS = new Set<() => number[]>();
+
+/** `drawnWith`: the lists this one is drawn among ({@link TALK_GROUPS}); left out, it is drawn alone. */
+export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>, now: () => number = Date.now, drawnWith?: Set<() => number[]>) {
     let state: YourGroupsState = { items: null, error: null, loading: false };
     const listeners = new Set<() => void>();
     let inflight: Promise<void> | null = null;
@@ -52,6 +59,8 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
 
     /** A chat's place in the list: its newest line (the node's lastActivityAt), or a send from here not yet in it. */
     const movedAt = (item: YourChat) => movedAtWithSend(chatTimeMs(item.lastActivityAt), sends.get(item.conversationId));
+    const places = () => (state.items ?? []).map(movedAt);
+    drawnWith?.add(places);
 
     /** The node's answer, asked at `startedAt`, with this phone's sends that it doesn't show yet: newest first. */
     const applySends = (items: YourChat[], startedAt: number): YourChat[] => {
@@ -69,8 +78,10 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
         set({ loading: true });
         try {
             const res = await fetcher();
+            const sent = sends.size;
             const items = applySends(applyReads(res.items, startedAt), startedAt);
-            const same = state.items && JSON.stringify(state.items) === JSON.stringify(items);
+            // A send settled moves its chat's place (movedAt), the rows the same or not.
+            const same = state.items && sent === sends.size && JSON.stringify(state.items) === JSON.stringify(items);
             set({ items: same ? state.items : items, error: null, loading: false });
         } catch (e: any) {
             set({ error: e?.message || t('Could not load your groups.'), loading: false });
@@ -102,6 +113,10 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
             return () => { listeners.delete(listener); };
         },
         refresh,
+        /** Where a chat stands in the list: its newest line, or a send from here not yet in it. What a list drawn of several is ordered by. */
+        movedAt,
+        /** No longer drawn (a community the phone let go): its chats' places count no more. */
+        leaveDrawn() { drawnWith?.delete(places); },
         /** Opening a chat reads it. Call again when the node confirms, so an answer already on its way is covered too. */
         markRead(conversationId: string) {
             readAt.set(conversationId, now());
@@ -117,7 +132,8 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
         noteSent(conversationId: string) {
             const items = state.items ?? [];
             const own = items.find(i => i.conversationId === conversationId);
-            sends.set(conversationId, sentHere(own ? chatTimeMs(own.lastActivityAt) : 0, items.map(movedAt), now(), now()));
+            const listed = drawnWith ? [...drawnWith].flatMap((chats) => chats()) : places();
+            sends.set(conversationId, sentHere(own ? chatTimeMs(own.lastActivityAt) : 0, listed, now(), now()));
             if (state.items) set({ items: newestChatsFirst(state.items, movedAt) });
         },
         /** This member muted or unmuted a chat: its row (and so the Groups total) shows it now, not at the next refresh. */

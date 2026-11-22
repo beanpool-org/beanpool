@@ -167,12 +167,13 @@ export function guestRosterRows(groupId: string, now = Date.now(), community?: s
     if (kept && now - kept.at < 60_000) return kept.rows;
     const rows = (async (): Promise<GuestNameRows> => {
         const ctx = await outsideContext(community).catch(() => null);
-        if (!ctx) return NO_ROWS;
+        // Nothing read (the chat left as it was asked), or not kept below: asked again at the next opening, never a minute's wait.
+        if (!ctx) { guestRowsMemo.delete(memo); return NO_ROWS; }
         const metaKey = `${GUEST_NAMES_META}:${groupId}:${ctx.identity.publicKey}`;
         const before = await ctx.store.getMeta(metaKey).catch(() => null);
         const listed = await fetchGroupGuests(groupId, community).then((g) => g.guests, () => null);
         const out = guestNameRows(before, listed, Date.now());
-        if (out.json !== null) await ctx.store.setMeta(metaKey, out.json).catch(() => {});
+        if (out.json !== null) await ctx.store.setMeta(metaKey, out.json).catch(() => { guestRowsMemo.delete(memo); });
         return { shown: out.shown, named: out.named };
     })().catch(() => NO_ROWS);
     guestRowsMemo.set(memo, { at: now, rows });

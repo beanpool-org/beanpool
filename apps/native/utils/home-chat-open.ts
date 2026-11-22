@@ -60,7 +60,7 @@ async function openGroup(pick: HomeChatSettings, lines: readonly HomeChatLine[],
     let ring: Awaited<ReturnType<HomeChatOpenDeps['keyring']>>;
     // Its key memory unreadable: nothing opens, and the chat is locked, as seenLocked() fails closed below.
     try { ring = await deps.keyring(pick.conversationId); } catch { return { lines: out, locked: true }; }
-    // Read from what this phone keeps (no request): a group it has held keys of is locked here whatever the node says.
+    // Read from what this phone keeps (no request): a group it has held keys of, or seen locked, is locked here whatever the node says.
     const locked = await ring.seenLocked().catch(() => true);
     // The card only reads the verdicts this phone has: it adds none (the chat screen keeps them).
     const memo = { has: (k: string) => ring.memo.has(k), add: () => { } };

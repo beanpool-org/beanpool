@@ -198,6 +198,7 @@ export async function openGroupThread(
         if (v.signer && !l.editedAt) ring.rememberSigner(l.id, v.signer);
         views.set(l.id, v);
     }
+    await ring.saveSigners();
     // A chat with no epoch yet is not waiting: the first member to write makes epoch 1.
     const waitingForNextKey = from !== null && enc.current !== null && from > enc.current;
     return { views, waitingForNextKey };

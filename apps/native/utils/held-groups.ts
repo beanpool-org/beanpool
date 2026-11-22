@@ -11,18 +11,24 @@
  * send or a mute in place shows on its own row and never on the same id in another.
  */
 import { useSyncExternalStore } from 'react';
-import { chatTimeMs } from '@beanpool/core';
+import { chatTimeMs, newestChatsFirst } from '@beanpool/core';
 import { getDatabaseFilenameForNode, isGuestCopy } from './nodes';
-import { createYourGroupsStore, type YourGroupsStore } from './your-groups-store';
+import { createYourGroupsStore, TALK_GROUPS, type YourGroupsStore } from './your-groups-store';
 import type { YourChat } from './your-groups';
+
+/** On every row made here, and on no other: a server's list is JSON, which can't write it (review of #3358, F3). */
+export const HELD_GROUP: unique symbol = Symbol('held group');
 
 /** A group of another community this phone holds: its row, and where it opens. */
 export interface HeldGroup extends YourChat {
+    readonly [HELD_GROUP]: true;
     /** The row's key: never that of a group in the community in use, nor of the same id in another. */
     key: string;
     /** The community's address, as the saved list has it. */
     community: string;
     communityName: string;
+    /** Its place in the list: its newest line, or a send from here not yet in it (your-groups-store.ts movedAt). */
+    movedAt: number;
 }
 
 /** How long one community's list is waited for. */
@@ -40,7 +46,7 @@ let listing: Promise<unknown> = Promise.resolve();
 function emit(): void {
     const next = places.flatMap(({ file, url, name, store, left }) => (store.getState().items ?? [])
         .filter((item) => item.kind === 'group' && !left.has(item.conversationId))
-        .map((item) => ({ ...item, key: `held-group:${file}:${item.conversationId}`, community: url, communityName: name })));
+        .map((item): HeldGroup => ({ ...item, [HELD_GROUP]: true, key: `held-group:${file}:${item.conversationId}`, community: url, communityName: name, movedAt: store.movedAt(item) })));
     if (JSON.stringify(next) === JSON.stringify(rows)) return;
     rows = next;
     listeners.forEach((l) => l());
@@ -62,8 +68,9 @@ function placeOf(me: string, file: string, url: string, name: string): Place {
         } finally {
             clearTimeout(timer);
         }
-    });
-    return { file, url, name, store, stop: store.subscribe(emit), left };
+    }, undefined, TALK_GROUPS);
+    const off = store.subscribe(emit);
+    return { file, url, name, store, stop: () => { off(); store.leaveDrawn(); }, left };
 }
 
 function drop(gone: Place[]): void {
@@ -141,21 +148,15 @@ export function useHeldGroups(myPubkey?: string | null): HeldGroup[] {
 }
 
 /**
- * Talk → Groups' one list: the community in use's rows and the held ones, newest line first. Each list keeps its own order
- * (the one in use holds a line just sent at its top); a held row takes its place among them by its newest line.
+ * Talk → Groups' one list, one rule over every row, the community in use's and the held ones alike: newest first, the
+ * member's own line included (each row's place as its store has it: `movedAt` of its own, `ownMovedAt` for one in use).
  */
-export function groupsListed(own: readonly YourChat[], held: readonly HeldGroup[]): Array<YourChat | HeldGroup> {
-    const rest = [...held].sort((a, b) => chatTimeMs(b.lastActivityAt) - chatTimeMs(a.lastActivityAt));
-    const out: Array<YourChat | HeldGroup> = [];
-    for (const item of own) {
-        while (rest.length && chatTimeMs(rest[0].lastActivityAt) > chatTimeMs(item.lastActivityAt)) out.push(rest.shift()!);
-        out.push(item);
-    }
-    return [...out, ...rest];
+export function groupsListed(own: readonly YourChat[], held: readonly HeldGroup[], ownMovedAt: (item: YourChat) => number = (item) => chatTimeMs(item.lastActivityAt)): Array<YourChat | HeldGroup> {
+    return newestChatsFirst<YourChat | HeldGroup>([...own, ...held], (item) => (isHeldGroup(item) ? item.movedAt : ownMovedAt(item)));
 }
 
 export function isHeldGroup(item: YourChat | HeldGroup): item is HeldGroup {
-    return typeof (item as HeldGroup).community === 'string' && typeof (item as HeldGroup).key === 'string';
+    return (item as HeldGroup)[HELD_GROUP] === true;
 }
 
 /** The chat screen's params for a held group opened in place: its id, its community by address, and the names shown on the way in. */

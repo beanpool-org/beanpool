@@ -54,7 +54,7 @@ const IN_PLACE = [
     'groupContextFor', 'groupAddressOf', 'groupKeyringFor', 'groupScreenKeyringFor', 'isHeldGroupChat', 'heldGroupRefusal',
     'nodeChatAnswer', 'nodeChatIsUnlocked', 'editRefusal', 'getGroupChat', 'fetchGroupDetails', 'postGroupChatMessage',
     'editThreadMessage', 'removeGroupChatMessage', 'reportGroupChatLine', 'getDecryptedGroupPhoto', 'getDecryptedGroupVoice',
-    'leaveGroupApi', 'markThreadReadOnNode',
+    'leaveGroupApi', 'markThreadReadOnNode', 'noteGroupLocked',
 ].sort();
 /** A function the DM screen may call with no `at`: it reads neither a copy nor a server (this run's memory, by the chat's id). */
 const NO_COPY = new Set(['getKnownChatMute']);

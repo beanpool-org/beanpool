@@ -17,6 +17,10 @@
  * today's roster, it is not stale, and its recipients are exactly today's roster (else this phone rotates first), and
  * (3) this phone holds its key (else it waits for another member's top-up and sends nothing meanwhile). After a rotation
  * it made, it seals under that one at once.
+ *
+ * The file first (review of #3358, F1): what a ring has in memory and what its file has never part. Every change is put in
+ * the store and only then taken into memory (GroupKeyring.commit), so a put refused on its way (a chat in place left, a
+ * switch, a SQLite error) leaves both where they were, and the next sync asks for it and puts it again.
  */
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
@@ -61,11 +65,14 @@ export interface StoredGroupEpoch {
  * `groupId` each call takes is the keyring's key for the rows: this identity's public key, "/", the group's id.
  */
 export interface GroupKeyStore {
-    load(groupId: string): Promise<{ epochs: StoredGroupEpoch[]; highest: number; after: number }>;
+    /** `locked`: this phone has seen the chat locked (noteLocked, or any key of it). */
+    load(groupId: string): Promise<{ epochs: StoredGroupEpoch[]; highest: number; after: number; locked: boolean }>;
     putEpochs(groupId: string, epochs: StoredGroupEpoch[]): Promise<void>;
     setCursor(groupId: string, after: number): Promise<void>;
     /** Store max(stored, epoch): the highest epoch never falls. */
     raiseHighest(groupId: string, epoch: number): Promise<void>;
+    /** Keep that a node answered this chat locked: a mark alone, no key and no epoch. Never taken off. */
+    noteLocked(groupId: string): Promise<void>;
     dropWrap(groupId: string, epoch: number): Promise<void>;
     loadVerdicts(groupId: string): Promise<string[]>;
     addVerdict(groupId: string, key: string): Promise<void>;
@@ -76,17 +83,18 @@ export interface GroupKeyStore {
 
 /** A store in memory: for tests, and the phone's fallback when SQLite can't be opened. */
 export function memoryGroupKeyStore(): GroupKeyStore {
-    const groups = new Map<string, { epochs: Map<number, StoredGroupEpoch>; highest: number; after: number; verdicts: Set<string>; signers: Map<string, string> }>();
+    const groups = new Map<string, { epochs: Map<number, StoredGroupEpoch>; highest: number; after: number; locked: boolean; verdicts: Set<string>; signers: Map<string, string> }>();
     const g = (id: string) => {
         let v = groups.get(id);
-        if (!v) { v = { epochs: new Map(), highest: 0, after: 0, verdicts: new Set(), signers: new Map() }; groups.set(id, v); }
+        if (!v) { v = { epochs: new Map(), highest: 0, after: 0, locked: false, verdicts: new Set(), signers: new Map() }; groups.set(id, v); }
         return v;
     };
     return {
-        async load(id) { const v = g(id); return { epochs: [...v.epochs.values()].map((e) => ({ ...e })), highest: v.highest, after: v.after }; },
+        async load(id) { const v = g(id); return { epochs: [...v.epochs.values()].map((e) => ({ ...e })), highest: v.highest, after: v.after, locked: v.locked || v.highest > 0 || v.after > 0 }; },
         async putEpochs(id, epochs) { const v = g(id); for (const e of epochs) v.epochs.set(e.epoch, { ...e }); },
         async setCursor(id, after) { g(id).after = Math.max(g(id).after, after); },
         async raiseHighest(id, epoch) { g(id).highest = Math.max(g(id).highest, epoch); },
+        async noteLocked(id) { g(id).locked = true; },
         async dropWrap(id, epoch) { const e = g(id).epochs.get(epoch); if (e) e.wrap = null; },
         async loadVerdicts(id) { return [...g(id).verdicts]; },
         async addVerdict(id, key) { g(id).verdicts.add(key); },
@@ -141,12 +149,23 @@ export function groupKeysLookUnopenable(): boolean {
 
 /** For tests: a fresh app session. */
 export function _resetGroupKeySessionForTests(): void {
-    wrapOpenedThisSession = false;
-    wrapFailuresBeforeAnyOpened = 0;
-    keyrings.clear();
+    forgetGroupKeys();
 }
 
 const HOLE_REFETCH_MS = 60_000;
+
+/**
+ * How long one change to the key store is waited for, past SQLite's own wait for a lock (30 s, utils/db.ts): a statement cut
+ * by the close of its handle never answers (the S1 probe), and the changes after it would wait for good.
+ */
+const STORE_WRITE_MS = 45_000;
+
+function inTime<T>(work: Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('the key store did not answer')), STORE_WRITE_MS);
+        work.then(resolve, reject).finally(() => clearTimeout(timer));
+    });
+}
 
 /** One group's keys on this phone. Get it with groupKeyring() so the opened keys are shared for the session. */
 export class GroupKeyring {
@@ -157,6 +176,15 @@ export class GroupKeyring {
     private loading: Promise<void> | null = null;
     private verdicts = new Set<string>();
     private signers = new Map<string, string>();
+    /** First signers remembered here that the file doesn't have yet (rememberSigner, saveSigners). */
+    private unsavedSigners = new Map<string, string>();
+    /** A node answered this chat locked: in memory as it is seen, and once the file keeps it (noteLocked). */
+    private sawLocked = false;
+    private lockKept = false;
+    /** The changes to what this ring keeps, one at a time (commit). */
+    private changing: Promise<unknown> = Promise.resolve();
+    /** Put away (forgetGroupKeys): nothing more of it reaches a file, which may be another by now. */
+    private putAway = false;
     private lastHoleFetch = 0;
     /** Succession verdicts for this group's roster (line-display §4 2b): one walk per (member, former key) per session. */
     readonly successions = new Map<string, boolean>();
@@ -202,7 +230,7 @@ export class GroupKeyring {
     private ensureLoaded(): Promise<void> {
         if (!this.loading) {
             const loading = (async () => {
-                let saved: { epochs: StoredGroupEpoch[]; highest: number; after: number };
+                let saved: Awaited<ReturnType<GroupKeyStore['load']>>;
                 let verdicts: string[];
                 let signers: [string, string][];
                 try {
@@ -216,6 +244,7 @@ export class GroupKeyring {
                 for (const e of saved.epochs) this.epochs.set(e.epoch, e);
                 this.highest = Math.max(this.highest, saved.highest);
                 this.after = Math.max(this.after, saved.after);
+                this.lockKept = this.lockKept || saved.locked;
                 for (const k of verdicts) this.verdicts.add(k);
                 for (const [id, s] of signers) this.signers.set(id, s);
             })();
@@ -226,12 +255,62 @@ export class GroupKeyring {
     }
 
     /**
-     * True once this phone has held a key of this group (an epoch verified, opened or made): the chat is locked here for
-     * good, whatever a node says later (review of #1788, finding 4; director's decision b).
+     * Every change to what this ring keeps: the file first, then memory, one change at a time. `change` works it out from
+     * memory as it stands, puts it in the store, and answers what takes it into memory. A put the store refuses, or never
+     * answers, takes nothing in and throws GROUP_KEY_STORE_UNREAD_TEXT ('store'): nothing is read, sealed or sent by what the
+     * file doesn't hold, so a restart finds what this run went by (review of #3358, F1).
      */
-    async seenLocked(): Promise<boolean> {
+    private commit<T>(change: () => Promise<() => T>): Promise<T> {
+        const done = this.changing.then(async () => {
+            let take: () => T;
+            try {
+                if (this.putAway) throw new Error('this group\'s keys were put away');
+                take = await inTime(change());
+            } catch (e: any) {
+                if (e instanceof GroupChatKeyError) throw e;
+                console.warn('[GroupKeys] could not keep this group\'s keys on the phone:', e?.message || e);
+                throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
+            }
+            return take();
+        });
+        this.changing = done.catch(() => { });
+        return done;
+    }
+
+    /** Every wipe, a copy moved or taken off the phone (forgetGroupKeys): a change still on its way is refused. */
+    putAwayNow(): void { this.putAway = true; }
+
+    /**
+     * True once this phone has held a key of this group (an epoch verified, opened or made), in its file as in memory. What
+     * the DM guard goes by (utils/db.ts refuseGroupKeysForDm): a node's word alone never makes it true.
+     */
+    async holdsKeys(): Promise<boolean> {
         await this.ensureLoaded();
         return this.highest > 0 || this.keys.size > 0 || [...this.epochs.values()].some((e) => !!e.wrap);
+    }
+
+    /**
+     * True once this phone has held a key of this group, or has seen its chat answered locked (noteLocked): the chat is locked
+     * here for good, whatever a node says later, and nothing readable is sent to it (review of #1788, finding 4; director's
+     * decision b; review of #3358, F1).
+     */
+    async seenLocked(): Promise<boolean> {
+        return (await this.holdsKeys()) || this.sawLocked || this.lockKept;
+    }
+
+    /**
+     * A node answered this group's chat locked: kept in the file, so it stays so after a restart, before this phone holds any
+     * key of it. In memory at once (a refusal is the safe side); throws while the file won't take it, and the next answer
+     * puts it again.
+     */
+    async noteLocked(): Promise<void> {
+        this.sawLocked = true;
+        await this.ensureLoaded();
+        if (this.lockKept) return;
+        await this.commit(async () => {
+            await this.store.noteLocked(this.storeKey);
+            return () => { this.lockKept = true; };
+        });
     }
 
     /**
@@ -270,11 +349,26 @@ export class GroupKeyring {
     }
 
     private async raise(epoch: number): Promise<void> {
-        if (epoch > this.highest) this.highest = epoch;
-        await this.store.raiseHighest(this.storeKey, epoch).catch(() => { });
+        if (epoch <= this.highest) return;
+        await this.commit(async () => {
+            await this.store.raiseHighest(this.storeKey, epoch);
+            return () => { this.highest = Math.max(this.highest, epoch); };
+        });
     }
 
-    /** The verify memo for this group's lines (core GroupLineVerifyMemo): in memory, each new verdict written behind. */
+    /** Where the next sync asks from. It moves only past epochs the file has taken (absorb, first). */
+    private async moveCursor(to: number): Promise<void> {
+        if (to <= this.after) return;
+        await this.commit(async () => {
+            await this.store.setCursor(this.storeKey, to);
+            return () => { this.after = Math.max(this.after, to); };
+        });
+    }
+
+    /**
+     * The verify memo for this group's lines (core GroupLineVerifyMemo): in memory, each new verdict written behind. The one
+     * write that may be lost: a verdict the file doesn't have is worked out again from the line itself.
+     */
     get memo(): GroupLineVerifyMemo {
         return {
             has: (k) => this.verdicts.has(k),
@@ -282,12 +376,25 @@ export class GroupKeyring {
         };
     }
 
-    /** The first signer this phone saw for a message id (line-display design §4 rule 3), and remember one. */
+    /**
+     * The first signer this phone saw for a message id (line-display design §4 rule 3), and remember one: in memory at once
+     * (an edit under another key is refused from then on), and in the file by {@link saveSigners}.
+     */
     signerSeen(messageId: string): string | undefined { return this.signers.get(messageId); }
     rememberSigner(messageId: string, signer: string): void {
         if (this.signers.has(messageId)) return;
         this.signers.set(messageId, signer);
-        this.store.putSigner(this.storeKey, messageId, signer).catch(() => { });
+        this.unsavedSigners.set(messageId, signer);
+    }
+
+    /** Put in the file every first signer it doesn't have yet, before their lines are shown. One it refuses is put again at the next. */
+    async saveSigners(): Promise<void> {
+        if (this.unsavedSigners.size === 0) return;
+        await this.commit(async () => {
+            const put = [...this.unsavedSigners];
+            await Promise.all(put.map(([id, signer]) => this.store.putSigner(this.storeKey, id, signer)));
+            return () => { for (const [id] of put) this.unsavedSigners.delete(id); };
+        }).catch(() => { });
     }
 
     private servedRecord(e: KeysAnswer['epochs'][number]): GroupEpochRecord {
@@ -301,43 +408,53 @@ export class GroupKeyring {
         return answerOf(await signedGet(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys${query}`, this.identity as BeanPoolIdentity));
     }
 
-    private async absorb(a: KeysAnswer): Promise<number[]> {
-        const wraps = new Map<number, GroupServedWrap>();
-        for (const w of Array.isArray(a.myWraps) ? a.myWraps : []) wraps.set(w.epoch, w);
-        const put: StoredGroupEpoch[] = [];
-        for (const e of Array.isArray(a.epochs) ? a.epochs : []) {
-            const prev = this.epochs.get(e.epoch);
-            const wrap = wraps.get(e.epoch) ?? null;
-            const record = this.servedRecord(e);
-            if (prev && sameRecord(prev.record, record)) this.unconfirmed.delete(e.epoch);
-            else if (prev) {
-                // A record is the maker's signed header and never changes. One that differs from the copy this phone
-                // holds is the node's doing: the held copy stays, unless it doesn't verify, or this phone made it and
-                // the node never served it back, and the served one does (review of #1788, findings 5 and 7).
-                if (!((this.unconfirmed.has(e.epoch) || !this.verifies(prev.record, e.epoch)) && this.verifies(record, e.epoch))) continue;
-                for (const held of [this.keys, this.recordRecipients]) held.delete(e.epoch);
-                this.badRecords.delete(e.epoch);
-                this.unconfirmed.delete(e.epoch);
-                const next: StoredGroupEpoch = { epoch: e.epoch, record, wrap };
-                this.epochs.set(e.epoch, next);
-                put.push(next);
-                continue;
+    /** Take in what the node served: each new or changed epoch in the file, then in memory ({@link commit}). */
+    private absorb(a: KeysAnswer): Promise<void> {
+        return this.commit(async () => {
+            const wraps = new Map<number, GroupServedWrap>();
+            for (const w of Array.isArray(a.myWraps) ? a.myWraps : []) wraps.set(w.epoch, w);
+            const put = new Map<number, StoredGroupEpoch>();
+            const replaced = new Set<number>();
+            const confirmed = new Set<number>();
+            for (const e of Array.isArray(a.epochs) ? a.epochs : []) {
+                const prev = put.get(e.epoch) ?? this.epochs.get(e.epoch);
+                const wrap = wraps.get(e.epoch) ?? null;
+                const record = this.servedRecord(e);
+                if (prev && sameRecord(prev.record, record)) confirmed.add(e.epoch);
+                else if (prev) {
+                    // A record is the maker's signed header and never changes. One that differs from the copy this phone
+                    // holds is the node's doing: the held copy stays, unless it doesn't verify, or this phone made it and
+                    // the node never served it back, and the served one does (review of #1788, findings 5 and 7).
+                    const unconfirmed = this.unconfirmed.has(e.epoch) && !confirmed.has(e.epoch);
+                    if (!((unconfirmed || !this.verifies(prev.record, e.epoch)) && this.verifies(record, e.epoch))) continue;
+                    replaced.add(e.epoch);
+                    confirmed.add(e.epoch);
+                    put.set(e.epoch, { epoch: e.epoch, record, wrap });
+                    continue;
+                }
+                const wrapChanged = JSON.stringify(prev?.wrap ?? null) !== JSON.stringify(wrap);
+                if (prev && !wrapChanged) continue;
+                // The key is already open from the old wrap (one of a record replaced just above is not).
+                if (wrapChanged && prev?.wrap && this.keys.has(e.epoch) && !replaced.has(e.epoch)) continue;
+                put.set(e.epoch, { epoch: e.epoch, record, wrap: wrap ?? prev?.wrap ?? null });
             }
-            const wrapChanged = JSON.stringify(prev?.wrap ?? null) !== JSON.stringify(wrap);
-            if (prev && !wrapChanged) continue;
-            if (wrapChanged && prev?.wrap && this.keys.has(e.epoch)) continue; // the key is already open from the old wrap
-            const next: StoredGroupEpoch = { epoch: e.epoch, record, wrap: wrap ?? prev?.wrap ?? null };
-            this.epochs.set(e.epoch, next);
-            put.push(next);
-        }
-        if (put.length) await this.store.putEpochs(this.storeKey, put).catch(() => { });
-        return put.map((e) => e.epoch);
+            if (put.size) await this.store.putEpochs(this.storeKey, [...put.values()]);
+            return () => {
+                for (const epoch of replaced) {
+                    for (const held of [this.keys, this.recordRecipients]) held.delete(epoch);
+                    this.badRecords.delete(epoch);
+                }
+                for (const epoch of confirmed) this.unconfirmed.delete(epoch);
+                for (const [epoch, next] of put) this.epochs.set(epoch, next);
+            };
+        });
     }
 
     /**
      * Bring this phone's copy up to the node: new epochs since the last sync (`?after`), and, at most once a minute, the
      * epochs this phone holds no wrap for (a top-up may have landed). Raises the highest epoch to the newest record that
-     * verifies. Throws the node's refusal (GroupKeysRequestError).
+     * verifies. Throws the node's refusal (GroupKeysRequestError), or the store's ('store', {@link commit}): what its file
+     * wouldn't take is asked for again at the next sync.
      */
     async sync(): Promise<GroupKeysState> {
         await this.ensureLoaded();
@@ -348,23 +465,24 @@ export class GroupKeyring {
             a = await this.fetchKeys(`?after=${this.after}`);
             await this.absorb(a);
             const top = (a.epochs || []).reduce((m, e) => Math.max(m, e.epoch), 0);
-            if (top > this.after) { this.after = top; await this.store.setCursor(this.storeKey, top).catch(() => { }); }
+            await this.moveCursor(top);
             newest = Math.max(newest, top);
         } while (a.more && ++guard < 50);
         const from = a.fromEpoch;
         const holes = [...this.epochs.values()].filter((e) => !e.wrap && (from === null || e.epoch >= from) && !this.keys.has(e.epoch)).map((e) => e.epoch);
         if (holes.length && Date.now() - this.lastHoleFetch > HOLE_REFETCH_MS) {
             this.lastHoleFetch = Date.now();
-            await this.absorb(await this.fetchKeys(`?epochs=${holes.slice(-100).join(',')}`)).catch(() => { });
+            await this.absorb(await this.fetchKeys(`?epochs=${holes.slice(-100).join(',')}`)).catch(() => { this.lastHoleFetch = 0; });
         }
         // The highest rises when a record verifies (rule 1): the newest one this phone has, by its header, made by someone
         // the screen shows (finding 6).
         const top = Math.max(newest, a.current ?? 0);
         if (top > this.highest) {
             const rec = this.epochs.get(top)?.record;
-            try {
-                if (rec && this.makerShown(rec)) { verifyGroupEpochRecord(rec, { groupId: this.groupId, epoch: top }); await this.raise(top); }
-            } catch { this.badRecords.add(top); }
+            if (rec && this.makerShown(rec)) {
+                if (this.verifies(rec, top)) await this.raise(top);
+                else this.badRecords.add(top);
+            }
         }
         this.state = { current: a.current ?? null, stale: !!a.stale, fromEpoch: a.fromEpoch ?? null, roster: Array.isArray(a.roster) ? a.roster : [] };
         return this.state;
@@ -540,12 +658,10 @@ export class GroupKeyring {
         const stored = this.epochs.get(epoch);
         if (!stored?.wrap) return null;
         if (this.badRecords.has(epoch)) return this.refetchRefused(epoch, stored);
+        let key: Uint8Array;
         try {
-            const key = openMyKey(stored.record, stored.wrap, this.identity.privateKey, this.groupId);
-            this.keys.set(epoch, key);
+            key = openMyKey(stored.record, stored.wrap, this.identity.privateKey, this.groupId);
             wrapOpenedThisSession = true;
-            if (this.makerShown(stored.record)) await this.raise(epoch);
-            return key;
         } catch (e) {
             if (!(e instanceof GroupKeyNotVerifiedError)) throw e;
             const why = e.message;
@@ -559,6 +675,9 @@ export class GroupKeyring {
             else wrapFailuresBeforeAnyOpened++;
             return null;
         }
+        if (this.makerShown(stored.record)) await this.raise(epoch);
+        this.keys.set(epoch, key);
+        return key;
     }
 
     /**
@@ -571,7 +690,9 @@ export class GroupKeyring {
         this.refetched.add(epoch);
         try {
             await this.absorb(await this.fetchKeys(`?epochs=${epoch}`));
-        } catch {
+        } catch (e) {
+            // The file wouldn't take it: not counted as asked.
+            if (e instanceof GroupChatKeyError) this.refetched.delete(epoch);
             return null;
         }
         return this.epochs.get(epoch) !== stored ? this.keyFor(epoch) : null;
@@ -581,37 +702,48 @@ export class GroupKeyring {
     private async refuse(stored: StoredGroupEpoch): Promise<void> {
         const wrap = stored.wrap;
         if (!wrap) return;
-        stored.wrap = null;
+        const dropped = await this.commit(async () => {
+            // Replaced, or refused, meanwhile: nothing of this one to drop.
+            if (this.epochs.get(stored.epoch) !== stored || stored.wrap !== wrap) return () => false;
+            await this.store.dropWrap(this.storeKey, stored.epoch);
+            return () => { stored.wrap = null; return true; };
+        });
+        if (!dropped) return;
         // The next sync asks for this epoch again at once: another member's top-up may already be there.
         this.lastHoleFetch = 0;
-        await this.store.dropWrap(this.storeKey, stored.epoch).catch(() => { });
         await signedPost(this.nodeUrl, `/api/groups/${encodeURIComponent(this.groupId)}/keys/${stored.epoch}/reject`,
             { wrapper: wrap.wrapper, ephPub: wrap.ephPub }, this.identity as BeanPoolIdentity).catch(() => null);
     }
 
-    private storeMade(record: GroupEpochRecord, key: Uint8Array): StoredGroupEpoch {
+    private madeHere(record: GroupEpochRecord): StoredGroupEpoch {
         const mine = record.wraps!.find((w) => w.recipient === this.identity.publicKey)!;
         const { wraps: _wraps, ...served } = record;
-        const stored: StoredGroupEpoch = {
+        return {
             epoch: record.epoch, record: served,
             wrap: { epoch: record.epoch, wrapper: this.identity.publicKey, ephPub: mine.ephPub, nonce: mine.nonce, wrapped: mine.wrapped, sig: null },
         };
-        this.epochs.set(record.epoch, stored);
-        this.keys.set(record.epoch, key);
-        return stored;
     }
 
     /**
      * After the node stored an epoch this phone made: keep it, raise the highest, and seal under it at once (rule 6). Never
-     * over an epoch this phone holds, or at or below its highest (finding 5).
+     * over an epoch this phone holds, or at or below its highest (finding 5). A file that won't keep it throws ('store'): no
+     * line goes under a key a restart would not find, and the next sync serves this phone's own epoch back.
      */
     async adopt(record: GroupEpochRecord, key: Uint8Array): Promise<void> {
         await this.ensureLoaded();
-        if (this.refusesEpoch(record.epoch)) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
-        const stored = this.storeMade(record, key);
-        await this.store.putEpochs(this.storeKey, [stored]).catch(() => { });
-        await this.raise(record.epoch);
-        if (record.epoch > this.after) { this.after = record.epoch; await this.store.setCursor(this.storeKey, record.epoch).catch(() => { }); }
+        await this.commit(async () => {
+            if (this.refusesEpoch(record.epoch)) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
+            const stored = this.madeHere(record);
+            await this.store.putEpochs(this.storeKey, [stored]);
+            await this.store.raiseHighest(this.storeKey, record.epoch);
+            await this.store.setCursor(this.storeKey, record.epoch);
+            return () => {
+                this.epochs.set(record.epoch, stored);
+                this.keys.set(record.epoch, key);
+                this.highest = Math.max(this.highest, record.epoch);
+                this.after = Math.max(this.after, record.epoch);
+            };
+        });
         this.state = { current: record.epoch, stale: false, fromEpoch: this.state?.fromEpoch ?? null, roster: this.state?.roster ?? [] };
     }
 
@@ -625,8 +757,8 @@ export class GroupKeyring {
         const held = this.epochs.get(record.epoch);
         const { wraps: _wraps, ...served } = record;
         if (!held || !sameRecord(held.record, served) || this.keys.has(record.epoch)) return false;
-        this.keys.set(record.epoch, key);
         await this.raise(record.epoch);
+        this.keys.set(record.epoch, key);
         return true;
     }
 
@@ -875,6 +1007,7 @@ export function groupKeyring(nodeUrl: string, identity: Pick<BeanPoolIdentity, '
 
 /** Every wipe (utils/db.ts clearDB): every opened key leaves memory, and this session's wrap tally; a kept store reopens them. */
 export function forgetGroupKeys(): void {
+    for (const ring of keyrings.values()) ring.putAwayNow();
     keyrings.clear();
     wrapOpenedThisSession = false;
     wrapFailuresBeforeAnyOpened = 0;

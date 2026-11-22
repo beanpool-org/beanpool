@@ -99,7 +99,7 @@ export function sqliteGroupKeyStore(getDb: () => Promise<SqliteLike>): GroupKeyS
                 try { epochs.push({ epoch: r.epoch, record: JSON.parse(r.record), wrap: r.wrap ? JSON.parse(r.wrap) : null }); } catch { /* a row this version can't read: fetched again */ }
             }
             const st = await db.getFirstAsync<{ highest: number; after: number }>('SELECT highest, after FROM group_chat_key_state WHERE group_id = ?', [groupId]);
-            return { epochs, highest: st?.highest ?? 0, after: st?.after ?? 0 };
+            return { epochs, highest: st?.highest ?? 0, after: st?.after ?? 0, locked: !!st };
         },
         async putEpochs(groupId, epochs) {
             const db = await getDb();
@@ -117,6 +117,11 @@ export function sqliteGroupKeyStore(getDb: () => Promise<SqliteLike>): GroupKeyS
             const db = await getDb();
             await db.runAsync(`INSERT INTO group_chat_key_state (group_id, highest) VALUES (?, ?)
                                ON CONFLICT(group_id) DO UPDATE SET highest = MAX(highest, excluded.highest)`, [groupId, epoch]);
+        },
+        async noteLocked(groupId) {
+            const db = await getDb();
+            // The group's state row alone: no epoch, no cursor. Every key this phone comes to hold of it is in the same row.
+            await db.runAsync('INSERT OR IGNORE INTO group_chat_key_state (group_id) VALUES (?)', [groupId]);
         },
         async dropWrap(groupId, epoch) {
             const db = await getDb();

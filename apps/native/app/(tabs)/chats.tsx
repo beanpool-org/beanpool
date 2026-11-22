@@ -115,7 +115,12 @@ export default function ChatsScreen() {
     // The groups of every other community this phone holds (slice S6, utils/held-groups.ts): listed with them, each with its
     // community's name and own count, in the same total.
     const groupsHeld = useHeldGroups(identity?.publicKey);
-    const groupsShown = React.useMemo(() => groupsListed(yourGroups ?? [], groupsHeld), [yourGroups, groupsHeld]);
+    const groupsShown = React.useMemo(() => groupsListed(yourGroups ?? [], groupsHeld, yourGroupsLive.movedAt), [yourGroups, groupsHeld, yourGroupsLive.movedAt]);
+    /** The pull (and Try again): every list drawn here, the held communities' too. */
+    const refreshGroups = () => {
+        void yourGroupsLive.refresh();
+        if (identity?.publicKey) void heldGroups.refresh(identity.publicKey).catch(() => {});
+    };
     const groupsUnread = React.useMemo(() => groupsUnreadTotal(groupsShown), [groupsShown]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -1115,7 +1120,7 @@ export default function ChatsScreen() {
                 <Animated.ScrollView
                     key={hasAny ? 'list' : 'empty'}
                     contentContainerStyle={{ paddingBottom: 100 }}
-                    refreshControl={<RefreshControl refreshing={false} onRefresh={yourGroupsLive.refresh} tintColor={colors.brand.primary} colors={[colors.brand.primary]} />}
+                    refreshControl={<RefreshControl refreshing={false} onRefresh={refreshGroups} tintColor={colors.brand.primary} colors={[colors.brand.primary]} />}
                 >
                     {tabTop()}
                     {talkSwitch}
@@ -1127,7 +1132,7 @@ export default function ChatsScreen() {
                         </View>
                     )}
                     {paneState === 'loading' && <YourGroupsLoading />}
-                    {paneState === 'error' && <YourGroupsError message={yourGroupsLive.error || t('Could not load your groups.')} onRetry={yourGroupsLive.refresh} />}
+                    {paneState === 'error' && <YourGroupsError message={yourGroupsLive.error || t('Could not load your groups.')} onRetry={refreshGroups} />}
                     {hasAny && <YourGroupsRows items={groupsShown} myPubkey={identity?.publicKey} showUnread />}
                     {paneState === 'empty' && !hasAny && <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push(FIND_GROUPS_HREF)} />}
                 </Animated.ScrollView>

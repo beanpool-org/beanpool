@@ -249,6 +249,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     const listRef = useRef<FlatList>(null);
     const composerRef = useRef<ChatComposerHandle>(null);
     const inFlight = useRef(false);
+    // "Open {community} ›" is under way: a second tap has nothing more to do, and nothing failed (slice S6).
+    const moving = useRef(false);
     const readUpTo = useRef<string | null>(null);
     // Whether the newest message is on screen: a message arriving while it is follows the thread down,
     // one arriving while someone reads history does not yank them.
@@ -810,9 +812,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
 
     // What isn't done in place (slice S6): the phone moves to the chat's own community, through the one switch, and opens it there.
     const openThere = async () => {
-        if (!inPlace || !me) return;
-        const moved = await openInCommunity(inPlace.community, `/chat/${id}?group=1`, me, recheck);
-        if (moved !== 'switched') Alert.alert(inPlace.name, t('Something went wrong. Try again in a moment.'));
+        if (!inPlace || !me || moving.current) return;
+        moving.current = true;
+        try {
+            const moved = await openInCommunity(inPlace.community, `/chat/${id}?group=1`, me, recheck);
+            if (moved !== 'switched') Alert.alert(inPlace.name, t('Something went wrong. Try again in a moment.'));
+        } finally {
+            moving.current = false;
+        }
     };
     const offerThere = () => {
         if (!inPlace) return;

@@ -19,6 +19,7 @@ export interface KnowledgePage {
     title: string;
     description: string;
     category: string;
+    /** From the copy, whole addresses on the community whose copy it is (utils/db.ts); in the node's own answer, paths. */
     photos?: string[];
     createdAt?: string;
     updatedAt?: string;

@@ -573,7 +573,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
     // Which showing of a page this is, for what lands after it: an answer or a read that comes back once another page is open, this
     // one is read again, or it is gone, is dropped, as this effect's own read is (review of #3353, N6).
     const showing = useRef(0);
-    // The read after "photos changed" alone, numbered: an older one is dropped for a newer one, or for the node's answer to a Save.
+    // The read after "photos changed" alone, numbered: an older one is dropped for a newer one, or for any answer shown since.
     const reread = useRef(0);
     useEffect(() => {
         let live = true;
@@ -591,14 +591,17 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
      * whether the writer is a Local guide (only a read of the page by id does), so the page keeps what it knew rather than
      * reading a pressed tap as taken back or dropping the writer's badge.
      */
-    const showAnswer = (next: LearnPost) => setState((prev) => {
-        const was = prev && prev !== 'failed' ? prev.post?.knowledge : undefined;
-        const kept = {
-            ...(next.knowledge.helpedByMe === undefined && was?.helpedByMe !== undefined ? { helpedByMe: was.helpedByMe } : {}),
-            ...(next.knowledge.writerLocalGuide === undefined && was?.writerLocalGuide !== undefined ? { writerLocalGuide: was.writerLocalGuide } : {}),
-        };
-        return { id, post: Object.keys(kept).length ? { ...next, knowledge: { ...next.knowledge, ...kept } } : next };
-    });
+    const showAnswer = (next: LearnPost) => {
+        reread.current += 1;
+        setState((prev) => {
+            const was = prev && prev !== 'failed' ? prev.post?.knowledge : undefined;
+            const kept = {
+                ...(next.knowledge.helpedByMe === undefined && was?.helpedByMe !== undefined ? { helpedByMe: was.helpedByMe } : {}),
+                ...(next.knowledge.writerLocalGuide === undefined && was?.writerLocalGuide !== undefined ? { writerLocalGuide: was.writerLocalGuide } : {}),
+            };
+            return { id, post: Object.keys(kept).length ? { ...next, knowledge: { ...next.knowledge, ...kept } } : next };
+        });
+    };
     /** One action: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
     const act = async <A,>(go: () => Promise<A>, after?: (answer: A) => void) => {
         if (busy) return;
@@ -676,7 +679,6 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                                 throw e;
                             }
                             if (showing.current !== here) return;
-                            reread.current += 1;
                             if (answer?.post?.knowledge) showAnswer(answer.post); else setTries((n) => n + 1);
                             setEditing(null);
                         }} />

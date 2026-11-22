@@ -671,7 +671,7 @@ describe('an owner or admin', () => {
         // The read after "photos changed" is slow and something else is on screen when it lands (review of #3353, N6): it is dropped.
         describe('an answer that lands after its page has moved on', () => {
             const BINS = { ...PAGE, id: 'bins', title: 'When the bins go out', photos: [], knowledge: { ...PAGE.knowledge, helped: 1 } } as LearnPost;
-            /** Holds what `held` says, until `land()`: the node answers it as it stood when it was asked (or as `given` says). */
+            /** Holds what `held` says, until `land()` (the last asked first): the node answers it as it stood when it was asked (or as `given` says). */
             const hold = (held: (method: string, path: string) => boolean, given?: () => unknown) => {
                 const answer = request.getMockImplementation()! as (method: string, path: string, body?: unknown) => Promise<unknown>;
                 const waiting: Array<() => void> = [];
@@ -681,7 +681,7 @@ describe('an owner or admin', () => {
                     await new Promise<void>((r) => waiting.push(r));
                     return said();
                 }) as never);
-                return { count: () => waiting.length, land: async () => { waiting.splice(0).forEach((r) => r()); await wait(); } };
+                return { count: () => waiting.length, land: async () => { waiting.splice(0).reverse().forEach((r) => r()); await wait(); } };
             };
             const openPage = async () => {
                 node.posts = [pictured(), BINS];
@@ -730,11 +730,27 @@ describe('an owner or admin', () => {
                 expect(screen.getByTestId('learn-post-photos').querySelectorAll('img')).toHaveLength(1);
             });
 
+            it("an action's answer shown meanwhile: the older read does not put the page back", async () => {
+                await openPage();
+                const read = hold((m, p) => m === 'GET' && p.includes('id=tip'));
+                await refusedSave();
+                fireEvent.click(screen.getAllByRole('button', { name: /back/i })[0]);
+                await wait();
+                node.refuse = null;
+                const tap = hold((m, p) => m === 'POST' && p.endsWith('/checked'), () => ({ post: { ...pictured(), title: 'Checked today' } }));
+                fireEvent.click(screen.getByTestId('learn-post-still-right'));
+                await wait();
+                await tap.land();
+                expect(shows()).toBe('Checked today');
+                await read.land();
+                expect(shows()).toBe('Checked today');
+            });
+
             it('two refused Saves: the later read is the one shown, whichever lands last', async () => {
                 await openPage();
                 const read = hold((m, p) => m === 'GET' && p.includes('id=tip'));
                 await refusedSave();
-                // The second asks again once the page holds one picture; the first, asked when it held three, lands after it.
+                // The second asks again once the page holds one picture; the first, asked when it held three, lands last.
                 node.posts = [{ ...pictured(), photos: [ADDR[0]] }];
                 fireEvent.click(screen.getByTestId('learn-form-send'));
                 await wait();

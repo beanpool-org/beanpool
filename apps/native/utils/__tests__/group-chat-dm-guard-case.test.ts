@@ -110,7 +110,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import {
-    insertMessage, postGroupChatMessage, editThreadMessage, groupKeyringFor, groupScreenKeyringFor, isHeldGroupChat,
+    insertMessage, postGroupChatMessage, editThreadMessage, groupKeyringFor, groupScreenKeyringFor, isHeldGroupChat, isLockedGroupChat,
     isKnownDmConversation, knownDmConversationId, getConversationKind, joinGroupApi, approveGroupMemberApi, leaveGroupApi,
     proposeGroupDecision, createPost, updateGroupApi, _resetDmPeerPinsForTests,
 } from '../db';
@@ -140,7 +140,7 @@ const PUPPET = mkId();
 /** The DM guard's list for this account in the one community file these cases open (§3.4 amendment 7 §3: one per file). */
 const DM_SEEN = dmConversationsSeenStoreKey(ME.publicKey, 'beanpool_test.db');
 /** ChatRoute's asks, wired to the real utils/db.ts as app/chat/[id].tsx wires them. */
-const ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+const ASKS: ChatRouteAsks = { isHeldGroupChat, isLockedGroupChat, knownDmConversationId, getConversationKind };
 
 /** How the fake node answers each group (matched by id in any spelling, as a dishonest node would). */
 interface NodeView {

@@ -19,6 +19,7 @@ Tap **Chat**, then **Groups**. Every group you are in is listed there, newest me
 - The number on **Groups** at the top adds up your unread messages, except in chats you have muted.
 - Tap a group to open its chat. That marks it read.
 - Pull the list down to refresh it.
+- On the phone, the groups you are in at the other communities you have joined on it are listed here too, each with its community's name under the group's. Tap one to read it and write in it: your phone stays where it is, and what you write goes to that community. Its photos and voice messages can be seen and heard there too. To send one, to invite people or to open the group's page, tap **⋮**, then **Open Riverside ›** (with that community's name). To leave the group, tap **⋮**, then **Leave Group**. Their projects, enterprises and events are not in this list.
 
 On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterprises and projects you keep first (with a **Manage** button to run them), then the groups you are in, opening the same chats.
 

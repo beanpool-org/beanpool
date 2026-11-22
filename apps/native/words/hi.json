@@ -1678,7 +1678,7 @@
   "Not confirmed\u0004chat line": "पुष्टि नहीं हुई",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "इस समुदाय का नोड पुराना है और इस समूह की चैट पढ़ सकता है। नोड के अपडेट होने के बाद इसे सुरक्षित लॉक कर दिया जाएगा।",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "शुरू से अंत तक एन्क्रिप्टेड: केवल इस समूह के सदस्य ही इसे पढ़ सकते हैं। नोड केवल यह देखता है कि किसने लिखा, कब लिखा, मेंशन, प्रत्येक पंक्ति किस उत्तर से जुड़ी है, और प्रतिक्रियाएँ।",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "यह नोड अब कहता है कि यह चैट लॉक नहीं है। इस फ़ोन के पास इसकी कुंजियाँ थीं, इसलिए यह अभी भी हर संदेश को लॉक करता है, और ऐसा कुछ भी नहीं भेजता जिसे यह लॉक न कर सके।",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "यह नोड अब कहता है कि यह चैट लॉक नहीं है। इस फ़ोन ने इसे लॉक देखा है, इसलिए यह अभी भी हर संदेश को लॉक करता है, और ऐसा कुछ भी नहीं भेजता जिसे यह लॉक न कर सके।",
   "Only members of this group can open its chat": "केवल इस समूह के सदस्य ही इसकी चैट खोल सकते हैं",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "यह फ़ोन इस बातचीत को सीधे संदेश के रूप में जानता है, समूह चैट के रूप में नहीं। कुछ भी नहीं भेजा गया।",
   "This message's key isn't on this phone, so it can't be edited here.": "इस संदेश की कुंजी इस फ़ोन पर नहीं है, इसलिए इसे यहाँ संपादित नहीं किया जा सकता।",

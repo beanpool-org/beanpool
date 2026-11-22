@@ -57,8 +57,9 @@ export function ChatOwnerHeader({ kind, name, avatarUrl, category, lifecycle, de
                 <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.body} />
             </Pressable>
             <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={h.a11y}
+                // With no page to open (a group's chat in place, slice S6) it is no button: its own words are read, never "Opens the group page".
+                accessibilityRole={onOpenOwner ? 'button' : undefined}
+                accessibilityLabel={onOpenOwner ? h.a11y : undefined}
                 onPress={onOpenOwner}
                 disabled={!onOpenOwner}
                 style={[styles.owner, avatarUrl ? { flexDirection: 'row', alignItems: 'center', gap: 10 } : null]}

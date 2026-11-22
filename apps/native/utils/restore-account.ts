@@ -28,6 +28,7 @@ import {
 import { clearPendingOnboarding } from './onboarding-state';
 import { assertPlainNodeAddress } from './node-url';
 import { communitiesOnThisPhone, forgetCommunities, releaseAccountFromPhone } from './account-leaves-phone';
+import { whileAccountLeaves } from './account-leaving';
 import { communitySwitched } from './community-switch';
 import { moveCommunityAddress } from './community-move-lock';
 import { forgetTheLook } from './look-around';
@@ -122,19 +123,22 @@ export async function saveRestoredAccount({ identity, replacesAnother }: Cleared
     // Only a plain host[:port] becomes the phone's community (node-url.ts). Refused before anything is removed.
     assertPlainNodeAddress(anchorUrl);
     try {
-        if (replacesAnother) {
-            await releaseAccountFromPhone(await leavingAccount(identity));
-            await wipeIdentityScopedStorage(AsyncStorage);
-        } else {
-            // Onto a phone with no account that looked around first (slice S12): that look's guest mark is not this account's.
-            await forgetTheLook();
-        }
-        await moveCommunityAddress(anchorUrl);
-        // The update screen asks the community now in use (utils/community-switch.ts).
-        communitySwitched();
-        // The member asked for this account back, and was asked above before it replaces another: it may go over an item
-        // this phone can't read, or the account the gate let it replace (identity.ts KEY-04).
-        await importIdentity(identity, { replaceUnreadable: true });
+        // Until the restored key is over the old one's, nothing more of the old account's group keys is written (account-leaving.ts).
+        await whileAccountLeaves(async () => {
+            if (replacesAnother) {
+                await releaseAccountFromPhone(await leavingAccount(identity));
+                await wipeIdentityScopedStorage(AsyncStorage);
+            } else {
+                // Onto a phone with no account that looked around first (slice S12): that look's guest mark is not this account's.
+                await forgetTheLook();
+            }
+            await moveCommunityAddress(anchorUrl);
+            // The update screen asks the community now in use (utils/community-switch.ts).
+            communitySwitched();
+            // The member asked for this account back, and was asked above before it replaces another: it may go over an item
+            // this phone can't read, or the account the gate let it replace (identity.ts KEY-04).
+            await importIdentity(identity, { replaceUnreadable: true });
+        }, replacesAnother);
     } catch (e) {
         if (!replacesAnother) throw e;
         throw await removeUnsavedReplace(e);

@@ -11,7 +11,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { acrossChatListed, type KnownChat } from '@beanpool/core';
-import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, isHeldMember, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
+import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, heldChatIsGroup, isHeldMember, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { communityAddress, sameCommunity } from './push-pins';
@@ -272,15 +272,16 @@ export async function heldOutsideChatsShown(myPubkey: string, view?: HeldChatsVi
  * What a link to a chat of another community opens (slice S2; #3305 review F1 and F2). The chat's route asks this before
  * it draws anything for a `community` param:
  * - `here`: the community in use, however spelled: the chat's ordinary route, which asks what kind of chat the id is;
- * - `in-place`: a direct chat that community's own copy already holds (db.ts heldChatIsDm, read only), at the address and
- *   under the name the phone saved for it, never a link's own;
- * - `move`: any other id of a community this phone holds as a member (a group's, an event's or an enterprise's chat, an
- *   id its copy doesn't hold): nothing of it opens in place, and a tap moves the phone there (S1);
+ * - `in-place`: a direct chat that community's own copy already holds (db.ts heldChatIsDm, read only), or a group's that its
+ *   copy or its own list this run holds (`kind: 'group'`, slice S6, db.ts heldChatIsGroup), at the address and under the name
+ *   the phone saved for it, never a link's own;
+ * - `move`: any other id of a community this phone holds as a member (an event's or an enterprise's chat, an id its copy
+ *   doesn't hold): nothing of it opens in place, and a tap moves the phone there (S1);
  * - `nothing`: not a community this phone holds (not saved, a guest's look, not a plain address).
  */
 export type ChatInPlaceRoute =
     | { open: 'here' }
-    | { open: 'in-place' | 'move'; community: string; name: string }
+    | { open: 'in-place' | 'move'; community: string; name: string; kind?: 'group' }
     | { open: 'nothing' };
 
 export async function chatInPlaceRoute(myPubkey: string | null | undefined, id: string, community: string): Promise<ChatInPlaceRoute> {
@@ -293,7 +294,9 @@ export async function chatInPlaceRoute(myPubkey: string | null | undefined, id: 
     const where = { community: node.url, name: typeof savedName === 'string' && savedName.trim() ? savedName.trim() : communityName(node) };
     if (!myPubkey || !id) return { open: 'move', ...where };
     try {
-        return (await heldChatIsDm(myPubkey, node.url, id)) ? { open: 'in-place', ...where } : { open: 'move', ...where };
+        if (await heldChatIsDm(myPubkey, node.url, id)) return { open: 'in-place', ...where };
+        // A link may carry a group's id in capitals: the group's chat is its id as the node makes it (chat-route.ts screenIdOf).
+        return (await heldChatIsGroup(myPubkey, node.url, id.toLowerCase())) ? { open: 'in-place', kind: 'group', ...where } : { open: 'move', ...where };
     } finally {
         // The check read through a held, read-only handle: it closes again unless Chat is in view (#3302 review F3). The
         // chat doesn't wait for that close: the copy it opens in place is a connection of its own.

@@ -327,7 +327,7 @@ const onPhone = async () => (await loadContacts(ME, phoneContactsDeps())).onPhon
 // Message's readers load on first use (utils/message-anyone.ts imports them lazily): loaded once here, so no row's settle()
 // is spent loading them and a first tap never lands in the next row.
 beforeAll(async () => {
-    await Promise.all([import('../held-chats'), import('../outside-mail'), import('../block-rules'), import('../dm-blocked'), import('../outside-chat-live'), import('../membership-probe')]);
+    await Promise.all([import('../held-chats'), import('../outside-mail'), import('../block-rules'), import('../dm-blocked'), import('../outside-chat-live'), import('../node-profile'), import('../membership-probe')]);
 });
 beforeEach(() => {
     mem.former = false; mem.formerDeleted = 0; mem.deleteAnswer = { here: true, complete: true }; mem.chats = []; mem.friends = []; mem.events.clear();

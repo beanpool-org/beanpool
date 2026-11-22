@@ -1846,7 +1846,7 @@
   "Not confirmed\u0004chat line": "Не підтверджено",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "Вузол цієї спільноти застарілий і може читати чат цієї групи. Його буде захищено після оновлення вузла.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "Наскрізне шифрування: читати можуть лише учасники цієї групи. Вузол бачить автора, час, згадки, відповіді та реакції.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "Вузол тепер повідомляє, що цей чат не захищений. Цей телефон мав його ключі, тому він усе одно шифрує кожне повідомлення і не надсилає нічого незахищеного.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Вузол тепер повідомляє, що цей чат не захищений. Цей телефон бачив його захищеним, тому він усе одно шифрує кожне повідомлення і не надсилає нічого незахищеного.",
   "Only members of this group can open its chat": "Лише учасники цієї групи можуть відкрити її чат",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "Цей телефон вважає цю розмову особистим повідомленням, а не груповим чатом. Нічого не було надіслано.",
   "This message's key isn't on this phone, so it can't be edited here.": "Ключа цього повідомлення немає на цьому телефоні, тому його не можна редагувати тут.",

@@ -527,6 +527,9 @@ export function isAtBottom(offsetY: number): boolean {
     return offsetY <= AT_BOTTOM_SLACK_PX;
 }
 
+/** The lines a group's or an enterprise's chat reads at a time, newest first (db.ts getGroupChat, getEnterpriseChat). */
+export const CHAT_PAGE_LINES = 50;
+
 /**
  * The bubbles this phone still owes after a read of the node. A node keeps the phone's `clientId` as the
  * message id, so a message that came back in the read is the phone's own bubble arriving home and stops being
@@ -536,14 +539,34 @@ export function isAtBottom(offsetY: number): boolean {
  * flight. A send whose POST succeeded but whose follow-up read did not must keep its bubble: retiring it on a
  * read that never answered takes the sender's message off the screen although the node holds it, and only the
  * next poll brings it back.
+ *
+ * A bubble's `after` is the node's time of the newest line the chat showed as it was written ('' when it showed none):
+ * the node's clock, never the phone's. A full page (`pageSize` lines, the most a read brings) whose oldest line is
+ * newer than that is a page of lines that all came after it, so it can't list the bubble's own line: the node took it
+ * and it is older than the page, or the node never took it and a page of the chat has gone by since. Either way it
+ * stops being pending (#3370 decide): kept, it came back "not delivered" on every open although the node held it, and
+ * its Resend (stored once under its id) would bring back only that same page. A bubble with no `after` (written
+ * before the chat had answered) is retired only by the node's own copy, as before.
  */
-export function pendingAfterRead<T extends { clientId: string }>(
+export function pendingAfterRead<T extends { clientId: string; after?: string }>(
     pending: T[],
-    nodeMessages: { id: string | number }[] | null | undefined,
+    nodeMessages: { id: string | number; timestamp?: unknown }[] | null | undefined,
+    pageSize: number = CHAT_PAGE_LINES,
 ): T[] {
     if (!nodeMessages) return pending;
     const held = new Set(nodeMessages.map(m => String(m.id)));
-    return pending.filter(p => !held.has(p.clientId));
+    const times = nodeMessages.map(m => m.timestamp);
+    const oldest = nodeMessages.length >= pageSize && times.every((t): t is string => typeof t === 'string' && t.length > 0)
+        ? times.reduce((a, b) => (b < a ? b : a))
+        : null;
+    return pending.filter(p => !held.has(p.clientId) && !(oldest !== null && typeof p.after === 'string' && oldest > p.after));
+}
+
+/** The node's time of the newest line `nodeMessages` hold ('' for none), as a bubble's `after` (pendingAfterRead). */
+export function newestLineAt(nodeMessages: { timestamp?: unknown }[]): string {
+    let newest = '';
+    for (const m of nodeMessages) if (typeof m.timestamp === 'string' && m.timestamp > newest) newest = m.timestamp;
+    return newest;
 }
 
 /**

@@ -86,7 +86,7 @@ import {
 } from '../utils/your-groups';
 import {
     buildChatListItems, chatActionErrorMessage, chatListIndexOf, formatMessageTime, hasAnyAction, isTombstone, messageActions, messageTime,
-    pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneWords,
+    newestLineAt, pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneWords,
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
 // The key and line code above never reaches the words layer: what it writes is translated where it is shown.
@@ -156,6 +156,8 @@ interface PendingMessage {
     replyToId: string | null;
     state: 'sending' | 'failed';
     timestamp: string;
+    /** The node's time of the newest line the chat showed as it was written; none before the chat answered (pendingAfterRead). */
+    after?: string;
 }
 
 export function GroupChatView({ kind, id, justCreated, initialName, openInfo, inPlace }: Props) {
@@ -318,7 +320,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     useEffect(() => {
         const file = unsentFile.current;
         if (!unsentRead || !me || !file) return;
-        void keepUnsent(AsyncStorage, me, file, id, pending.map(({ clientId, text, replyToId, timestamp }) => ({ clientId, text, replyToId, timestamp })));
+        void keepUnsent(AsyncStorage, me, file, id, pending.map(({ clientId, text, replyToId, timestamp, after }) => ({ clientId, text, replyToId, timestamp, after })));
     }, [pending, unsentRead, me, id]);
 
     // The list this chat's row is in: that community's own in place, never the community in use's.
@@ -734,6 +736,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
                 replyToId: replyToMessage?.id ?? null,
                 state: 'sending',
                 timestamp: new Date().toISOString(),
+                // The newest line the chat shows, by the node's clock: once a whole page has come after it, the line is older than any read.
+                ...(view ? { after: newestLineAt(rawMessages) } : {}),
             };
             clientIdRef.current = Crypto.randomUUID();
             setPending(prev => [...prev, p]);

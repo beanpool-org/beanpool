@@ -16,6 +16,8 @@ export interface UnsentLine {
     text: string;
     replyToId: string | null;
     timestamp: string;
+    /** The node's time of the newest line the chat showed as it was written (chat-actions.ts pendingAfterRead). */
+    after?: string;
 }
 
 interface Storage {
@@ -34,7 +36,10 @@ function lineOf(v: unknown): UnsentLine | null {
     if (!v || typeof v !== 'object') return null;
     const l = v as Record<string, unknown>;
     if (typeof l.clientId !== 'string' || !l.clientId || typeof l.text !== 'string' || typeof l.timestamp !== 'string') return null;
-    return { clientId: l.clientId, text: l.text, replyToId: typeof l.replyToId === 'string' ? l.replyToId : null, timestamp: l.timestamp };
+    return {
+        clientId: l.clientId, text: l.text, replyToId: typeof l.replyToId === 'string' ? l.replyToId : null, timestamp: l.timestamp,
+        ...(typeof l.after === 'string' ? { after: l.after } : {}),
+    };
 }
 
 /** Each chat's lines, as kept; anything else in the value is none. */

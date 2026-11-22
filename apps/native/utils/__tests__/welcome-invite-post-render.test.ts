@@ -17,7 +17,7 @@
  * brings back that isn't an invite is never shown or sent.
  * And 6: the same screens laid out on an old small phone (320 × 569 dp, the text at 1.3×, three-button navigation; walk 148),
  * light and dark: clear of both system bars, the name box in view, the address asked only where the invite names none, and a
- * refused code said before Join.
+ * refused code said before Join, with everything Join's refusal does.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -417,6 +417,9 @@ vi.mock('../../components/SsoButton', () => {
 import { NAME_BOX_WORDS, setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import WelcomeScreen from '../../app/welcome';
+import { palette } from '../../constants/colors';
+import { MEMBER_TICKET_REFUSED_TEXT } from '../invite-entries';
+import { onboardingColors } from '../onboarding-colors';
 import { noVault } from './fake-vault';
 import { layOut } from './yoga-dom-layout';
 
@@ -1120,7 +1123,11 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
             expect(text()).toContain(REQUIRED);
         });
 
-        it.each(['not_a_community', 'invites_off'])('the check says %s: the box is drawn to put it right, and the words say so before Join', async (reason) => {
+        it.each([
+            ['not_a_community', 'riverside.example.org'],
+            ['invites_off', 'riverside.example.org'],
+            ['unknown_inviter', "Double-check you're joining the right community"],
+        ])('the check says %s: the box is drawn to put it right, and the words say so before Join', async (reason, words) => {
             smallPhone(false);
             params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
             phone.invite = { valid: false, reason };
@@ -1128,7 +1135,7 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
             expect(field(ADDRESS)).toBeUndefined();
             await checkAnswers();
             expect(field(ADDRESS)?.value).toBe(RIVERSIDE);
-            expect(byId('invite-refused')?.textContent).toContain('riverside.example.org');
+            expect(byId('invite-refused')?.textContent).toContain(words);
             // Put right: those words were for the old address.
             await type(ADDRESS, 'https://upstream.example.org');
             expect(byId('invite-refused')).toBeNull();
@@ -1145,6 +1152,94 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
             expect(field(ADDRESS)).toBeUndefined();
             await press('Join');
             expect(field(ADDRESS)?.value).toBe(RIVERSIDE);
+        });
+
+        it('a redeem refused, and the check after it says the community does not know the inviter: the box is drawn', async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+            phone.redeemFails = 'Not now';
+            await mount();
+            await type('Your name or nickname', 'Rowan');
+            let asked = 0;
+            phone.checkFor = async () => (asked++ === 0 ? { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' } : { valid: false, reason: 'unknown_inviter' });
+            await press('Join');
+            expect(asked).toBe(2);
+            expect(text()).toContain('Not now');
+            expect(field(ADDRESS)?.value).toBe(RIVERSIDE);
+        });
+
+        it('never hidden under the typing: the address the invite named, typed again in the box, leaves the box where it is', async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+            phone.invite = { valid: false, reason: 'invites_off' };
+            await mount();
+            await checkAnswers();
+            await type(ADDRESS, 'https://upstream.example.org');
+            // The same code again: the box is drawn for the address in hand, which isn't the one the invite named.
+            await press('Change the invite');
+            await press('Next');
+            expect(field(ADDRESS)?.value).toBe('https://upstream.example.org');
+            await type(ADDRESS, RIVERSIDE);
+            expect(field(ADDRESS)?.value).toBe(RIVERSIDE);
+        });
+
+        describe('a join resumed after a restart', () => {
+            const resume = (pending: Record<string, unknown>) => {
+                smallPhone(false);
+                phone.stored = { ...KNOCKER };
+                phone.pending = { inviteCode: 'INV-ABCD-EFGH', anchorUrl: RIVERSIDE, callsign: 'Rowan', redeemed: false, ...pending };
+            };
+
+            it.each([
+                ['no link', {}],
+                ['the same link tapped again, its address written another way', { invite: 'INV-ABCD-EFGH', server: 'riverside.example.org', t: '1' }],
+            ] as Array<[string, Record<string, string>]>)('at the name step, %s: not asked, and Join goes to that community', async (_how, link) => {
+                resume({ step: 'create' });
+                params.now = link;
+                await mount();
+                expect(onNameScreen()).toBe(true);
+                expect(field(ADDRESS)).toBeUndefined();
+                expect(text()).not.toContain(REQUIRED);
+                await checkAnswers();
+                expect(byId('invite-greeting')?.textContent).toContain('Ana invited you to Riverside');
+                expect(field(ADDRESS)).toBeUndefined();
+                await press('Join');
+                expect(phone.redeems).toEqual([{ code: 'INV-ABCD-EFGH', callsign: 'Rowan' }]);
+                expect(store.map.get('beanpool_anchor_url')).toBe(RIVERSIDE);
+            });
+
+            it('at the photo step, then its ‹: not asked', async () => {
+                resume({ step: 'profileSetup', redeemed: true });
+                phone.invite = { valid: false, reason: 'used', communityName: 'Riverside' };
+                await mount();
+                expect(text()).toContain('Choose your look');
+                await press('Back');
+                expect(onNameScreen()).toBe(true);
+                expect(field(ADDRESS)).toBeUndefined();
+                expect(text()).not.toContain(REQUIRED);
+                // Its own code, spent by its own key: Join asks the node that, and nothing is said before.
+                await checkAnswers();
+                expect(byId('invite-refused')).toBeNull();
+                expect(field(ADDRESS)).toBeUndefined();
+            });
+
+            it('nothing answers there at Join: the box is drawn, to put it right', async () => {
+                resume({ step: 'create' });
+                phone.checkFor = async () => null;
+                phone.redeemFails = 'Network request failed';
+                await mount();
+                expect(field(ADDRESS)).toBeUndefined();
+                await press('Join');
+                expect(field(ADDRESS)?.value).toBe(RIVERSIDE);
+            });
+
+            it('no community in the record: asked', async () => {
+                resume({ step: 'create', anchorUrl: '' });
+                await mount();
+                expect(onNameScreen()).toBe(true);
+                expect(field(ADDRESS)).toBeTruthy();
+                expect(text()).toContain(REQUIRED);
+            });
         });
     });
 
@@ -1220,6 +1315,192 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
             await checkAnswers();
             expect(byId('invite-refused')).toBeNull();
             expect(byId('invite-greeting')?.textContent).toContain("You're invited");
+        });
+    });
+
+    // Review of #3361 at bac287d9: the early check said Join's words and did nothing else of what Join's refusal does. The held
+    // link reopened every launch on a dead code, a spent one had no way to Recover, and "the right community" had no box.
+    describe('a refused code: the check as the step opens and Join do the same', () => {
+        const HELD_INVITE = 'beanpool_held_invite';
+        const CODE = 'INV-ABCD-EFGH';
+        const RECOVER = '🔑 Recover an existing account with seed phrase →';
+        const NAME = 'Your name or nickname';
+        const hold = (invite: Record<string, unknown> = { invite: CODE, server: RIVERSIDE }) => store.map.set(HELD_INVITE, JSON.stringify({ ...invite, at: Date.now() }));
+        const heldCode = () => { const raw = store.map.get(HELD_INVITE); return raw ? JSON.parse(raw).invite : null; };
+        const styleOf = (el: Element) => JSON.parse(el.getAttribute('data-style') ?? '{}') as Record<string, any>;
+        /** The lines in the error's style: what the step says is wrong, wherever on it. */
+        const problems = () => all('span').filter((el) => styleOf(el).color === onboardingColors(look148.dark ? 'night' : 'light').colors.feedback.danger.fg && styleOf(el).textAlign === 'center');
+        const recovers = () => all('button').filter((b) => b.textContent === RECOVER);
+        /** What the refusal says (once), offers right under it, asks for, and leaves held. */
+        const outcome = () => ({
+            words: problems().map((el) => el.textContent),
+            recover: recovers().map((b) => b.previousElementSibling?.textContent),
+            addressBox: field(ADDRESS)?.value ?? null,
+            held: heldCode(),
+        });
+        /** The refusal heard by the check as the step opens. Join is never tapped. */
+        async function early(reason: string | undefined, dark = false) {
+            smallPhone(dark);
+            hold();
+            phone.invite = { valid: false, reason, communityName: 'Riverside' };
+            await mount();
+            expect(onNameScreen()).toBe(true);
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeTruthy();
+            return outcome();
+        }
+        /** The refusal heard by Join alone: the check as the step opens has no answer. */
+        async function atJoin(reason: string | undefined, dark = false) {
+            smallPhone(dark);
+            hold();
+            let joining = false;
+            phone.checkFor = async () => (joining ? { valid: false, reason, communityName: 'Riverside' } : null);
+            await mount();
+            await type(NAME, 'Rowan');
+            expect(heldCode()).toBe(CODE);
+            joining = true;
+            await press('Join');
+            expect(byId('invite-refused')).toBeNull();
+            return outcome();
+        }
+        async function relaunch() {
+            leave();
+            phone.checkFor = null;
+            await mount();
+        }
+
+        const ROWS: Array<[reason: string | undefined, words: string, forgotten: boolean, recover: boolean, box: boolean]> = [
+            ['used', 'This invite has already been used', true, true, false],
+            ['expired', 'This invite has expired', true, false, false],
+            ['invalid', "That invite wasn't recognised by your community.", true, false, false],
+            ['malformed', "That invite wasn't recognised by your community.", true, false, false],
+            ['unknown_inviter', "This community doesn't know the person who made this invite. Double-check you're joining the right community", false, false, true],
+            ['invites_off', 'riverside.example.org doesn’t use invites', false, false, true],
+            ['not_a_community', 'There is no BeanPool community at riverside.example.org.', false, false, true],
+            ['admins_only', MEMBER_TICKET_REFUSED_TEXT, false, false, false],
+            [undefined, "That invite wasn't recognised by your community.", false, false, false],
+        ];
+        describe.each([false, true])('dark: %s', (dark) => {
+            it.each(ROWS)('%s: the words, what is offered, the address box and what stays held', async (reason, words, forgotten, recover, box) => {
+                const first = await early(reason, dark);
+                expect(first.words).toEqual([expect.stringContaining(words)]);
+                expect(first).toMatchObject({ recover: recover ? first.words : [], addressBox: box ? RIVERSIDE : null, held: forgotten ? null : CODE });
+                // The next launch: the front door for a dead code, else the invite again.
+                await relaunch();
+                expect(!!byId('front-door'), 'the front door').toBe(forgotten);
+                expect(onNameScreen()).toBe(!forgotten);
+                leave();
+
+                store.map.clear();
+                const join = await atJoin(reason, dark);
+                expect(join).toEqual(first);
+                await relaunch();
+                expect(!!byId('front-door'), 'the front door').toBe(forgotten);
+                expect(phone.redeems).toEqual([]);
+            });
+
+            it.each([['early', early], ['at Join', atJoin]] as const)('a spent code said %s: Recover is in the set drawn, and opens the words screen', async (_when, hear) => {
+                await hear('used', dark);
+                const recover = button(RECOVER);
+                const { colors } = onboardingColors(dark ? 'night' : 'light');
+                expect(styleOf(recover).backgroundColor).toBe(dark ? colors.feedback.info.bg : palette.blue50);
+                expect(styleOf(recover).borderColor).toBe(dark ? colors.feedback.info.border : palette.blue200);
+                expect(styleOf(recover.firstElementChild!).color).toBe(dark ? palette.blue400 : palette.blue600);
+                await press(RECOVER);
+                expect(text()).toContain('🔑 Recover Identity');
+                expect(phone.redeems).toEqual([]);
+            });
+
+            it.each(['used', 'expired', 'invalid', 'unknown_inviter'])('%s, as the step opens: the name box above the Join footer, with it what is offered and the end of the words, inside the width', async (reason) => {
+                await early(reason, dark);
+                await measureNameStep();
+                const { at, box } = lay();
+                const y = scrolledTo();
+                const view = at(part('scroll'));
+                expect(view.bottom).toBe(at(part('step-footer-invite')).top);
+                // The address box where the answer is about the address, then the name box.
+                expect(all('input').length).toBe(reason === 'unknown_inviter' ? 2 : 1);
+                expect(recovers().length).toBe(reason === 'used' ? 1 : 0);
+                for (const el of [...recovers(), ...all('input')]) {
+                    expect(at(el).top - y).toBeGreaterThanOrEqual(view.top);
+                    expect(at(el).bottom - y).toBeLessThanOrEqual(view.bottom);
+                }
+                expect(at(part('invite-refused')).bottom - y).toBeGreaterThan(view.top);
+                for (const el of [part('invite-refused'), ...recovers(), ...all('input')]) {
+                    expect(box(el).width).toBeGreaterThan(0);
+                    expect(box(el).width).toBeLessThanOrEqual(SCREEN.width - 2 * 24);
+                    expect(el.getAttribute('data-lines')).toBeNull();
+                }
+                for (const b of recovers()) expect(box(b).height, 'a thumb').toBeGreaterThanOrEqual(44);
+            });
+        });
+
+        it('a fresh link copied after the early refusal, the app opened again: "I have an invite" reads it', async () => {
+            await early('expired');
+            await relaunch();
+            clip.has = true; clip.text = `${RIVERSIDE}/?invite=INV-FRSH-LINK`;
+            phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' };
+            await press('I have an invite');
+            expect(clip.reads).toBe(1);
+            await checkAnswers();
+            expect(byId('invite-greeting')?.textContent).toContain('Ana invited you to Riverside');
+            expect(byId('invite-refused')).toBeNull();
+        });
+
+        it('a newer link held meanwhile stays: only the refused code is forgotten', async () => {
+            smallPhone(false);
+            params.now = { invite: CODE, server: RIVERSIDE, t: '1' };
+            hold({ invite: 'INV-NEWR-LINK', server: RIVERSIDE });
+            phone.invite = { valid: false, reason: 'expired' };
+            await mount();
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeTruthy();
+            expect(heldCode()).toBe('INV-NEWR-LINK');
+        });
+
+        it.each(['used', 'expired', 'invalid'])('a held code with an address being typed, which answers %s: nothing said, and it stays held', async (reason) => {
+            smallPhone(false);
+            hold({ invite: CODE });
+            phone.invite = { valid: false, reason };
+            await mount();
+            await type(ADDRESS, 'https://river.example.org');
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeNull();
+            expect(heldCode()).toBe(CODE);
+        });
+
+        it("the link's address changed in the box to one that answers invalid: nothing said before Join, and it stays held", async () => {
+            await early('unknown_inviter');
+            phone.invite = { valid: false, reason: 'invalid' };
+            await type(ADDRESS, 'https://upstream.example.org');
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeNull();
+            expect(heldCode()).toBe(CODE);
+        });
+
+        it.each(['expired', 'invalid'])('a resumed join whose code is %s now: said as the step opens, and forgotten', async (reason) => {
+            smallPhone(false);
+            hold();
+            phone.stored = { ...KNOCKER };
+            phone.pending = { step: 'create', inviteCode: CODE, anchorUrl: RIVERSIDE, callsign: 'Rowan', redeemed: false };
+            phone.invite = { valid: false, reason, communityName: 'Riverside' };
+            await mount();
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeTruthy();
+            expect(field(ADDRESS)).toBeUndefined();
+            expect(heldCode()).toBeNull();
+        });
+
+        it('a spent code on a phone with an account: nothing early, so nothing is forgotten until Join has asked whose it was', async () => {
+            smallPhone(false);
+            phone.stored = { ...KNOCKER };
+            hold();
+            params.now = { invite: CODE, server: RIVERSIDE, t: '1' };
+            phone.invite = { valid: false, reason: 'used', communityName: 'Riverside' };
+            await mount();
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeNull();
+            expect(heldCode()).toBe(CODE);
         });
     });
 });

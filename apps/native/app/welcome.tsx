@@ -118,8 +118,9 @@ import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type Hel
  *  'unknown_inviter': the node says it of an inviter paused "for now" too (engine members.ts), so that code stays held until
  *  it lapses. */
 const DEAD_INVITE_REASONS = new Set(['used', 'expired', 'invalid', 'malformed']);
-/** The invite check's answers about the address, not the code: the address box is drawn, even for one the invite named. */
-const ADDRESS_REASONS = new Set(['invites_off', 'not_a_community']);
+/** The invite check's answers about the address: the address box is drawn, even for one the invite named. 'unknown_inviter'
+ *  is one: its words say to check it is the right community. */
+const ADDRESS_REASONS = new Set(['invites_off', 'not_a_community', 'unknown_inviter']);
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
@@ -407,8 +408,8 @@ export default function WelcomeScreen() {
      */
     const [greeting, setGreeting] = useState<{ at: string; code: string; community: string | null; inviter: string | null } | null>(null);
     /**
-     * That same check's refusal, said under the band before a name is typed (Join says it again, after its own check). Kept
-     * with the code and the address it was for, as the greeting is.
+     * That same check's refusal, for an address the invite named: said under the band before a name is typed (Join says it
+     * again, after its own check). Kept with the code and the address it was for, as the greeting is.
      */
     const [refusal, setRefusal] = useState<{ at: string; code: string; reason?: string } | null>(null);
     /**
@@ -424,6 +425,23 @@ export default function WelcomeScreen() {
         const code = normaliseInviteCode(invite.trim());
         setAddressAsked(false);
         setNamedByInvite((was) => (at ? { code, at } : was?.code === code ? was : null));
+    }, []);
+    const codeHere = normaliseInviteCode(inviteCode.trim());
+    /** The address in hand is the one the invite in hand named: not one being typed. */
+    const addressNamed = namedByInvite?.code === codeHere && namedByInvite.at === createAnchorUrl;
+    /**
+     * A community refused an invite: all that follows from its answer but the words, wherever it was heard (the check as the
+     * step opens, Join's, or the one after a redeem it refused), so none says the words and leaves the rest undone (review
+     * of #3361).
+     * - A dead code (used by someone else, expired, not recognised): a link's held invite is never offered again, or every
+     *   launch would reopen this step on it. A good code at the wrong address, or at a community whose invites are off for
+     *   now, stays held. A newer one held meanwhile stays too.
+     * - An answer about the address: its box is drawn, to put it right.
+     */
+    const inviteRefused = useCallback((code: string, reason: string | undefined) => {
+        if (!reason) return;
+        if (DEAD_INVITE_REASONS.has(reason)) void forgetHeldInvite(AsyncStorage, code);
+        if (ADDRESS_REASONS.has(reason)) setAddressAsked(true);
     }, []);
     /** iOS 16+ only: the phone holds copied text (`hasStringAsync`, which reads nothing): Apple's button is drawn. */
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
@@ -1308,6 +1326,9 @@ export default function WelcomeScreen() {
             setPendingInviteCode(plan.inviteCode);
             setInviteRedeemed(plan.redeemed);
             if (plan.anchorUrl) setCreateAnchorUrl(plan.anchorUrl);
+            // The community this join was at: not asked for again after a restart, at this step or by the photo step's ‹. The
+            // record is written past the invite check, so a typed one is whole too, and Join draws the box if nothing answers.
+            if (plan.flow === 'invite') noteInviteAddress(plan.inviteCode, plan.anchorUrl);
             if (plan.avatar) setPendingAvatar(plan.avatar);
             setJoinFlow(plan.flow);
             setJoinDoor(plan.joinDoor);
@@ -1406,16 +1427,17 @@ export default function WelcomeScreen() {
         let cancelled = false;
         const timer = setTimeout(() => {
             void import('../utils/db').then(({ checkInvite }) => checkInvite(normaliseInviteCode(code), nodeUrl)).then(async (check) => {
-                // A spent code may have been spent by the key on this phone: only Join asks the node that (afterSpentInvite).
-                const refused = !!check && !check.valid && !(check.reason === 'used' && await loadIdentity().catch(() => true));
+                // A spent code may have been spent by the key on this phone: only Join asks the node that (afterSpentInvite). And
+                // an address being typed is checked half typed too, and may be another community: what it says is only Join's.
+                const refused = !!check && !check.valid && addressNamed && !(check.reason === 'used' && await loadIdentity().catch(() => true));
                 if (cancelled || !check) return;
-                setGreeting({ at: nodeUrl, code: normaliseInviteCode(code), community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
-                setRefusal(refused ? { at: nodeUrl, code: normaliseInviteCode(code), reason: check.reason } : null);
-                if (refused && check.reason && ADDRESS_REASONS.has(check.reason)) setAddressAsked(true);
+                setGreeting({ at: nodeUrl, code: codeHere, community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
+                setRefusal(refused ? { at: nodeUrl, code: codeHere, reason: check.reason } : null);
+                if (refused) inviteRefused(codeHere, check.reason);
             }).catch(() => {});
         }, 600);
         return () => { cancelled = true; clearTimeout(timer); };
-    }, [mode, inviteCode, createAnchorUrl]);
+    }, [mode, inviteCode, createAnchorUrl, addressNamed]);
 
     /**
      * The name box given an invite (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted there became
@@ -1531,12 +1553,8 @@ export default function WelcomeScreen() {
                         return;
                     }
                     if (spent !== 'carryOn') {
-                        // A dead code (used by someone else, expired, not recognised): a link's held invite is never offered
-                        // again, or every launch would reopen this step on it. A good code at the wrong address, or at a community
-                        // whose invites are off for now, stays held. A newer one held meanwhile stays too.
-                        if (check.reason && DEAD_INVITE_REASONS.has(check.reason)) void forgetHeldInvite(AsyncStorage, parsedCode);
+                        inviteRefused(parsedCode, check.reason);
                         setError(inviteProblemMessage(check.reason, nodeUrl));
-                        if (check.reason && ADDRESS_REASONS.has(check.reason)) setAddressAsked(true);
                         return;
                     }
                     // This join's own key, in already: the member has never been shown its words. On to the photo and
@@ -1652,11 +1670,11 @@ export default function WelcomeScreen() {
                     setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
                     return;
                 }
-                // A redeem refused for the code itself (spent meanwhile, expired): asked once more, a dead held invite is forgotten
-                // as at the check above. No answer, or a good code: it stays held.
+                // A redeem refused for the code itself (spent meanwhile, expired): asked once more, and what the answer means is
+                // done as at the check above. No answer, or a good code: it stays held.
                 const heldCode = normaliseInviteCode(rawInvite);
                 const again = await import('../utils/db').then(({ checkInvite }) => checkInvite(heldCode, nodeUrl)).catch(() => null);
-                if (again && !again.valid && again.reason && DEAD_INVITE_REASONS.has(again.reason)) void forgetHeldInvite(AsyncStorage, heldCode);
+                if (again && !again.valid) inviteRefused(heldCode, again.reason);
                 // Nothing answers there: the address it tried is drawn, to be read and put right.
                 if (!again) setAddressAsked(true);
                 // The reason: a lower layer's sentence in the member's language, or the node's own words as they came.
@@ -3304,11 +3322,8 @@ export default function WelcomeScreen() {
         // one it was checked for and the address the one it was checked at, as Join reads them (join names N1). Else "You're
         // invited": a new code for the same community never shows the previous code's inviter.
         let greet: { community: string; inviter: string | null } | null = null;
-        // The same check's refusal, while the fields still hold that code for that address. Only for the address the invite
-        // named: one being typed is checked half typed too, and Join says what is wrong with it.
+        // The same check's refusal, while the fields still hold that code for the address the invite named.
         let refusedWords: string | null = null;
-        const codeHere = normaliseInviteCode(inviteCode.trim());
-        const addressNamed = namedByInvite?.code === codeHere && namedByInvite.at === createAnchorUrl;
         if (greeting?.community || refusal) {
             try {
                 const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
@@ -3319,6 +3334,28 @@ export default function WelcomeScreen() {
         // The address box is for a bare code that names no community (onboarding §3.1 B), or an invite's own address that didn't do.
         const addressHeld = addressNamed && !addressAsked;
         const bold = (text: string) => <Text style={styles.greetingName}>{text}</Text>;
+        // What is wrong, as the step opens or at Join. Under a spent code, the way back: it may be a returning member's own old
+        // link, and a fresh invite would make them a second account.
+        const problem = (words: string, spent: boolean, testID?: string) => (
+            <View style={{ marginBottom: 12 }}>
+                <Text style={styles.error} accessibilityLiveRegion="polite" testID={testID}>{words}</Text>
+                {spent && (
+                    <Pressable
+                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: dark ? colors.feedback.info.bg : (palette.blue50 || '#eff6ff'), borderRadius: 8, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : (palette.blue200 || '#bfdbfe'), alignItems: 'center' }}
+                        onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {
+                            setError(null);
+                            setMode('recover');
+                        })}
+                        disabled={loading}
+                        accessibilityRole="button"
+                    >
+                        <Text style={{ color: dark ? palette.blue400 : (palette.blue600 || '#2563eb'), fontWeight: 'bold', fontSize: 13 }}>
+                            {t('🔑 Recover an existing account with seed phrase →')}
+                        </Text>
+                    </Pressable>
+                )}
+            </View>
+        );
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -3347,9 +3384,7 @@ export default function WelcomeScreen() {
                             </Pressable>
                         </View>
 
-                        {refusedWords && !error && (
-                            <Text style={styles.error} accessibilityLiveRegion="polite" testID="invite-refused">{refusedWords}</Text>
-                        )}
+                        {refusedWords && !error && problem(refusedWords, refusal?.reason === 'used', 'invite-refused')}
 
                         {inviteCode && !inviteCode.startsWith('http') && !addressHeld && (
                             <>
@@ -3359,7 +3394,8 @@ export default function WelcomeScreen() {
                                     placeholder={t('Community name or address (e.g. riverside)')}
                                     placeholderTextColor={colors.text.muted}
                                     value={createAnchorUrl}
-                                    onChangeText={setCreateAnchorUrl}
+                                    // Never hidden under the typing, when what is typed comes to the address the invite named.
+                                    onChangeText={(text) => { setAddressAsked(true); setCreateAnchorUrl(text); }}
                                     autoCapitalize="none"
                                     autoCorrect={false}
                                     keyboardType="url"
@@ -3419,27 +3455,8 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        {error && (
-                            <View style={{ marginBottom: 12 }}>
-                                <Text style={styles.error}>{error}</Text>
-                                {/* A spent invite: said by the node in English, or by this screen in the member's language. */}
-                                {(error.includes('already been used') || error.includes('already used') || error === inviteProblemMessage('used')) && (
-                                    <Pressable
-                                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: dark ? colors.feedback.info.bg : (palette.blue50 || '#eff6ff'), borderRadius: 8, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : (palette.blue200 || '#bfdbfe'), alignItems: 'center' }}
-                                        onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {
-                                            setError(null);
-                                            setMode('recover');
-                                        })}
-                                        disabled={loading}
-                                        accessibilityRole="button"
-                                    >
-                                        <Text style={{ color: dark ? palette.blue400 : (palette.blue600 || '#2563eb'), fontWeight: 'bold', fontSize: 13 }}>
-                                            {t('🔑 Recover an existing account with seed phrase →')}
-                                        </Text>
-                                    </Pressable>
-                                )}
-                            </View>
-                        )}
+                        {/* A spent invite: said by the node in English, or by this screen in the member's language. */}
+                        {error && problem(error, error.includes('already been used') || error.includes('already used') || error === inviteProblemMessage('used'))}
 
                         {/* The ways back for a returning member are the front door's third button (§3.1 A), one ‹ away; a
                             spent invite still offers one above. */}

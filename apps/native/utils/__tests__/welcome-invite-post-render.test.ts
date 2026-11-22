@@ -212,8 +212,8 @@ const phone = vi.hoisted(() => ({
     pending: null as any,
     enrolment: null as any,
     invite: { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' } as Record<string, unknown>,
-    /** The node's invite check by code, where a test needs one (else every code gets `invite`). */
-    checkFor: null as null | ((code: string) => Promise<unknown>),
+    /** The node's invite check by code (and the community asked), where a test needs one (else every code gets `invite`). */
+    checkFor: null as null | ((code: string, at: string) => Promise<unknown>),
     outgoing: null as any,
     redeemFails: null as string | null,
     /** Every redeem the screen sent: the code and the name. */
@@ -264,7 +264,7 @@ vi.mock('../onboarding-state', async (importOriginal) => {
     };
 });
 vi.mock('../db', () => ({
-    checkInvite: async (code: string) => (phone.checkFor ? phone.checkFor(code) : phone.invite),
+    checkInvite: async (code: string, at: string) => (phone.checkFor ? phone.checkFor(code, at) : phone.invite),
     redeemInvite: async (code: string, callsign: string) => { phone.redeems.push({ code, callsign }); if (phone.redeemFails) throw new Error(phone.redeemFails); return {}; },
     updateMemberProfile: async () => {},
     fetchNodeCallsign: async () => 'Sally',
@@ -1445,6 +1445,166 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
             await checkAnswers();
             expect(byId('invite-greeting')?.textContent).toContain('Ana invited you to Riverside');
             expect(byId('invite-refused')).toBeNull();
+        });
+
+        // Review of #3361 (pre-existing): after a dead code was refused, ‹ kept it in hand, so "I have an invite" read neither the
+        // phone's held invite nor the clipboard and went straight back to the same dead code. A dead code goes with the step's ‹;
+        // any other refusal's code stays in hand, as before (its community or its address may still do).
+        const BACK_THEN_TAP: Array<[reason: string, dead: boolean]> = [
+            ['used', true], ['expired', true], ['invalid', true], ['malformed', true],
+            ['unknown_inviter', false], ['invites_off', false],
+        ];
+        it.each(BACK_THEN_TAP.flatMap(([reason, dead]) => (['early', 'at Join'] as const).map((when) => [reason, when, dead] as const)))(
+            '%s, said %s, then ‹ and "I have an invite": a dead code is gone, the clipboard is read; any other stays in hand',
+            async (reason, when, dead) => {
+                await (when === 'early' ? early(reason) : atJoin(reason));
+                await press('Back to Home');
+                expect(byId('front-door')).toBeTruthy();
+                // Nothing copied: Your invite, its box empty, for a dead code; the same code again, for any other.
+                await press('I have an invite');
+                expect(clip.reads, 'the clipboard is read only with no code in hand').toBe(dead ? 1 : 0);
+                expect(onNameScreen(), 'the refused code\'s name screen again').toBe(!dead);
+                if (dead) expect(field('Invite link or code')?.value).toBe('');
+                await press(dead ? 'Back' : 'Back to Home');
+                // A fresh invite copied meanwhile: read at the tap, and greeted.
+                clip.has = true; clip.text = `${RIVERSIDE}/?invite=INV-FRSH-LINK`;
+                phone.checkFor = null;
+                phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' };
+                const readsBefore = clip.reads;
+                await press('I have an invite');
+                await checkAnswers();
+                expect(clip.reads - readsBefore).toBe(dead ? 1 : 0);
+                expect(onNameScreen()).toBe(true);
+                if (dead) {
+                    expect(byId('invite-greeting')?.textContent).toContain('Ana invited you to Riverside');
+                    expect(byId('invite-refused')).toBeNull();
+                }
+                expect(phone.redeems).toEqual([]);
+            },
+        );
+
+        // Review of #3371, findings 1 and 3: the code in hand came from the clipboard, or was typed, so nothing held brings it
+        // back (the rows above get a live code back from the held store, whatever ‹ did). A dead code is not taken from the
+        // clipboard again, and Your invite says why in its community's words; any other is kept in hand by ‹ itself.
+        const LINK = `${RIVERSIDE}/?invite=${CODE}`;
+        type Source = 'copied' | 'typed';
+        /** The invite's name screen, from a copied link read at "I have an invite", or the link typed in Your invite's box. */
+        async function arriveFrom(source: Source) {
+            smallPhone(false);
+            await mount();
+            if (source === 'copied') { clip.has = true; clip.text = LINK; }
+            await press('I have an invite');
+            if (source === 'typed') {
+                await type('Invite link or code', LINK);
+                await press('Next');
+            }
+            expect(onNameScreen()).toBe(true);
+            expect(heldCode(), 'nothing held').toBeNull();
+        }
+        async function refusedFrom(source: Source, reason: string, when: 'early' | 'at Join') {
+            let joining = when === 'early';
+            phone.checkFor = async () => (joining ? { valid: false, reason, communityName: 'Riverside' } : null);
+            await arriveFrom(source);
+            if (when === 'early') {
+                await checkAnswers();
+                expect(byId('invite-refused')).toBeTruthy();
+                return;
+            }
+            await type(NAME, 'Rowan');
+            joining = true;
+            await press('Join');
+            expect(text()).toContain(ROWS.find(([r]) => r === reason)![1]);
+        }
+        const FROM_THE_PHONE = (['copied', 'typed'] as const).flatMap((source) =>
+            BACK_THEN_TAP.flatMap(([reason, dead]) => (['early', 'at Join'] as const).map((when) => [source, reason, when, dead] as const)));
+        it.each(FROM_THE_PHONE)('a code %s, refused %s (%s), nothing held: ‹ and "I have an invite" never bring a dead one back, and keep any other in hand', async (source, reason, when, dead) => {
+            await refusedFrom(source, reason, when);
+            // Copied over since, with words that are no invite: only the hand the code is in can keep it.
+            if (source === 'copied' && !dead) clip.text = 'see you at the market';
+            await press('Back to Home');
+            expect(byId('front-door')).toBeTruthy();
+            const readsBefore = clip.reads;
+            await press('I have an invite');
+            expect(onNameScreen(), "the refused code's name screen again").toBe(!dead);
+            expect(clip.reads - readsBefore, 'the clipboard is read only with no code in hand').toBe(dead ? 1 : 0);
+            if (dead) {
+                expect(byId('your-invite')).toBeTruthy();
+                expect(byId('invite-refused')).toBeNull();
+                // The dead link is still copied: not taken again, and the step says why. Nothing copied: nothing to say.
+                const note = byId('your-invite-note')?.textContent ?? null;
+                if (source === 'copied') expect(note).toContain(ROWS.find(([r]) => r === reason)![1]);
+                else expect(note).toBeNull();
+                if (source === 'copied') expect(field('Invite link or code')?.value).toBe('');
+            } else {
+                // The same code, in hand all along.
+                await press('Change the invite');
+                expect(field('Invite link or code')?.value).toBe(CODE);
+            }
+            expect(phone.redeems).toEqual([]);
+        });
+
+        it('the dead link still copied, then a fresh one copied over it: "I have an invite" reads it and greets', async () => {
+            await refusedFrom('copied', 'expired', 'early');
+            await press('Back to Home');
+            await press('I have an invite');
+            expect(byId('your-invite-note')?.textContent).toContain('This invite has expired');
+            await press('Back');
+            clip.text = `${RIVERSIDE}/?invite=INV-FRSH-LINK`;
+            phone.checkFor = null;
+            phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' };
+            await press('I have an invite');
+            await checkAnswers();
+            expect(onNameScreen()).toBe(true);
+            expect(byId('invite-greeting')?.textContent).toContain('Ana invited you to Riverside');
+            expect(byId('invite-refused')).toBeNull();
+            expect(phone.redeems).toEqual([]);
+        });
+
+        // Review of #3371, finding 2: a community that holds no such code answers 'invalid' for a good one too (engine
+        // members.ts). So a code is set aside as dead with the community that said so: a bare code joined at another community,
+        // the address then put right, is live there and ‹ keeps it in hand. Dead at the community in hand, it goes.
+        const HILLTOP = 'https://hilltop.example.org';
+        const ADDRESS_ROWS: Array<[name: string, joinAt: string, then: string, liveAt: string | null, kept: boolean]> = [
+            ['joined at another community, the address put right', HILLTOP, RIVERSIDE, RIVERSIDE, true],
+            ['joined at another community, left there', HILLTOP, HILLTOP, RIVERSIDE, false],
+            ['dead at its own community', RIVERSIDE, RIVERSIDE, null, false],
+        ];
+        it.each(ADDRESS_ROWS)('a bare code %s: ‹ and "I have an invite"', async (_name, joinAt, then, liveAt, kept) => {
+            smallPhone(false);
+            const asked: string[] = [];
+            phone.checkFor = async (_code, at) => {
+                asked.push(at);
+                return at === liveAt
+                    ? { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' }
+                    : { valid: false, reason: 'invalid', communityName: at === RIVERSIDE ? 'Riverside' : 'Hilltop' };
+            };
+            await mount();
+            await press('I have an invite');
+            await type('Invite link or code', CODE);
+            await press('Next');
+            expect(onNameScreen()).toBe(true);
+            await type(ADDRESS, joinAt);
+            await type(NAME, 'Rowan');
+            await press('Join');
+            expect(asked.at(-1), "Join's check").toBe(joinAt);
+            expect(text()).toContain("That invite wasn't recognised by your community.");
+            if (then !== joinAt) {
+                await type(ADDRESS, then);
+                await checkAnswers();
+                expect(byId('invite-greeting')?.textContent).toContain('Ana invited you to Riverside');
+            }
+            await press('Back to Home');
+            const readsBefore = clip.reads;
+            await press('I have an invite');
+            expect(onNameScreen(), 'the code still in hand').toBe(kept);
+            expect(clip.reads - readsBefore, 'the clipboard is read only with no code in hand').toBe(kept ? 0 : 1);
+            if (kept) {
+                await press('Change the invite');
+                expect(field('Invite link or code')?.value).toBe(CODE);
+            } else {
+                expect(byId('your-invite')).toBeTruthy();
+            }
+            expect(phone.redeems).toEqual([]);
         });
 
         it('a newer link held meanwhile stays: only the refused code is forgotten', async () => {

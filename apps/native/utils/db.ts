@@ -63,7 +63,7 @@ import type { GroupSuccessionData } from './group-succession';
 import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
-import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, forgetLockedRings, followLockedRings, followedFrom, groupsLockedIn, noteAnsweredLocked, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_STORE_UNREAD_TEXT, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, forgetLockedRings, followLockedRings, followedFrom, groupsLockedIn, noteAnsweredLocked, noteLockedInCopy, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_STORE_UNREAD_TEXT, type GroupKeyring, type GroupKeyStore, type NeverLocked } from './group-chat-keys';
 import {
     unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
     lockedHistoryCounts, noteLockedHistoryCount, type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
@@ -942,15 +942,20 @@ export function newCopyGeneration(): void {
  * A write that follows still() goes through its copy's handle, which a clear or a switch closes, so nothing is written
  * after it changes either. Taken with no await, so nothing comes between it and the ask; after the copy the read writes
  * into is open, since opening a copy below this build's schema starts a generation of its own.
+ * And no account may have been on its way off the phone as it was asked, nor begun to leave since (account-leaving.ts;
+ * `stays()`, asked again with no await under the sync lock before a page of it is written): a read begun after Sign Out's
+ * clear, while the key was still here, wrote its chats' lock marks into the copy just cleared (max review of #3358, U1).
  * Not in the class: refreshHeldDms (slice S2b) reads that list too, but writes, keeps and shows nothing of it; it only names
  * the chats whose own polls then run, each after the account is read again (its loop), each poll its own read.
  */
 export interface OwnListRead {
     still(): Promise<{ identity: BeanPoolIdentity | null } | null>;
+    stays(): boolean;
 }
 export function ownListRead(asking: string | null | undefined): OwnListRead {
     const generation = copyGeneration;
-    const copiesAsAsked = () => copyGeneration === generation;
+    const stays = accountStays();
+    const copiesAsAsked = () => copyGeneration === generation && stays();
     return {
         still: async () => {
             if (!copiesAsAsked()) return null;
@@ -958,6 +963,7 @@ export function ownListRead(asking: string | null | undefined): OwnListRead {
             if ((identity?.publicKey || null) !== (asking || null) || !copiesAsAsked()) return null;
             return { identity };
         },
+        stays,
     };
 }
 
@@ -6245,7 +6251,8 @@ async function ownLinesOnly(database: SQLite.SQLiteDatabase, conversationId: str
 // A group's sealed line is stored only with its chat's lock mark (`me`'s, GroupKeyStore noteLocked) in the same file and
 // transaction: its node can take the line off again (a removal, its author's account deleted, a resync), never the mark (max
 // review of #3358, T1). Only for a chat this phone keeps as a group's, or with no row of it, the page's own word
-// (`pageType`). The mark lifts no DM guard.
+// (`pageType`). The mark lifts no DM guard. This run's key memory is told before the mark is written (noteLockedInCopy), so a
+// ring of the copy that read its file before says locked at once, a readable line on its way included (U2).
 async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversationId: string, m: any, me?: string | null, pageType?: string | null) {
     const local = await database.getFirstAsync<LocalMessageRow>(
         'SELECT ciphertext, nonce, type, edited_at, metadata FROM messages WHERE id = ?',
@@ -6260,11 +6267,15 @@ async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversatio
         editedAt: m.editedAt || m.edited_at || null,
     });
     if (me && (isGroupSealedNonce(merged.nonce) || isGroupSealedNonce(local?.nonce))) {
-        await database.runAsync(
-            `INSERT OR IGNORE INTO group_chat_key_state (group_id)
-             SELECT ? WHERE IFNULL((SELECT IFNULL(type, 'dm') FROM conversations WHERE id = ?), ?) = 'group_thread'`,
-            [`${me}/${conversationId.toLowerCase()}`, conversationId, pageType ?? null]
+        const kept = await database.getFirstAsync<{ kind: string | null }>(
+            `SELECT IFNULL((SELECT IFNULL(type, 'dm') FROM conversations WHERE id = ?), ?) AS kind`,
+            [conversationId, pageType ?? null]
         );
+        if (kept?.kind === 'group_thread') {
+            const copy = dbFileOf.get(database);
+            if (copy) noteLockedInCopy(copy, me, conversationId);
+            await database.runAsync('INSERT OR IGNORE INTO group_chat_key_state (group_id) VALUES (?)', [`${me}/${conversationId.toLowerCase()}`]);
+        }
     }
     await database.runAsync(
         `INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at)
@@ -6681,6 +6692,9 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
 
             await acquireSyncLock();
             try {
+                // Under the lock, with no await since: an account that began to leave meanwhile has its page written nowhere,
+                // its chats' lock marks with it (ownListRead; max review of #3358, U1).
+                if (!asked.stays()) return false;
                 await database.withTransactionAsync(async () => {
                     for (const m of changed) {
                         await upsertFetchedMessage(database, conv.id, m, myIdentity?.publicKey, conv.type);
@@ -6861,6 +6875,9 @@ export function syncSingleConversation(conversationId: string, community?: ChatC
 }
 
 async function syncSingleConversationOnce(conversationId: string, community?: ChatCommunity): Promise<boolean> {
+    // Before anything awaits: an account on its way off the phone as the poll begins, or that begins to leave before its page
+    // is written, has nothing of it written, a group's lock mark least of all (account-leaving.ts; max review of #3358, U1).
+    const stays = accountStays();
     try {
         // The community asked and its file, taken together (chatCopyForRequest): the page is written into that file only.
         // `community`: a chat open in place (slice S2), read from its own server into its own copy.
@@ -6901,9 +6918,11 @@ async function syncSingleConversationOnce(conversationId: string, community?: Ch
         const messages = msgData.messages;
         if (!Array.isArray(messages)) return false;
 
-        // The page's community's copy, or nothing: the member switched while it was on its way (dropped, not an error).
+        // The page's community's copy, or nothing: the member switched while it was on its way (dropped, not an error). Nor
+        // once an account has begun to leave the phone: a clear makes the copy again under the same name, so its handle alone
+        // doesn't say so.
         const database = await here.handle();
-        if (!database) return false;
+        if (!database || !stays()) return false;
 
         // This runs every 3s while a chat is open (plus on every WS nudge), so the
         // no-change fast path matters: diff BEFORE taking the lock, and bail without
@@ -7052,6 +7071,8 @@ async function syncSingleConversationOnce(conversationId: string, community?: Ch
         const own = pollPinsUnread ? await ownLinesOnly(database, conversationId, changed) : changed;
         await acquireSyncLock();
         try {
+            // Under the lock, with no await since: a leave's clear waits for it, so none is half done under this write.
+            if (!stays()) return false;
             // One transaction for the whole burst — a single commit instead of a
             // disk flush per message.
             await database.withTransactionAsync(async () => {
@@ -8419,7 +8440,7 @@ async function isNodeReadableConversation(conversationId: string): Promise<boole
  * plaintext-v1, as designed. Every other conversation is a DM, locked or not sent: DmNotLockedError when the other
  * person's key can't be resolved even after asking the node, or the encryption throws. Never a readable fallback.
  */
-async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal, here: ChatRequestCopy, community?: ChatCommunity): Promise<{ ciphertext: string; nonce: string; metadata?: Record<string, unknown>; leaving?: () => void }> {
+async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal, here: ChatRequestCopy, community?: ChatCommunity): Promise<{ ciphertext: string; nonce: string; metadata?: Record<string, unknown>; last?: LastAsk }> {
     // A chat open in place (slice S2) is a direct one: sealed to the pin kept in that community's own file, under the same
     // key-pin gate (requireDmKeyContext: a key change pauses, unreadable pins refuse), or not sent. Never readable, never a
     // group's: its group key memory and DM guard are that community's, not the copy in use's, so nothing here asks them.
@@ -8442,8 +8463,8 @@ async function lockForConversation(conversationId: string, text: string, line: D
         // screen's path): readable only to a node whose own chat answer for this id says it isn't locked, never on a type
         // alone (confirmation 2 of #1788, finding 3).
         if (!asked || !(groupLine === 'readable' || await nodeChatIsUnlocked(asked, conversationId, community))) throw new DmNotLockedError();
-        const { leaving } = await readableLineTo(asked, conversationId);
-        return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)), leaving };
+        const { leaving, lastLook } = await readableLineTo(asked, conversationId);
+        return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)), last: { leaving, lastLook } };
     }
     return lockWith(await requireDmKeyContext(conversationId, community), text, line);
 }
@@ -8489,9 +8510,13 @@ async function goesAsGroup(conversationId: string, here: ChatRequestCopy): Promi
 
 /**
  * A readable line's way out ({@link readableLineTo}), and a deal's step's ({@link dealStep}): its one address, and what is asked
- * last of all, with no await, as its request leaves. `signer`: the one account it may be signed by.
+ * last of all, with no await, as its request leaves. `signer`: the one account it may be signed by. `lastLook`: a readable
+ * line's file asked once more, the last await before `leaving` (once the line is signed), so a lock that reached the file
+ * meanwhile stops it ({@link readableLineTo}).
  */
-interface ReadableTo { address: string; leaving(): void; signer?: string }
+interface ReadableTo extends LastAsk { address: string; signer?: string }
+/** What is asked of a readable line as its request leaves: `lastLook` awaited, then `leaving`, then the request, with no await between those two. */
+interface LastAsk { leaving(): void; lastLook?(): Promise<void> }
 
 /**
  * The last thing asked before a readable chat line goes, and the address it goes to. It fails closed (third review of #3358,
@@ -8500,21 +8525,41 @@ interface ReadableTo { address: string; leaving(): void; signer?: string }
  * it ({@link refuseByItsFile}), and its key memory's own answer (GroupKeyring.neverLocked), which still holds as the request
  * leaves (`leaving`). Whatever its server now calls the chat. Else it throws and nothing goes. Every readable line asks it: an
  * old node's group post and edit, the DM screen's line and edit, an event's and an enterprise's chat (the table:
- * utils/__tests__/group-in-place-table.test.ts; second review, R1 and R2).
+ * utils/__tests__/group-in-place-table.test.ts; second review, R1 and R2). The file is asked again as the request leaves
+ * (`lastLook`, after the signing): a sync that stored the group's first sealed line meanwhile, its mark with it, stops the
+ * line, as this run's memory does once that sync has told it (max review of #3358, U2).
  */
 async function readableLineTo(asked: GroupContext, conversationId: string): Promise<ReadableTo> {
     const database = await asked.handle();
     if (!database) throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
     await refuseReadableIntoDm(conversationId, database);
-    await refuseByItsFile(conversationId, database);
-    const never = await ringOf(asked, conversationId).neverLocked();
+    /** What the community's file says against the line now: thrown; else the key memory's "never locked". */
+    const fileSays = async (): Promise<NeverLocked | null> => {
+        const at = await asked.handle();
+        if (!at) throw new Error(SWITCHED_SINCE_CHAT_OPENED_TEXT);
+        await refuseByItsFile(conversationId, at);
+        return ringOf(asked, conversationId).neverLocked();
+    };
+    const never = await fileSays();
     const leaving = () => {
         const still = never?.still() ?? 'locked';
         if (still === 'locked') throw new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
         if (still !== 'never') throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
     };
     leaving();
-    return { address: asked.nodeUrl, leaving };
+    // What this run knows first (its words are the true ones); then the file, whose read that fails says so, never SQLite's words.
+    const lastLook = async () => {
+        leaving();
+        let again: NeverLocked | null;
+        try {
+            again = await fileSays();
+        } catch (e: any) {
+            if (e instanceof GroupChatKeyError || e instanceof DmNotLockedError || e?.message === SWITCHED_SINCE_CHAT_OPENED_TEXT) throw e;
+            throw Object.assign(new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store'), { why: e });
+        }
+        if (!again) throw new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
+    };
+    return { address: asked.nodeUrl, leaving, lastLook };
 }
 
 /**
@@ -8997,7 +9042,7 @@ export async function insertMessage(conversationId: string, authorPubkey: string
     );
 
     // Fire-and-forget: the returned promise is intentionally not awaited.
-    _deliverPendingMessage(here, anchorUrl, identity, tempId, { id: tempId, conversationId, authorPubkey, ciphertext, nonce, metadata }, locked.leaving);
+    _deliverPendingMessage(here, anchorUrl, identity, tempId, { id: tempId, conversationId, authorPubkey, ciphertext, nonce, metadata }, locked.last);
     // The line's id, which the node keeps: the chat follows it to the node's answer (a request's line waits for the 200).
     return tempId;
 }
@@ -9014,13 +9059,14 @@ async function _deliverPendingMessage(
     tempId: string,
     body: { id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; metadata?: string },
     /** A readable line's last ask ({@link readableLineTo}): throws, and the line is kept as not sent. */
-    leaving?: () => void,
+    last?: LastAsk,
 ) {
     const { DeviceEventEmitter } = require('react-native');
     try {
         const bodyString = JSON.stringify(body);
         const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/send`, bodyString, identity.privateKey, identity.publicKey);
-        leaving?.();
+        await last?.lastLook?.();
+        last?.leaving();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         const res = await fetch(`${anchorUrl}/api/messages/send`, {
@@ -9152,7 +9198,7 @@ export async function editMessage(conversationId: string, messageId: string, new
 
     // New words: locked like a new message, or not sent (DmNotLockedError). Sealed to the line's own id, keeping the
     // line it was written after: an edit stays where its line is.
-    const { ciphertext, nonce, metadata, leaving } = await lockForConversation(conversationId, newText, {
+    const { ciphertext, nonce, metadata, last } = await lockForConversation(conversationId, newText, {
         senderPubHex: identity?.publicKey ?? '',
         messageId,
         ...(await sealOfLine(conversationId, messageId, community)),
@@ -9166,7 +9212,8 @@ export async function editMessage(conversationId: string, messageId: string, new
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/edit`, bodyString, identity.privateKey, identity.publicKey);
 
-    leaving?.();
+    await last?.lastLook?.();
+    last?.leaving();
     const res = await fetch(`${anchorUrl}/api/messages/edit`, { method: 'POST', headers, body: bodyString });
     if (!res.ok) {
         const txt = await res.text();
@@ -10119,7 +10166,8 @@ async function _signedRequest(endpoint: string, payload: any, to?: string | null
     // The language this phone writes in, so the node can answer in it (utils/language-choice.ts; not signed, not stored).
     const headers = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
 
-    // A readable chat line's last ask, and a deal's step's: nothing is awaited between it and the request.
+    // A readable chat line's last ask, and a deal's step's: nothing is awaited between it and the request (its file first).
+    await readable?.lastLook?.();
     readable?.leaving();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -10187,6 +10235,7 @@ async function _signedRequest(endpoint: string, payload: any, to?: string | null
             const healed = await pushProfileToServer();
             if (healed) {
                 const retryHeaders = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
+                await readable?.lastLook?.();
                 readable?.leaving();
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {
                     method: 'POST',

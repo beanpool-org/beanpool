@@ -16,7 +16,8 @@
  *      naming any other host is redirected, and a public source naming a beanpool.org host is redirected; a proxy of the
  *      operator's own (a private source saying X-Forwarded-Proto: https, or Forwarded: proto=https with no X-Forwarded-Proto)
  *      is served, a public source sending the same headers is redirected, and a visitor's Forwarded: proto=https never
- *      overrules the proxy's X-Forwarded-Proto: http; 4c. saysHttpsBefore's answer for each header combination;
+ *      overrules the proxy's X-Forwarded-Proto: http; a live-updates socket with Traefik's X-Forwarded-Proto: wss is
+ *      upgraded, one with ws redirected; 4c. saysHttpsBefore's answer for each header combination, wss and ws among them;
  *   5. IPv6: a public source is redirected, a unique-local one naming a beanpool.org host is served;
  *   6. the ACME challenge route answers from the Internet on a node with a certificate, unknown tokens 404, never a
  *      redirect;
@@ -219,6 +220,19 @@ console.log('\n4b. A web server or proxy of the operator\'s own in front, saying
         + `Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${Buffer.from('0123456789abcdef').toString('base64')}\r\n\r\n`,
         '127.0.0.1', true);
     check('a live-updates socket through the proxy saying https is upgraded', wsProxy.status === 101, `${wsProxy.status}`);
+    // Traefik says wss, not https, for a live-updates socket that came to it over TLS, and ws for one that came in the clear
+    // (its forwardedheaders middleware): the first is upgraded, the second redirected, as a page saying https or http is.
+    const socketVia = (header: string) => raw('172.18.0.1', `GET /ws HTTP/1.1\r\nHost: ${OWN}\r\n${header}\r\nConnection: Upgrade\r\n`
+        + `Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${Buffer.from('0123456789abcdef').toString('base64')}\r\n\r\n`,
+        '127.0.0.1', true);
+    const wsTraefik = await socketVia('X-Forwarded-Proto: wss');
+    check('a live-updates socket from the gateway with Traefik\'s X-Forwarded-Proto: wss is upgraded (no loop)', wsTraefik.status === 101, `${wsTraefik.status}`);
+    const wsPlain = await socketVia('X-Forwarded-Proto: ws');
+    check('… and one with X-Forwarded-Proto: ws (it came to the proxy in the clear) is redirected', wsPlain.status === 301, `${wsPlain.status}`);
+    const wsPub = await raw(PUBLIC, `GET /ws HTTP/1.1\r\nHost: ${OWN}\r\nX-Forwarded-Proto: wss\r\nConnection: Upgrade\r\n`
+        + `Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${Buffer.from('0123456789abcdef').toString('base64')}\r\n\r\n`,
+        '127.0.0.1', true);
+    check('a public source with X-Forwarded-Proto: wss is redirected', wsPub.status === 301, `${wsPub.status}`);
     // Cloudflare passes a visitor's own Forwarded header on untouched and sets X-Forwarded-Proto itself, so the proxy's
     // X-Forwarded-Proto: http is the answer and a Forwarded: proto=https beside it is never read (saysHttpsBefore).
     const both = await via('172.18.0.1', 'X-Forwarded-Proto: http\r\nForwarded: for=198.51.100.2;proto=https');
@@ -259,6 +273,24 @@ console.log('\n4c. saysHttpsBefore: each header combination and its answer');
         ['ws', 'proto=https', false],
         ['https', 'proto=http', true],
         ['https', 'proto=https', true],
+        // A live-updates socket: wss came over TLS (Traefik says so of one), ws did not, as https and http.
+        ['wss', undefined, true],
+        ['WSS', undefined, true],
+        [' wss ', undefined, true],
+        ['ws', undefined, false],
+        ['wss, http', undefined, true],
+        ['ws, wss', undefined, false],
+        ['wssx', undefined, false],
+        ['wss', 'proto=http', true],
+        ['ws', 'proto=wss', false],
+        ['http', 'proto=wss', false],
+        [undefined, 'proto=wss', true],
+        [undefined, 'proto="WSS"', true],
+        [undefined, 'for=198.51.100.2;proto=wss;host=beans.example.org', true],
+        [undefined, 'proto=ws', false],
+        [undefined, 'proto=wssx', false],
+        [undefined, 'proto=ws, proto=wss', false],
+        ['', 'proto=wss', true],
     ];
     const wrong = rows.filter(([xfp, fwd, want]) => gate.saysHttpsBefore({ forwardedProto: xfp, forwarded: fwd }) !== want);
     check(`all ${rows.length} rows give their answer`, wrong.length === 0,

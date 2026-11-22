@@ -27,7 +27,7 @@ import { notSeenInThread, notSeenWords } from '@beanpool/core';
 import { useRequestsUnseen } from '../lib/requests-seen';
 import { AddressCardPanel } from '../components/AddressCardPanel';
 import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
-import { messageOnWeb, type HereChat } from '../lib/message-anyone';
+import { messageOnWeb, type ListedChats } from '../lib/message-anyone';
 import type { OutsideChat } from '../lib/outside-chat-store';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { ChatImageBubble, ChatPhotoShown } from '../components/ChatImageBubble';
@@ -2319,9 +2319,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // the chat page's own refusal line; never a tap that does nothing. Where whose the link's address is can't be said for
     // certain nothing opens: the address is handed back, and Contacts stays, with the link to it.
     const messageAcross = async (links: Array<{ key: string; community: string }>, name: string): Promise<string | null> => {
-        // The list as it stands; asked for when this page has none yet (a tap before its first answer).
-        const listed: HereChat[] = conversations.length || requests ? [...conversations, ...(requests?.conversations ?? [])]
-            : await getConversations(identity.publicKey).then((r) => [...(r.conversations || []), ...(r.requests?.conversations || [])], () => []);
+        // The list as it stands; asked for, within Message's deadline, when this page has none yet (a tap before its first answer).
+        const listed: ListedChats = conversations.length || requests ? [...conversations, ...(requests?.conversations ?? [])]
+            : () => getConversations(identity.publicKey);
         const done = await messageOnWeb(links, name, listed);
         if ('elsewhere' in done) return done.elsewhere;
         setShowContacts(null);

@@ -15,27 +15,45 @@
  * Nothing it opens or makes is a chat the member can't write in now (#3354 review round 4, the rule's own invariant), and no
  * message goes to no one: a chat across counts, and one is made, only while this community takes messages from other
  * communities, has an address of its own to send from (core saysNoHome), this account is a member here (its server takes a
- * line across from members alone), and the person is for certain not in this community, by any of its names. Where that
- * can't be said for certain nothing opens: `elsewhere`, the link to that address the contact had before this slice.
+ * line across from members alone, and nothing from one it removed), and the person is for certain not in this community, by
+ * any of its names. Where that can't be said for certain nothing opens: `elsewhere`, the link to that address the contact had before this slice.
  */
 import { FIND_WORDS, acrossChatListed, messagePathFor, nodeHomeOf, saysNames, saysNoHome, t, whoseName, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
-import { checkMembership, nodeAddress, type CommunityInfo, type Conversation } from './api';
+import { checkMembership, nodeAddress, type CommunityInfo, type Conversation, type ConversationsAnswer } from './api';
 import { getBlocklistStatus, isUserBlocked, loadBlocklist } from './blocklist';
 import { communityAnswerNow, communityInfoKept, inTime, namesHere } from './community-homes';
 import { chatsShown, openChatFromCard, outsideContext } from './outside-mail';
+import { standingFromRefusal } from './standing-refusal';
 
 /** A chat the list shows here, as MessagesPage has it: a direct one is weighed by its people. */
 export type HereChat = Pick<Conversation, 'id' | 'type' | 'participants'>;
 
-/** Whether Message refuses this person: on this community's list for the account, by any of `keys` (read first if it hasn't been). Throws when it can't be read. */
+/** The chats the list shows here: as the page has them, or how to ask for them (a tap before the list's first answer). */
+export type ListedChats = readonly HereChat[] | (() => Promise<ConversationsAnswer>);
+
+/** The chats in {@link ListedChats}; asked for, and no answer in time: none. */
+async function chatsListed(listed: ListedChats): Promise<readonly HereChat[]> {
+    if (typeof listed !== 'function') return listed;
+    const got = await inTime(listed);
+    return [...(got?.conversations ?? []), ...(got?.requests?.conversations ?? [])];
+}
+
+/** Whether Message refuses this person: on this community's list for the account, by any of `keys` (read first if it hasn't been). Throws when it can't be read, or isn't in time. */
 async function blockedForMessage(keys: readonly string[]): Promise<boolean> {
-    if (!getBlocklistStatus().loaded) await loadBlocklist();
+    if (!getBlocklistStatus().loaded && await inTime(() => loadBlocklist()) === null) throw new Error('The block list was not read in time');
     return keys.some((k) => isUserBlocked(k));
 }
 
-/** Whether the account is a member here, asked now. Not known (no answer, or none in time): taken as one, as App does. */
+/**
+ * Whether the account is a member here, asked now: not one whose every request this community refuses (the account closed or
+ * retired here, or its key replaced: 403). Not known (no answer, or none in time): taken as one, as App does.
+ */
 async function memberHere(me: string): Promise<boolean> {
-    return (await inTime(() => checkMembership(me)))?.isMember !== false;
+    const answer = await inTime(() => checkMembership(me).catch((e) => {
+        if (standingFromRefusal(e) || (e as { code?: unknown } | null)?.code === 'key_invalidated') return { isMember: false };
+        throw e;
+    }));
+    return answer?.isMember !== false;
 }
 
 /**
@@ -121,10 +139,12 @@ const BLOCKED_WORDS = () => t('You have blocked this user. Messaging is disabled
 /**
  * Message on a contact in another community, from this browser ({@link messagePathOnWeb}, then the chat across made or
  * refused): never a tap that does nothing. `links`: every community the contact names them in, the one tapped first (a chat
- * across is made from it); the block is asked by every key they name. `direct`: the chats the list shows here. A block list
- * or a community that can't be read says to try again.
+ * across is made from it); the block is asked by every key they name. `listed`: the chats the list shows here. A block list
+ * or a community that can't be read says to try again. Contacts' Message waits for this, so every read in it has the one
+ * deadline (lib/community-homes.ts inTime), the page's list among them.
  */
-export async function messageOnWeb(links: ReadonlyArray<{ key: string; community: string }>, name: string, direct: readonly HereChat[] = []): Promise<MessageDone> {
+export async function messageOnWeb(links: ReadonlyArray<{ key: string; community: string }>, name: string, listed: ListedChats = []): Promise<MessageDone> {
+    const direct = await chatsListed(listed);
     const path = await messagePathOnWeb(links.map((l) => ({ community: l.community, key: l.key, name })), direct).catch(() => null);
     if (!path) return { refused: t("Couldn't reach your community. Check your connection and try again.") };
     if (path.open === 'blocked') return { refused: BLOCKED_WORDS() };

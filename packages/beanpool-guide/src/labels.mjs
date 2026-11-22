@@ -106,6 +106,39 @@ export function labelIndex(lang, catalogs) {
     };
 }
 
+/**
+ * The English bolds of one line paired one for one with the translated line's bolds: each English bold takes a bold of
+ * its own, never one another English bold already holds, so two labels a language says with one word (vi Remove and
+ * Delete are both "Xóa") need that word bolded twice and a wrong second bold is not hidden by the first. Taken in the
+ * line's order, the earliest free bold first; when a later label can only be paired with a bold an earlier one took, the
+ * earlier one moves to another bold it can take (a translation may say two labels in the other order).
+ * `wants[j]`: the folded words English bold j may be; `bolds[i]`: translated bold i, folded.
+ * Returns, for each English bold, the index of its translated bold, or -1 when none is left for it.
+ */
+export function pairBolds(wants, bolds) {
+    const owner = bolds.map(() => -1); // translated bold → the English bold holding it
+    const take = (j, seen) => {
+        const free = bolds.findIndex((b, i) => owner[i] === -1 && wants[j].has(b));
+        if (free !== -1) {
+            owner[free] = j;
+            return true;
+        }
+        for (let i = 0; i < bolds.length; i++) {
+            if (seen.has(i) || !wants[j].has(bolds[i])) continue;
+            seen.add(i);
+            if (take(owner[i], seen)) {
+                owner[i] = j;
+                return true;
+            }
+        }
+        return false;
+    };
+    for (let j = 0; j < wants.length; j++) take(j, new Set());
+    const out = wants.map(() => -1);
+    owner.forEach((j, i) => { if (j !== -1) out[j] = i; });
+    return out;
+}
+
 /** The bold runs on one line. */
 export const boldRuns = line => [...line.matchAll(/\*\*(.+?)\*\*/g)].map(m => m[1]);
 /** The "quoted" names on one English line. */
@@ -136,10 +169,12 @@ export function checkTranslatedPage({ file, english, translated, index, titles =
     for (let i = 0; i < en.length; i++) {
         const trBold = boldRuns(tr[i].text).map(bareLabel);
         const trFolded = trBold.map(fold);
-        for (const bold of boldRuns(en[i].text)) {
-            const want = index.expected(bold);
-            const key = `${file}: **${bold}**`;
-            if (!want || allowed.has(key) || want.some(w => trFolded.includes(fold(w)))) continue;
+        const held = boldRuns(en[i].text)
+            .map(bold => ({ bold, want: index.expected(bold), key: `${file}: **${bold}**` }))
+            .filter(h => h.want && !allowed.has(h.key));
+        const paired = pairBolds(held.map(h => new Set(h.want.map(fold))), trFolded);
+        for (const [j, { bold, want, key }] of held.entries()) {
+            if (paired[j] !== -1) continue;
             const has = trBold.length ? trBold.map(b => `**${b}**`).join(', ') : 'nothing';
             findings.push({ key, file, line: tr[i].n, kind: 'label', english: bold, want, enText: en[i].text,
                 message: `${file}:${tr[i].n}: **${bold}** is ${want.map(w => `**${w}**`).join(' or ')} in the app; the line bolds ${has}` });

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { guideBodyHash, parseGuideMarkdown } from '../src/guide.mjs';
 import {
-    checkGuideLabels, checkTranslatedPage, labelIndex, bareLabel, againstBaseline, readBaseline, LABEL_EXCEPTIONS,
+    checkGuideLabels, checkTranslatedPage, labelIndex, bareLabel, againstBaseline, readBaseline, LABEL_EXCEPTIONS, pairBolds,
 } from '../src/labels.mjs';
 
 // The translated guide pages name the app's buttons in the app's words (src/labels.mjs; #3247 review round 1: Manage,
@@ -74,6 +74,32 @@ test('one English word in several contexts: any of the app\'s words for it passe
     assert.deepEqual(labelIndex('ja', catalogs).expected('Open').sort(), ['自由参加', '進行中'].sort());
     assert.deepEqual(messages(check('ja', 'Choose **Open**.', '**自由参加**を選びます。', catalogs)), []);
     assert.equal(check('ja', 'Choose **Open**.', '**オープン**を選びます。', catalogs).findings.length, 1);
+});
+
+test('two labels the language says with one word: each English bold needs a bold of its own (one for one)', () => {
+    // vi says Remove and Delete both "Xóa" (fa: حذف). Before, a line bolding "Xóa" once passed both, and a wrong
+    // second bold hid behind it.
+    const catalogs = [{ key: 'Remove', value: 'Xóa' }, { key: 'Delete', value: 'Xóa' }, { key: 'Groups', value: 'Nhóm' }];
+    const english = 'Tap **Remove**, then **Delete**.';
+    assert.deepEqual(messages(check('vi', english, 'Nhấn **Xóa**, rồi **Xóa**.', catalogs)), []);
+    assert.deepEqual(messages(check('vi', english, 'Nhấn **Xóa**, rồi **Gỡ bỏ**.', catalogs)),
+        ['vi/talk/one.md:8: **Delete** is **Xóa** in the app; the line bolds **Xóa**, **Gỡ bỏ**']);
+    assert.deepEqual(messages(check('vi', english, 'Nhấn **Xóa**, rồi xóa hẳn.', catalogs)),
+        ['vi/talk/one.md:8: **Delete** is **Xóa** in the app; the line bolds **Xóa**']);
+    // The same label twice on a line is bolded twice.
+    assert.equal(check('vi', 'Open **Groups**; **Groups** lists them.', 'Mở **Nhóm**; danh sách ở đó.', catalogs).findings.length, 1);
+    // In order, but a translation may say two labels the other way round: each still has its own bold.
+    assert.deepEqual(messages(check('vi', 'Under **Groups**, tap **Remove**.', 'Nhấn **Xóa** trong **Nhóm**.', catalogs)), []);
+});
+
+test('pairBolds: each English bold its own translated bold, the earliest free one, moving an earlier one when it must', () => {
+    const w = (...xs) => new Set(xs);
+    assert.deepEqual(pairBolds([w('xóa'), w('xóa')], ['xóa', 'xóa']), [0, 1]);
+    assert.deepEqual(pairBolds([w('xóa'), w('xóa')], ['xóa', 'gỡ']), [0, -1]);
+    // The first could take either; the second only the first: the first moves.
+    assert.deepEqual(pairBolds([w('a', 'b'), w('a')], ['a', 'b']), [1, 0]);
+    assert.deepEqual(pairBolds([w('a')], []), [-1]);
+    assert.deepEqual(pairBolds([], ['a']), []);
 });
 
 test('a page named on the English line is named by its title in the page\'s language', () => {

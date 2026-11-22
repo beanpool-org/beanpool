@@ -111,8 +111,9 @@ export * from './node-request-signing.js';
 export * from './address-list.js';
 export * from './relay-envelope.js';
 export * from './outside-chat.js';
-// Which chat Message opens: an existing chat, the community you share, else across (S5 part 2).
+// Which chat Message opens: an existing chat, the community you share, else across (S5 part 2); a community, all its addresses.
 export * from './message-path.js';
+export * from './community-homes.js';
 // A guest in a group hosted by another community: the step their phone takes from the host's roster (G1b).
 export * from './group-guest-steps.js';
 export * from './group-guest-chat.js';

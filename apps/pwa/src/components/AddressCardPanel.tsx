@@ -20,6 +20,7 @@ import {
     OUTSIDE_SEND_MS, OutsideMailError, doorOpen, findByName, findMeOn, myAddressCard, myHome, openChatFromCard, outsideContext, outsideErrorWords,
     outsideMessagesHere, ring, sendFromBox, setDoor, setFindMe,
 } from '../lib/outside-mail';
+import { communityInfoKept, namedHere } from '../lib/community-homes';
 
 /** Core's sentences, the phone's too (@beanpool/core outside-devices.ts): the door is this browser's own (X2b). */
 const LINES = { doorSwitch: OUTSIDE_DOOR_SWITCH_BROWSER, doorEachDevice: OUTSIDE_DOOR_EACH_DEVICE };
@@ -145,7 +146,12 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
         const ctx = await outsideContext();
         if (!ctx) return;
         if (c.key === ctx.identity.publicKey) { setCardNote(t("That's your own card.")); return; }
-        if (c.home === await myHome(ctx).catch(() => null)) { setCardNote(t('{name} is in this community: write to them here.', { name: c.name })); return; }
+        // By any of this community's addresses, not one spelling (lib/community-homes.ts, Message's rule too): its server
+        // refuses every line across to one of its own names, an older main address among them.
+        if (c.home === await myHome(ctx).catch(() => null) || namedHere(await communityInfoKept(), ctx.nodeUrl)(c.home) !== null) {
+            setCardNote(t('{name} is in this community: write to them here.', { name: c.name }));
+            return;
+        }
         // A block is the account's: no box to write to them (as the phone's card screen).
         if (await ctx.isBlocked(c.key).catch(() => false)) { setCardNote(t('You have blocked this user. Messaging is disabled.')); return; }
         setCardNote(null);

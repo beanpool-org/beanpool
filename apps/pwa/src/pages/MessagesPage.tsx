@@ -2314,10 +2314,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     ) : null;
 
     // Message on a contact in another community (slice S5 part 2, lib/message-anyone.ts messageOnWeb): someone blocked is
-    // refused first, an existing chat across included (#3354 review); else a chat across the list shows opens, or one is made
-    // from their link. A refusal says why, in the chat page's own refusal line; never a tap that does nothing.
+    // refused first, an existing chat across included (#3354 review); else a chat with them the list shows opens (here, a
+    // request of theirs too, or across while it can be written in), or one is made from their link. A refusal says why, in
+    // the chat page's own refusal line; never a tap that does nothing.
     const messageAcross = async (links: Array<{ key: string; community: string }>, name: string) => {
-        const done = await messageOnWeb(links, name);
+        const done = await messageOnWeb(links, name, [...conversations, ...(requests?.conversations ?? [])]);
         setShowContacts(null);
         if ('dm' in done) void handleStartDm(done.dm);
         else if ('across' in done) setOpenOutside(done.across);

@@ -39,7 +39,7 @@ import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser, withoutBlockedPe
 import { createConversationApi, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace } from '../utils/db';
 import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { communitySwitchUnderWay, switchCommunity } from '../utils/use-communities';
-import { existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
+import { anchorUrl, existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
 import { messageInHeldCommunity, takeMessageAfterSwitch } from '../utils/message-after-switch';
 import { getPendingOnboarding } from '../utils/onboarding-state';
 import { useNodeStatus } from './NodeStatusContext';
@@ -429,7 +429,8 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
     // chat with them wins (here, in a held community in place, or across), else the community the phone shares with them
     // (the one in use first, then one it holds), else a chat across from their link. A refusal says why: someone blocked
     // on this phone's own list (Marty 22 Nov, the S7 rule) is refused on every path, an existing chat included (#3354
-    // review), in the across path's words. A chat across they declined is no existing chat (its thread can't be written in).
+    // review), in the across path's words. Nothing it opens or makes is a chat the member can't write in now (the rule's
+    // invariant): a chat across they declined, or to someone in a community shared by any of its addresses, is no existing chat.
     const messageAnyone = async (c: Contact) => {
         if (opening) return;
         const links = c.links.map((l) => ({ community: l.community, key: l.key, name: c.name }));
@@ -439,13 +440,14 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
         if (path.open === 'blocked') Alert.alert(t('Message', undefined, 'button: write to'), t('You have blocked this user. Messaging is disabled.'));
         // Nothing to open (the link's address isn't a community's, or a read failed): said, never a tap that does nothing.
         else if (path.open === 'nothing') Alert.alert(t('Message', undefined, 'button: write to'), t('Please try again.'));
-        else if (path.open === 'existing') router.push(existingChatRoute(path.chat, view.anchor, (community) => communityLabel(view, community)) as any);
+        else if (path.open === 'existing') router.push(existingChatRoute(path.chat, await anchorUrl(), (community) => communityLabel(view, community)) as any);
         else if (path.open === 'shared') await (here(path.community) ? message(path.key) : messageThere(path.key, path.community));
         else if (path.open === 'across') {
             setOpening(path.key);
             const opened = await openAcrossChat(path).catch(() => ({ refused: 'no-community' as const }));
             setOpening(null);
             if ('chatId' in opened) router.push(`/outside-chat/${opened.chatId}`);
+            else if ('here' in opened) await message(opened.here);
             else Alert.alert(t('Message', undefined, 'button: write to'), opened.refused === 'off' ? t("This community doesn't take messages from other communities.")
                 : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : t('Connect to your community to start a chat.'));
         }

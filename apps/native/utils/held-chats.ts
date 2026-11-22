@@ -162,7 +162,7 @@ export async function heldChatsWith(myPubkey: string, keys: readonly string[]): 
             for (const key of new Set([...c.peerKeys, ...(c.peerPubkey ? [c.peerPubkey] : [])])) if (want.has(key)) out.push({ kind: 'direct', community: c.community, id: c.id, key });
         }
         for (const c of await heldOutsideChatsShown(myPubkey).catch(() => [] as HeldOutsideChat[])) {
-            if (want.has(c.peerKey) && acrossChatListed(c.state)) out.push({ kind: 'across', community: c.community, id: c.id, key: c.peerKey });
+            if (want.has(c.peerKey) && acrossChatListed(c.state)) out.push({ kind: 'across', community: c.community, id: c.id, key: c.peerKey, home: c.peerHome });
         }
     } finally {
         await closeUnlessInView();

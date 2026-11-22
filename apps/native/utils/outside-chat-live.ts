@@ -16,7 +16,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { t } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { blocksOwedAt, blockUser, isUserBlocked, syncBlocksAt } from './blocklist';
-import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn } from './node-profile';
+import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn, type NodeProfile } from './node-profile';
 import { failUnsent, setOutsideQuiet, syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy } from './nodes';
 import { isPlainNodeAddress } from './node-url';
@@ -191,6 +191,18 @@ export async function outsideMessagesHere(nodeUrl: string): Promise<boolean> {
 /** The community's profile as this phone keeps it, read from the community when it keeps none; null when neither can be had. */
 async function profileHere(nodeUrl: string) {
     return (await getCachedNodeProfile(nodeUrl).catch(() => null)) ?? (await fetchNodeProfile(nodeUrl).catch(() => null));
+}
+
+/** How long making a chat across waits for the community's own answer before it goes by what this phone keeps. */
+const PROFILE_NOW_MS = 5_000;
+
+/**
+ * What the community says of itself as a chat across is made (utils/message-anyone.ts openAcrossChat; #3354 review round 4):
+ * asked now, so a switch turned off or an address taken on since this phone last heard never makes a chat whose every line
+ * it refuses; with no answer, as this phone keeps it. Null when neither can be had.
+ */
+export async function profileNow(nodeUrl: string): Promise<NodeProfile | null> {
+    return (await fetchNodeProfile(nodeUrl, fetch, PROFILE_NOW_MS).catch(() => null)) ?? (await getCachedNodeProfile(nodeUrl).catch(() => null));
 }
 
 /**

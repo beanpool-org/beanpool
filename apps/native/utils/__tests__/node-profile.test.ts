@@ -165,6 +165,17 @@ describe('readNodeProfile', () => {
         expect(p).not.toHaveProperty('primaryAddress');
     });
 
+    // #3354 review round 4: a contact saved at a name the community had before is in this community (utils/community-homes.ts).
+    it('keeps the names it had before as bare hosts, apart from its addresses; none, or not a list, says nothing', () => {
+        const p = readNodeProfile({ addresses: ['beans.example.org'], primaryAddress: 'beans.example.org', formerAddresses: ['Old.Example.ORG', 'https://x.example.org', 7, 'old.example.org'] }, new Date('2026-11-22T00:00:00Z'))!;
+        expect(p.addresses).toEqual(['beans.example.org']);
+        expect(p.formerAddresses).toEqual(['old.example.org']);
+        expect(readNodeProfile(JSON.parse(JSON.stringify(p)), new Date(p.checkedAt))).toEqual(p);
+        for (const formerAddresses of [undefined, null, [], 'old.example.org']) {
+            expect(readNodeProfile({ addresses: ['beans.example.org'], formerAddresses })!).not.toHaveProperty('formerAddresses');
+        }
+    });
+
     it('a copy read back from the phone keeps them', async () => {
         const p = readNodeProfile({ addresses: ['203.0.113.5', 'beans.example.org'], primaryAddress: 'beans.example.org' }, new Date('2026-10-18T00:00:00Z'))!;
         expect(readNodeProfile(JSON.parse(JSON.stringify(p)), new Date(p.checkedAt))).toEqual(p);

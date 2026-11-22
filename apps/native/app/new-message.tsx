@@ -312,6 +312,7 @@ export default function NewMessageScreen() {
         try {
             // Message's one rule (slice S5 part 2, utils/message-anyone.ts): an existing chat with them wins (here, in place in
             // a held community, or across), else the community shared with them: the one in use, else where they were found.
+            // On a guest's look, a direct chat the member already has there opens; a new one is not theirs to start.
             const heldList = await heldCommunityList().catch(() => [] as Array<{ url: string; name: string }>);
             const heldUrls = heldList.map((h) => h.url);
             const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -323,19 +324,20 @@ export default function NewMessageScreen() {
                 : { open: 'nothing' };
             if (path.open === 'blocked') throw new Error(t('You have blocked this user. Messaging is disabled.'));
             if (path.open === 'nothing' && where) throw new Error(t('Please try again.'));
+            const nameOf = (c: string) => heldList.find((h) => sameCommunity(h.url, c))?.name ?? held?.communityName ?? '';
             if (path.open === 'existing') {
-                router.replace(existingChatRoute(path.chat, anchor, (c) => heldList.find((h) => sameCommunity(h.url, c))?.name ?? held?.communityName ?? '') as any);
+                router.replace(existingChatRoute(path.chat, anchor, nameOf) as any);
                 return;
             }
-            if (path.open === 'shared' && held && !(anchor && sameCommunity(path.community, anchor))) {
-                const conv = await startChatInPlace(identity.publicKey, pubkey, path.community);
-                router.replace({ pathname: '/chat/[id]', params: { id: conv.id, community: conv.community, communityName: held.communityName } });
+            if (path.open === 'shared' && !(anchor && sameCommunity(path.community, anchor))) {
+                const conv = await startChatInPlace(identity.publicKey, path.key, path.community);
+                router.replace({ pathname: '/chat/[id]', params: { id: conv.id, community: conv.community, communityName: nameOf(path.community) } });
                 return;
             }
             if (path.open === 'across') {
                 const opened = await openAcrossChat(path);
                 if ('chatId' in opened) { router.replace(`/outside-chat/${opened.chatId}`); return; }
-                throw new Error(opened.refused === 'off' ? t("This community doesn't take messages from other communities.") : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : '');
+                if ('refused' in opened) throw new Error(opened.refused === 'off' ? t("This community doesn't take messages from other communities.") : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : '');
             }
             const fromNode = nodeResults.find(m => m.public_key === pubkey);
             if (fromNode) await keepCards([fromNode]);

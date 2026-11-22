@@ -241,21 +241,32 @@ export interface NodeProfile {
      * host this phone uses, the phone offers to follow it, after checking it is the same community (utils/address-follow.ts).
      */
     primaryAddress?: string;
+    /**
+     * The names it had before (`formerAddresses` in its info), when it had any: its server still answers as them, and they
+     * are never an address to go to. A contact saved at one is in this community (utils/community-homes.ts), nothing more.
+     */
+    formerAddresses?: string[];
 }
 
 /** A bare host as a node's info names its own: letters, digits, hyphens and dots, an optional port, nothing else. */
 const OWN_HOST = /^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::\d{1,5})?$/;
 const MAX_ADDRESSES = 32;
 
-/** `addresses` and `primaryAddress` of an info answer: hosts only, at most 32; the primary only when it is one of them. */
-function ownAddresses(addresses: unknown, primary: unknown): Pick<NodeProfile, 'addresses' | 'primaryAddress'> {
-    if (!Array.isArray(addresses)) return {};
-    const hosts = [...new Set(addresses
+/** Bare hosts in lower case, each once, at most 32; anything that isn't one is dropped. */
+function ownHosts(list: readonly unknown[]): string[] {
+    return [...new Set(list
         .filter((a): a is string => typeof a === 'string')
         .map((a) => a.trim().toLowerCase())
         .filter((a) => OWN_HOST.test(a)))].slice(0, MAX_ADDRESSES);
+}
+
+/** `addresses`, `primaryAddress` and `formerAddresses` of an info answer: hosts only; the primary only when it is one of `addresses`. */
+function ownAddresses(addresses: unknown, primary: unknown, former: unknown): Pick<NodeProfile, 'addresses' | 'primaryAddress' | 'formerAddresses'> {
+    if (!Array.isArray(addresses)) return {};
+    const hosts = ownHosts(addresses);
+    const before = Array.isArray(former) ? ownHosts(former) : [];
     const p = typeof primary === 'string' ? primary.trim().toLowerCase() : null;
-    return { addresses: hosts, ...(p && hosts.includes(p) ? { primaryAddress: p } : {}) };
+    return { addresses: hosts, ...(p && hosts.includes(p) ? { primaryAddress: p } : {}), ...(before.length ? { formerAddresses: before } : {}) };
 }
 
 /** The server's own rule (config/start-community.ts cleanStartCommunityUrl): https, a host, no user name or password, at most 300 characters, no spaces. */
@@ -297,7 +308,7 @@ export function readReaderFeatures(body: unknown): NodeFeatures | null {
 export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProfile | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
     const b = body as {
-        profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown; addresses?: unknown; primaryAddress?: unknown;
+        profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown; addresses?: unknown; primaryAddress?: unknown; formerAddresses?: unknown;
         recoveryCopies?: unknown; pollOther?: unknown;
     };
     const features: NodeFeatures = {};
@@ -327,7 +338,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         ...(startCommunityUrl ? { startCommunityUrl } : {}),
         ...(language ? { language } : {}),
         recoveryCopies: readRecoveryCopiesRule(b.recoveryCopies),
-        ...ownAddresses(b.addresses, b.primaryAddress),
+        ...ownAddresses(b.addresses, b.primaryAddress, b.formerAddresses),
     };
 }
 

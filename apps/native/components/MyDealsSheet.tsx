@@ -630,7 +630,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         {dealsTab === 'pending' && (
                             <Text testID={`deal-state-${item.id}`} accessibilityRole={standing?.warning ? 'alert' : undefined}
                                 style={[styles.dealStateText, standing?.warning && { color: colors.feedback.warning.fg, fontWeight: '800' }]}
-                                numberOfLines={3}>
+                                numberOfLines={standing ? 3 : undefined}>
                                 {standing ? standing.status : dealStateWords(step, partnerCallsign)}
                             </Text>
                         )}

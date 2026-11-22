@@ -21,7 +21,7 @@ export const SHEET_FOOTER_GAP = 16;
  */
 export const LIST_SHEET_SHARE = 0.75;
 export const LIST_SHEET_MIN = 560;
-/** Under the list: the navigation bar's own room and a little over, never less than the 40 it always had. */
+/** Under the list: the navigation bar's own room, never less than the 40 it always had (the list's own end adds 24). */
 const LIST_SHEET_FOOT = 40;
 
 /**
@@ -33,7 +33,7 @@ export function listSheetLayout(sheetRoom: number, insets: SheetInsets): { maxHe
     const h = Math.max(0, sheetRoom || 0);
     return {
         maxHeight: Math.max(0, Math.max(h * LIST_SHEET_SHARE, Math.min(LIST_SHEET_MIN, h - top - SHEET_TOP_GAP))),
-        paddingBottom: Math.max(LIST_SHEET_FOOT, bottom + 8),
+        paddingBottom: Math.max(LIST_SHEET_FOOT, bottom),
     };
 }
 

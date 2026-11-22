@@ -15,6 +15,9 @@
  * And 5: how an invite is found on a new phone (DESIGN-onboarding-home-landing-fable.md §3.1 B, DESIGN-ios-invite-paste-fable.md
  * §4.1), one row per arrival: which screen, which button, which words; no read of the clipboard before a tap; and what a tap
  * brings back that isn't an invite is never shown or sent.
+ * And 6: the same screens laid out on an old small phone (320 × 569 dp, the text at 1.3×, three-button navigation; walk 148),
+ * light and dark: clear of both system bars, the name box in view, the address asked only where the invite names none, and a
+ * refused code said before Join.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -32,6 +35,19 @@ const plat = vi.hoisted(() => ({ OS: 'android', paste: false, select: (o: Record
 const prompts = vi.hoisted(() => ({ asked: [] as string[] }));
 /** The phone's back button: its handlers, as React Native keeps them (the latest first). */
 const backs = vi.hoisted(() => ({ handlers: new Set<() => boolean>() }));
+
+/** §6: the parts' onLayout by testID, the step's scroll view (its onLayout and where it was last scrolled), and the system bars. */
+const laid = vi.hoisted(() => new Map<string, (e: unknown) => void>());
+const scrolled = vi.hoisted(() => ({ to: [] as number[] }));
+const keyboard = vi.hoisted(() => ({ hidden: new Set<() => void>() }));
+const bars = vi.hoisted(() => ({ top: 24, bottom: 0 }));
+const look148 = vi.hoisted(() => ({ dark: false }));
+/** A scroll view as React Native lays one out: its frame, and its content inside it. */
+function scrollBox({ children, contentContainerStyle, onLayout }: Record<string, any>) {
+    if (onLayout) laid.set('scroll', onLayout);
+    return createElement('div', { 'data-testid': 'scroll', 'data-style': JSON.stringify({ flexGrow: 1, flexShrink: 1, overflow: 'scroll' }) },
+        createElement('div', { 'data-testid': 'scroll-content', 'data-style': JSON.stringify(Object.assign({}, ...[contentContainerStyle].flat(3).filter(Boolean))) }, children));
+}
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', checkbox: 'checkbox' };
@@ -53,13 +69,17 @@ vi.mock('react-native', () => {
         if (s.flexDirection === 'row') attrs['data-row'] = 'true';
         if (s.flexWrap === 'wrap') attrs['data-wrap'] = 'true';
         if ((typeof s.flexShrink === 'number' && s.flexShrink > 0) || (typeof s.flex === 'number' && s.flex > 0)) attrs['data-shrink'] = 'true';
+        // For §6's layout (yoga-dom-layout.ts): the style, a box's room for its line of text, and each measured part's onLayout.
+        attrs['data-style'] = JSON.stringify(tag === 'input' ? { ...s, minHeight: 2 * (s.padding ?? 0) + (s.fontSize ?? 14) * 1.3 * 1.25 } : s);
+        if (testID && props.onLayout) laid.set(testID, props.onLayout);
         return createElement(tag, attrs, children);
     };
+    const scroll = (props: Record<string, any>) => scrollBox({ ...props, contentContainerStyle: flat(props.contentContainerStyle) });
     const listener = () => ({ remove() {} });
     return {
         Platform: plat,
         Image: el('img'),
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), FlatList: el('div'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: scroll, TextInput: el('input'), FlatList: el('div'),
         TouchableOpacity: el('button'), SafeAreaView: el('div'), ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
@@ -78,7 +98,7 @@ vi.mock('react-native', () => {
             },
         },
         DeviceEventEmitter: { addListener: listener, emit() {} },
-        Keyboard: { addListener: listener, dismiss() {} },
+        Keyboard: { addListener: (event: string, fn: () => void) => { if (event === 'keyboardDidHide') keyboard.hidden.add(fn); return { remove() { keyboard.hidden.delete(fn); } }; }, dismiss() {} },
         AccessibilityInfo: { announceForAccessibility: () => {}, isScreenReaderEnabled: async () => false, addEventListener: listener },
         I18nManager: { getConstants: () => ({ localeIdentifier: 'en_US' }), allowRTL: () => {}, forceRTL: () => {} },
         NativeModules: {},
@@ -144,12 +164,17 @@ vi.mock('expo-apple-authentication', () => ({ isAvailableAsync: async () => fals
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '1.0.0' } } }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('react-native-safe-area-context', () => ({
-    useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
+    useSafeAreaInsets: () => ({ top: bars.top, bottom: bars.bottom, left: 0, right: 0 }),
     SafeAreaView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
 }));
-vi.mock('react-native-keyboard-controller', () => {
+vi.mock('react-native-keyboard-controller', async () => {
+    const { forwardRef, useImperativeHandle } = await import('react');
     const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
-    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardStickyView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
+    const aware = forwardRef((props: Record<string, any>, ref) => {
+        useImperativeHandle(ref, () => ({ scrollTo: (o: { y: number }) => { scrolled.to.push(o.y); }, scrollToEnd() {} }));
+        return scrollBox(props);
+    });
+    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: aware, KeyboardStickyView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -162,10 +187,12 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors } = await import('../../constants/colors');
+    const { lightColors, COLOUR_SETS } = await import('../../constants/colors');
     const { onboardingColors } = await import('../onboarding-colors');
     const ctx = { theme: 'light', colors: lightColors, themePreference: 'light', setThemePreference() {}, patternEnabled: false, setPatternEnabled() {} };
-    return { useTheme: () => ctx, useStyles: (make: (t: unknown) => unknown) => make(ctx), useOnboardingColors: () => onboardingColors('light') };
+    const night = { ...ctx, theme: 'dark', colors: COLOUR_SETS.night, themePreference: 'night' };
+    const now = () => (look148.dark ? night : ctx);
+    return { useTheme: now, useStyles: (make: (t: unknown) => unknown) => make(now()), useOnboardingColors: () => onboardingColors(look148.dark ? 'night' : 'light') };
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: phone.stored, setIdentity() {} }) }));
 vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => {} }) }));
@@ -391,6 +418,7 @@ import { NAME_BOX_WORDS, setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import WelcomeScreen from '../../app/welcome';
 import { noVault } from './fake-vault';
+import { layOut } from './yoga-dom-layout';
 
 const RIVERSIDE = 'https://riverside.example.org';
 const KNOCKER = { publicKey: 'e7'.repeat(32), privateKey: 'f8'.repeat(32), callsign: 'River Kid', createdAt: '2026-10-29', mnemonic: ids.WORDS };
@@ -412,6 +440,7 @@ beforeEach(() => {
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' };
     phone.checkFor = null;
     keyItem.value = null; keyItem.throws = false;
+    laid.clear(); scrolled.to.length = 0; bars.top = 24; bars.bottom = 0; look148.dark = false;
     knocking.asked = [knockAt(RIVERSIDE, 'Riverside')];
     knocking.statuses = {};
     knocking.mark = KNOCKER.publicKey;
@@ -906,5 +935,262 @@ describe('6. "I\'ve used BeanPool before": every way back opens from the front d
         await press('Start a new account instead');
         expect(byId('front-door')).toBeTruthy();
         expect(work.keysDrafted).toBe(0);
+    });
+});
+
+// Walk 148 (the 1.4.8 phone build on API 26, 320 × 569 dp at 1.3×, three-button navigation): words scrolled up under the
+// status bar, "More ways in ›" sat half under the navigation bar at the end of the scroll, the name box sat under the Join
+// footer, and the address box and "Required — the community node…" showed although the link had named the community.
+describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigation bar drawn over the screen', () => {
+    const SCREEN = { width: 320, height: 569 };
+    const STATUS = 24;
+    const NAV = 48;
+    const ADDRESS = 'Community name or node address';
+    const REQUIRED = "Required — the community node you're joining.";
+    const text = () => host!.textContent ?? '';
+    const checkAnswers = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 700)); }); await settle(); };
+    const smallPhone = (dark: boolean) => {
+        phone.stored = null; knocking.mark = null; knocking.asked = [];
+        bars.top = STATUS; bars.bottom = NAV; look148.dark = dark;
+    };
+    const leave = () => { act(() => root?.unmount()); host?.remove(); root = null; host = null; };
+    /** The screen laid out, and where a part is on it, scrolled to its top. */
+    function lay() {
+        const screen = host!.firstElementChild!;
+        const layout = layOut(screen, SCREEN, { fontScale: 1.3 });
+        const at = (el: Element) => {
+            let top = 0;
+            for (let e: Element | null = el; e; e = e === screen ? null : e.parentElement) top += layout.box(e).top;
+            return { top, bottom: top + layout.box(el).height };
+        };
+        return { at, box: layout.box };
+    }
+    const part = (id: string) => { const el = byId(id); expect(el, id).toBeTruthy(); return el!; };
+    /** The phone measures the name step's parts, as the layout has them, and each tells the step. */
+    async function measureNameStep() {
+        const { box } = lay();
+        const tell = async (id: string, el: Element) => { await act(async () => { laid.get(id)!({ nativeEvent: { layout: { y: box(el).top, height: box(el).height } } }); }); };
+        await tell('scroll', part('scroll'));
+        await tell('name-step-card', part('name-step-card'));
+        await tell('name-step-name', part('name-step-name'));
+    }
+    /** How far the step is scrolled: never past its end. */
+    function scrolledTo(): number {
+        const { box } = lay();
+        return Math.min(scrolled.to.at(-1) ?? 0, Math.max(0, box(part('scroll-content')).height - box(part('scroll')).height));
+    }
+    const nameBoxSeen = () => {
+        const { at } = lay();
+        const y = scrolledTo();
+        const name = at(all('input').find((i) => i.getAttribute('aria-label') === 'Your name or nickname')!);
+        return { top: name.top - y, bottom: name.bottom - y, view: at(part('scroll')) };
+    };
+
+    describe.each([false, true])('dark: %s', (dark) => {
+        it('the name step, its community named by the link: no address box, no "Required", the name box above the Join footer with nothing scrolled', async () => {
+            smallPhone(dark);
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+            phone.invite = { valid: true, inviterCallsign: 'Sam', communityName: 'Riverside Walk' };
+            await mount();
+            await checkAnswers();
+            expect(byId('invite-greeting')?.textContent).toContain('Sam invited you to Riverside Walk');
+            expect(field(ADDRESS)).toBeUndefined();
+            expect(text()).not.toContain(REQUIRED);
+            await measureNameStep();
+            expect(scrolled.to).toEqual([]);
+            const seen = nameBoxSeen();
+            expect(seen.bottom).toBeLessThanOrEqual(lay().at(part('step-footer-invite')).top);
+            expect(seen.view.top, 'the step scrolls below the status bar').toBe(STATUS);
+            expect(lay().at(part('step-dots')).top).toBeGreaterThanOrEqual(STATUS);
+        });
+
+        it.each([
+            ['a bare code (the address asked for)', { invite: 'INV-ABCD-EFGH', t: '1' }, 'Riverside'],
+            ['a long community name', { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '2' }, 'The Riverside and Upper Valley Neighbours and Growers Community'],
+        ] as Array<[string, Record<string, string>, string]>)('%s: the step scrolls just far enough for the name box, and again once the keyboard has gone', async (_what, invite, community) => {
+            smallPhone(dark);
+            params.now = invite;
+            phone.invite = { valid: true, inviterCallsign: 'Wilhelmina', communityName: community };
+            await mount();
+            await checkAnswers();
+            if (!invite.server) { expect(field(ADDRESS)).toBeTruthy(); expect(text()).toContain(REQUIRED); }
+            await measureNameStep();
+            const before = scrolled.to.length;
+            expect(before).toBeGreaterThan(0);
+            const seen = nameBoxSeen();
+            expect(seen.bottom).toBeLessThanOrEqual(seen.view.bottom);
+            expect(seen.top).toBeGreaterThanOrEqual(seen.view.top);
+            // The keyboard's scroll view goes back to where it was as the keyboard hides: the step is scrolled again.
+            expect(keyboard.hidden.size).toBe(1);
+            await act(async () => { keyboard.hidden.forEach((fn) => fn()); });
+            expect(scrolled.to.length).toBe(before + 1);
+            expect(scrolled.to.at(-1)).toBe(scrolled.to.at(-2));
+            // Nothing moved: nothing is scrolled under the reader.
+            await measureNameStep();
+            expect(scrolled.to.length).toBe(before + 1);
+        });
+
+        it('the front door: below the status bar, and at the end of its scroll "More ways in ›" is above the navigation bar', async () => {
+            smallPhone(dark);
+            await mount();
+            const { at, box } = lay();
+            expect(at(part('scroll')).top).toBe(STATUS);
+            const under = box(part('scroll-content')).height - (at(part('front-door-more')).bottom - at(part('scroll-content')).top);
+            expect(under, 'the room under the last link').toBeGreaterThanOrEqual(NAV);
+            // The scroll view itself reaches the screen's end: the page shows behind a see-through bar.
+            expect(at(part('scroll')).bottom).toBe(SCREEN.height);
+        });
+    });
+
+    it("every scroll on the welcome screens: above a footer, which keeps the bar's room itself, or ending above the bar", async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve } = await import('node:path');
+        const src = readFileSync(resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
+        const scrolls = [...src.matchAll(/contentContainerStyle=\{styles\.(\w+)\}/g)];
+        expect(scrolls.length).toBeGreaterThan(10);
+        scrolls.forEach((m, i) => {
+            const step = src.slice(m.index, scrolls[i + 1]?.index ?? src.length);
+            expect(['scroll', 'scrollToEnd', 'homeContent'], m[0]).toContain(m[1]);
+            expect(step.includes('<StepFooter'), `${m[1]} at line ${src.slice(0, m.index).split('\n').length}`).toBe(m[1] === 'scroll');
+        });
+        // Every screen of it sits on the one ground that keeps clear of the status bar.
+        expect(src.match(/<SafeAreaView style=\{styles\.container\}>/g)?.length).toBe(src.match(/<SafeAreaView/g)?.length);
+    });
+
+    describe('the address box: only for a bare code that names no community, or an address that did not do', () => {
+        it.each([
+            ['a link tapped (router params)', async () => { params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' }; await mount(); }],
+            ['the install referrer', async () => { referrer.value = `invite=INV-ABCD-EFGH&server=${encodeURIComponent(RIVERSIDE)}`; await mount(); }],
+            ['a link copied', async () => { clip.text = `${RIVERSIDE}/?invite=INV-ABCD-EFGH`; await mount(); await press('I have an invite'); }],
+            ['a link typed', async () => { await mount(); await press('I have an invite'); await type('Invite link or code', `${RIVERSIDE}/?invite=INV-ABCD-EFGH`); await press('Next'); }],
+            ['a message with its address line', async () => { clip.text = 'Join us on BeanPool. Your invite code: INV-ABCD-EFGH\nCommunity address: riverside.example.org'; await mount(); await press('I have an invite'); }],
+        ] as Array<[string, () => Promise<void>]>)('%s: not asked', async (_how, arrive) => {
+            smallPhone(false);
+            await arrive();
+            expect(onNameScreen()).toBe(true);
+            expect(field(ADDRESS)).toBeUndefined();
+            expect(text()).not.toContain(REQUIRED);
+            await type('Your name or nickname', 'Rowan');
+            await press('Join');
+            expect(phone.redeems).toEqual([{ code: 'INV-ABCD-EFGH', callsign: 'Rowan' }]);
+        });
+
+        it.each([null, 'https://lastused.example.org'])('a bare code copied, the community this phone last used %s: asked', async (last) => {
+            smallPhone(false);
+            if (last) store.map.set('beanpool_anchor_url', last);
+            clip.text = 'INV-ABCD-EFGH';
+            await mount();
+            await press('I have an invite');
+            expect(onNameScreen()).toBe(true);
+            expect(field(ADDRESS)).toBeTruthy();
+            expect(text()).toContain(REQUIRED);
+        });
+
+        it("the pencil and back with the same code: still the link's community; with another code alone: asked", async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+            await mount();
+            await press('Change the invite');
+            await press('Next');
+            expect(onNameScreen()).toBe(true);
+            expect(field(ADDRESS)).toBeUndefined();
+            await press('Change the invite');
+            await type('Invite link or code', 'INV-ZZZZ-YYYY');
+            await press('Next');
+            expect(field(ADDRESS)?.value).toBe(RIVERSIDE);
+            expect(text()).toContain(REQUIRED);
+        });
+
+        it.each(['not_a_community', 'invites_off'])('the check says %s: the box is drawn to put it right, and the words say so before Join', async (reason) => {
+            smallPhone(false);
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+            phone.invite = { valid: false, reason };
+            await mount();
+            expect(field(ADDRESS)).toBeUndefined();
+            await checkAnswers();
+            expect(field(ADDRESS)?.value).toBe(RIVERSIDE);
+            expect(byId('invite-refused')?.textContent).toContain('riverside.example.org');
+            // Put right: those words were for the old address.
+            await type(ADDRESS, 'https://upstream.example.org');
+            expect(byId('invite-refused')).toBeNull();
+            expect(phone.redeems).toEqual([]);
+        });
+
+        it('nothing answers at Join: the address it tried is drawn', async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+            phone.checkFor = async () => null;
+            phone.redeemFails = 'Network request failed';
+            await mount();
+            await type('Your name or nickname', 'Rowan');
+            expect(field(ADDRESS)).toBeUndefined();
+            await press('Join');
+            expect(field(ADDRESS)?.value).toBe(RIVERSIDE);
+        });
+    });
+
+    describe('a refused code, said on the name step by the check the greeting already makes', () => {
+        const UNKNOWN = "That invite wasn't recognised by your community.";
+        const USED = 'This invite has already been used';
+
+        it('a made-up code: said under the band, nothing redeemed, Join still there', async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-2222-2222', server: RIVERSIDE, t: '1' };
+            phone.invite = { valid: false, reason: 'invalid', communityName: 'Riverside' };
+            await mount();
+            expect(byId('invite-refused')).toBeNull();
+            await checkAnswers();
+            expect(byId('invite-refused')?.textContent).toContain(UNKNOWN);
+            expect(field(ADDRESS), 'the address did: only the code did not').toBeUndefined();
+            expect(phone.redeems).toEqual([]);
+            // Join says the same, once: in its own place, with the note gone.
+            await type('Your name or nickname', 'Rowan');
+            await press('Join');
+            expect(text().split(UNKNOWN).length - 1).toBe(1);
+            expect(byId('invite-refused')).toBeNull();
+            expect(phone.redeems).toEqual([]);
+        });
+
+        it('belongs to its code: another code for the same community has none until its own check', async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-2222-2222', server: RIVERSIDE, t: '1' };
+            phone.checkFor = async (code) => (code === 'INV-2222-2222' ? { valid: false, reason: 'invalid' } : { valid: true, inviterCallsign: 'Asha', communityName: 'Riverside' });
+            await mount();
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeTruthy();
+            await press('Change the invite');
+            await type('Invite link or code', 'INV-ASHA-AAAA');
+            await press('Next');
+            expect(byId('invite-refused')).toBeNull();
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeNull();
+            expect(byId('invite-greeting')?.textContent).toContain('Asha invited you to Riverside');
+        });
+
+        it('a spent code: said on a phone with no account; with one, only Join asks the node whose it was', async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+            phone.invite = { valid: false, reason: 'used', communityName: 'Riverside' };
+            await mount();
+            await checkAnswers();
+            expect(byId('invite-refused')?.textContent).toContain(USED);
+            leave();
+            phone.stored = { ...KNOCKER };
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '2' };
+            await mount();
+            await checkAnswers();
+            expect(onNameScreen()).toBe(true);
+            expect(byId('invite-refused')).toBeNull();
+        });
+
+        it('no answer (offline): nothing said, Join as before', async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+            phone.checkFor = async () => null;
+            await mount();
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeNull();
+            expect(byId('invite-greeting')?.textContent).toContain("You're invited");
+        });
     });
 });

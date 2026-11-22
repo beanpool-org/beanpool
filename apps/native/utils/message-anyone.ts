@@ -265,9 +265,10 @@ export function acrossRefusedWords(refused: Exclude<AcrossRefused, 'uncertain'>)
  * declined one there is opened again, and one kept with another home goes to the link's now). Refused with no community in
  * use (a guest's look included: its copy is not the member's, and its server would refuse the line), where the community
  * in use doesn't take messages from other communities, has no address of its own to send from, or says the account is
- * suspended there (its server refuses the line), or for someone the account blocked; nothing is made then. Nor when the link's address is one of the community in use's own (asked now, always: a name
- * it took on since this phone last heard), where the direct chat here is theirs: its server refuses every line across to one
- * of its own names. Nor when whose the address is can't be said for certain (utils/community-homes.ts).
+ * suspended there (its server refuses the line), or for someone the account blocked; nothing is made then. Nor when the link's
+ * address is one of the community in use's own (asked now, always: a name it took on since this phone last heard), where the
+ * direct chat here is theirs: its server refuses every line across to one of its own names. Nor when whose the address is
+ * can't be said for certain (utils/community-homes.ts).
  */
 export async function openAcrossChat(target: { key: string; home: string; name: string | null }): Promise<AcrossOpened> {
     const inFront = await anchorUrl();

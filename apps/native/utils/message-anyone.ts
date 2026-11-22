@@ -32,7 +32,7 @@
  * Chat reads; Marty 22 Nov, the S7 rule) is refused, with the words the across path already said, and nothing opens or is made.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { acrossChatListed, messagePathFor, whoseName, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
+import { acrossChatListed, messagePathFor, whoseName, type KnownChat, type MessageLink, type MessagePath, type WhoseName } from '@beanpool/core';
 import type { getConversations } from './db';
 import { askedNow, doubted, keptAsOne, keptNames, keptNamesWith, type PhoneNames } from './community-homes';
 import { readMembershipAnswer } from './membership-answer';
@@ -156,9 +156,9 @@ export async function messagePathOnPhone(me: string, links: readonly MessageLink
     const chats = keys.length && !blocked ? (await knownChatsWith(me, keys, { inFront, member: setTo !== null })).map(placed) : [];
     const { outsideMessagesOn } = await import('./node-profile');
     let weighed: MessageLink[] = [...links];
+    let whose = whoseOf(names);
     const over = (from: readonly string[]): MessagePath => messagePathFor({
-        links: weighed, chats, setTo, look, held: from, blocked,
-        whose: whoseName(names),
+        links: weighed, chats, setTo, look, held: from, blocked, whose,
         // Not heard from yet: its chats across still count (only a community that says it takes none is left out).
         takesAcross: (c) => { const profile = profileOf(names, c); return !profile || acrossRefusal(profile, outsideMessagesOn) === null; },
     });
@@ -190,10 +190,22 @@ export async function messagePathOnPhone(me: string, links: readonly MessageLink
         askedNow(names, [...links.map((l) => l.community), ...chats.map((c) => (c.kind === 'across' ? c.home : null))]),
         settled(),
     ]);
+    whose = whoseOf(names);
     // One after another: each held read closes the handles Chat doesn't need (held-chats.ts).
     weighed = [];
     for (const l of links) weighed.push(await doubted(names, l.community, l.key, inFront) ? { ...l, doubted: true } : l);
     return settled();
+}
+
+/** {@link whoseName}, each address worked out once: {@link messagePathOnPhone} weighs the same few several times over. */
+function whoseOf(names: readonly PhoneNames[]): (address: string | null | undefined) => WhoseName {
+    const of = whoseName(names);
+    const known = new Map<string | null | undefined, WhoseName>();
+    return (address) => {
+        const got = known.get(address) ?? of(address);
+        known.set(address, got);
+        return got;
+    };
 }
 
 /** A community's info among `names`: its answer now, else as this phone keeps it. */

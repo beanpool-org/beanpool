@@ -107,6 +107,7 @@ import { getDatabaseFilenameForNode, removeSavedNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { forgetGroupKeys, groupKeyring, memoryGroupKeyStore, GROUP_KEY_ROLLBACK_TEXT, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 import { makeEpochRecord, sealLine } from '../group-chat-crypto';
+import { addGroupKeyState, sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from '../group-chat-store';
 import { groupChatShownLines, openGroupThread, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_KEYS_FOR_DM_TEXT, type OpenedGroupThread } from '../group-chat-lines';
 import { dmPeerPinsStoreKey, dmConversationsSeenStoreKey } from '../storage-keys';
 import { chatInPlaceRoute } from '../held-chats';
@@ -898,6 +899,24 @@ describe('a group\'s keys: every write x every way it is refused, then opened ag
         await db.leaveChatInPlace(A);
     });
 
+    it('a key opened from the file with no signal, whose raise the file won\'t keep, opens nothing until it is kept', async () => {
+        await danaWrites('under key 2');
+        db.enterChatInPlace(A);
+        await opened(A);
+        await db.leaveChatInPlace(A);
+        into(A_FILE, (sql) => { sql.prepare('UPDATE group_chat_key_state SET highest = 1').run(); });
+        await restart();
+        servers[A].noKeys = true;
+        db.enterChatInPlace(A);
+        h.cut = { file: A_FILE, sql: /\(group_id, highest\)/, times: 1, refuse: true, hit: () => {} };
+        expect(texts(await opened(A))).not.toContain('under key 2');
+        expect([h.cut.times, parted(), onDisk().highest]).toEqual([0, [], 1]);
+        h.cut = null;
+        expect(texts(await opened(A))).toContain('under key 2');
+        expect([parted(), onDisk().highest]).toEqual([[], 2]);
+        await db.leaveChatInPlace(A);
+    });
+
     it('a community taken off the phone and joined again in the same run: its new copy is told every key again, and a restart reads every line', async () => {
         await danaWrites('under key 2');
         db.enterChatInPlace(A);
@@ -1065,6 +1084,24 @@ describe('the sticky lock: on disk before any of the chat is shown or sent; a gr
         await db.postGroupChatMessage(g, 'an old node\'s words', randomUUID(), null, undefined, A);
         await db.leaveChatInPlace(A);
         expect([servers[A].wordsIn, onDisk().locked]).toEqual([['an old node\'s words'], false]);
+    });
+
+    it('the mark goes with the rest when a community is followed to another address this phone has a copy for', async () => {
+        const copy = () => {
+            const sql = new DatabaseSync(':memory:');
+            return {
+                getAllAsync: async <T,>(q: string, p: any[] = []) => sql.prepare(q).all(...p) as T[],
+                getFirstAsync: async <T,>(q: string, p: any[] = []) => (sql.prepare(q).get(...p) ?? null) as T | null,
+                runAsync: async (q: string, p: any[] = []) => sql.prepare(q).run(...p),
+                execAsync: async (q: string) => { sql.exec(q); },
+            };
+        };
+        const [from, into_] = [copy(), copy()];
+        await from.execAsync(GROUP_KEY_TABLES_SQL);
+        await sqliteGroupKeyStore(async () => from).noteLocked('me/g');
+        await addGroupKeyState(from, into_);
+        expect(await sqliteGroupKeyStore(async () => into_).load('me/g')).toEqual({ epochs: [], highest: 0, after: 0, locked: true });
+        expect((await sqliteGroupKeyStore(async () => into_).load('me/other')).locked).toBe(false);
     });
 
     it('the mark lifts no DM guard: an id this phone knows as a DM gets no group keys, in place or in use, and is not a held group', async () => {

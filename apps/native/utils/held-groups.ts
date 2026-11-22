@@ -1,9 +1,10 @@
 /**
  * Talk → Groups' rows from every other community this phone holds (slice S6, scratch/fable-design/DESIGN-no-switch-messaging-fable.md
- * §3, §6): each group the member is in there, with that community's name and its own unread count, opened in place
- * (components/GroupChatView.tsx `inPlace`). Each community is asked for its member's own list, signed for its name (utils/db.ts
- * fetchHeldYourGroups), as Talk asks the one in use: one read as Chat opens, at each change of the notice counts and at the
- * member's pull, never a poll. Events and enterprises there are a later part of the slice: not listed here.
+ * §3, §6): each group the member is in there and each event whose chat they may read (the host, and the people Going it lets
+ * in: that community's own list says which), with that community's name and its own unread count, opened in place
+ * (components/GroupChatView.tsx, EventChatView.tsx `inPlace`). Each community is asked for its member's own list, signed for
+ * its name (utils/db.ts fetchHeldYourGroups), as Talk asks the one in use: one read as Chat opens, at each change of the
+ * notice counts and at the member's pull, never a poll. Enterprises there are not listed here.
  *
  * Which communities: those Chat reads (held-chats.ts heldCommunityList), less any a guest's mark names under any spelling
  * (it wouldn't open in place). One that doesn't answer keeps the rows it had; one the phone is now set to, no longer holds,
@@ -11,15 +12,17 @@
  * send or a mute in place shows on its own row and never on the same id in another.
  */
 import { useSyncExternalStore } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { chatTimeMs, newestChatsFirst } from '@beanpool/core';
 import { getDatabaseFilenameForNode, isGuestCopy } from './nodes';
+import type { OtherCommunityNotice } from './use-notice-counts';
 import { createYourGroupsStore, TALK_GROUPS, type YourGroupsStore } from './your-groups-store';
 import type { YourChat } from './your-groups';
 
 /** On every row made here, and on no other: a server's list is JSON, which can't write it (review of #3358, F3). */
 export const HELD_GROUP: unique symbol = Symbol('held group');
 
-/** A group of another community this phone holds: its row, and where it opens. */
+/** A group's or an event's chat of another community this phone holds: its row, and where it opens. */
 export interface HeldGroup extends YourChat {
     readonly [HELD_GROUP]: true;
     /** The row's key: never that of a group in the community in use, nor of the same id in another. */
@@ -45,7 +48,7 @@ let listing: Promise<unknown> = Promise.resolve();
 
 function emit(): void {
     const next = places.flatMap(({ file, url, name, store, left }) => (store.getState().items ?? [])
-        .filter((item) => item.kind === 'group' && !left.has(item.conversationId))
+        .filter((item) => (item.kind === 'group' || item.kind === 'event') && !left.has(item.conversationId))
         .map((item): HeldGroup => ({ ...item, [HELD_GROUP]: true, key: `held-group:${file}:${item.conversationId}`, community: url, communityName: name, movedAt: store.movedAt(item) })));
     if (JSON.stringify(next) === JSON.stringify(rows)) return;
     rows = next;
@@ -101,7 +104,13 @@ export const heldGroups = {
         const file = getDatabaseFilenameForNode(community);
         const list = () => places.find((p) => p.file === file)?.store;
         return {
-            markRead: (id) => list()?.markRead(id),
+            markRead: (id) => {
+                const row = list()?.getState().items?.find((i) => i.conversationId === id);
+                list()?.markRead(id);
+                // An event's lines leave that community's number too, now: the "· Switch" line never counts what was read here.
+                const lines = row?.kind === 'event' ? row.unreadCount : 0;
+                if (lines > 0) void import('./notice-counts').then((m) => m.noteReadInPlace(AsyncStorage, community, lines)).catch(() => {});
+            },
             noteSent: (id) => list()?.noteSent(id),
             setMute: (id, mute) => list()?.setMute(id, mute),
         };
@@ -165,7 +174,22 @@ export function isHeldGroup(item: YourChat | HeldGroup): item is HeldGroup {
     return (item as HeldGroup)[HELD_GROUP] === true;
 }
 
-/** The chat screen's params for a held group opened in place: its id, its community by address, and the names shown on the way in. */
+/** The chat screen's params for a held row opened in place: its id, its community by address, and the names shown on the way in. */
 export function heldGroupParams(item: HeldGroup): Record<string, string> {
-    return { id: item.conversationId, community: item.community, communityName: item.communityName, group: '1', name: item.name };
+    return { id: item.conversationId, community: item.community, communityName: item.communityName, [item.kind === 'event' ? 'event' : 'group']: '1', name: item.name };
+}
+
+/**
+ * Chat's "{n} new messages in {community} · Switch" lines once events have rows of their own here (DESIGN §3: "the '· Switch'
+ * row goes once a community's chats are in the list"): a community's number less the unread lines its events' rows show, and
+ * no line when nothing else waits. Never below the lines a push told of there (`alerts`): an event's chat tells nobody, so
+ * those are never an event's, whatever came between that community's last count and its last list.
+ */
+export function noticesBesideEvents(notices: readonly OtherCommunityNotice[], held: readonly HeldGroup[]): OtherCommunityNotice[] {
+    return notices.flatMap((n) => {
+        const file = getDatabaseFilenameForNode(n.url);
+        const onRows = held.reduce((sum, r) => sum + (r.kind === 'event' && getDatabaseFilenameForNode(r.community) === file ? Math.max(0, r.unreadCount || 0) : 0), 0);
+        const count = Math.max(n.count - onRows, Math.min(n.alerts ?? n.count, n.count));
+        return count > 0 ? [count === n.count ? n : { ...n, count }] : [];
+    });
 }

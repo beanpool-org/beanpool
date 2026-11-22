@@ -1136,11 +1136,12 @@ export async function whileChatInPlace<T>(community: ChatCommunity, fn: () => Pr
     }
 }
 
-/** For tests: a new phone (no chat held or left in place, no group listed by a community), as an app start has. */
+/** For tests: a new phone (no chat held or left in place, no group or event listed by a community), as an app start has. */
 export function _resetChatsInPlaceForTests(): void {
     chatsInPlaceHeld.clear();
     chatsInPlaceLeft.clear();
     groupsListedThere.clear();
+    eventsListedThere.clear();
 }
 
 /**
@@ -1227,7 +1228,7 @@ async function dmLineHeldThrough(database: SQLite.SQLiteDatabase, messageId: str
 async function onlyLineInPlace(here: ChatRequestCopy, messageId: string, groupId?: string): Promise<ChatRequestCopy> {
     if (!here.inPlace) return here;
     const aDmLine = await dmLineHeldThrough(here.database, messageId);
-    if (groupId ? aDmLine || !(await heldAsGroupThrough(here.database, groupId)) : !aDmLine) throw new NoCopyInPlaceError();
+    if (groupId ? aDmLine || !(await heldAsThreadThrough(here.database, groupId, ['group'])) : !aDmLine) throw new NoCopyInPlaceError();
     return here;
 }
 
@@ -1247,6 +1248,10 @@ async function newDmFitsIn(database: SQLite.SQLiteDatabase, conversationId: stri
  * by account and file: a group joined on another device opens in place before that community's copy has a row for it.
  */
 const groupsListedThere = new Map<string, Set<string>>();
+/** The same for events: none its list also names as a group (an id of two kinds is neither's). */
+const eventsListedThere = new Map<string, Set<string>>();
+/** The chats of a community, direct ones aside, that open in place (slice S6): a group's, and an event's. */
+type ThreadKind = 'group' | 'event';
 
 /**
  * Whether a community's copy holds `conversationId` as a group's chat (slice S6), from what it keeps and what its own list
@@ -1266,32 +1271,51 @@ async function holdsAsGroup(conversationId: string, facts: any, listed: boolean,
 
 const listedAsGroup = (me: string, file: string, id: string): boolean => !!groupsListedThere.get(`${me}\n${file}`)?.has(id);
 
-/** Whether the copy `database` reads (a copy open in place) holds `conversationId` as a group's chat ({@link holdsAsGroup}). */
-async function heldAsGroupThrough(database: SQLite.SQLiteDatabase, conversationId: string): Promise<boolean> {
+/**
+ * As {@link holdsAsGroup}, for an event's chat (slice S6): its row there is an event's (or, with no row, its own server's list
+ * names it as one), and neither that copy's group keys nor its DM memory knows the id. An event's chat is readable by its
+ * server, by design: what may be said in it is asked again as each line leaves ({@link readableLineTo}).
+ */
+async function holdsAsEvent(conversationId: string, facts: any, listed: boolean, memory: () => Promise<{ pins: DmPeerPins | null; seen: string[] | null }>): Promise<boolean> {
+    if (!facts || !conversationId || conversationId !== conversationId.toLowerCase()) return false;
+    if (Number(facts.highest ?? 0) > 0 || Number(facts.wrapped ?? 0) > 0) return false;
+    if (facts.type == null ? !listed : facts.type !== 'event_thread') return false;
+    const { pins, seen } = await memory();
+    return !(pins && dmSightFor(pins, conversationId)) && !seen?.some((id) => id.toLowerCase() === conversationId);
+}
+
+/** Whether a community's copy holds `conversationId` as a chat of one of `kinds`, from what it keeps and its list named. */
+async function holdsAsThread(kinds: readonly ThreadKind[], me: string, file: string, conversationId: string, facts: any): Promise<boolean> {
+    const memory = () => dmMemoryOf(me, file);
+    if (kinds.includes('group') && await holdsAsGroup(conversationId, facts, listedAsGroup(me, file, conversationId), memory)) return true;
+    return kinds.includes('event') && holdsAsEvent(conversationId, facts, !!eventsListedThere.get(`${me}\n${file}`)?.has(conversationId), memory);
+}
+
+/** Whether the copy `database` reads (a copy open in place) holds `conversationId` as a chat of one of `kinds` ({@link holdsAsThread}). */
+async function heldAsThreadThrough(database: SQLite.SQLiteDatabase, conversationId: string, kinds: readonly ThreadKind[]): Promise<boolean> {
     const me = (await loadIdentity())?.publicKey;
     const file = dbFileOf.get(database);
     if (!me || !file || !conversationId) return false;
     try {
-        const facts = await database.getFirstAsync<any>(DM_FACTS_SQL, dmFactsParams(me, conversationId));
-        return await holdsAsGroup(conversationId, facts, listedAsGroup(me, file, conversationId), () => dmMemoryOf(me, file));
+        return await holdsAsThread(kinds, me, file, conversationId, await database.getFirstAsync<any>(DM_FACTS_SQL, dmFactsParams(me, conversationId)));
     } catch {
         return false;
     }
 }
 
 /**
- * A chat request's copy, for an in-place read or write of a group's chat (slice S6): only one that community's own copy or
- * list holds ({@link holdsAsGroup}); anything else is refused (NoCopyInPlaceError) before anything is asked or written. The
- * community in use: as before, untouched.
+ * A chat request's copy, for an in-place read or write of a group's or an event's chat (slice S6): only one that community's
+ * own copy or list holds as one of `kinds` ({@link holdsAsThread}); anything else is refused (NoCopyInPlaceError) before
+ * anything is asked or written. The community in use: as before, untouched.
  */
-async function onlyGroupInPlace(here: ChatRequestCopy, groupId: string): Promise<ChatRequestCopy> {
-    if (here.inPlace && !(await heldAsGroupThrough(here.database, groupId))) throw new NoCopyInPlaceError();
+async function onlyThreadInPlace(here: ChatRequestCopy, conversationId: string, kinds: readonly ThreadKind[]): Promise<ChatRequestCopy> {
+    if (here.inPlace && !(await heldAsThreadThrough(here.database, conversationId, kinds))) throw new NoCopyInPlaceError();
     return here;
 }
 
-/** As {@link onlyDmInPlace} and {@link onlyGroupInPlace}, for what a direct chat and a group's take the same way (a mute). */
+/** As {@link onlyDmInPlace} and {@link onlyThreadInPlace}, for what a direct chat, a group's and an event's take the same way (a mute). */
 async function onlyChatInPlace(here: ChatRequestCopy, conversationId: string): Promise<ChatRequestCopy> {
-    if (here.inPlace && !(await heldAsDmThrough(here.database, conversationId))) return onlyGroupInPlace(here, conversationId);
+    if (here.inPlace && !(await heldAsDmThrough(here.database, conversationId))) return onlyThreadInPlace(here, conversationId, ['group', 'event']);
     return here;
 }
 
@@ -1299,7 +1323,19 @@ async function onlyChatInPlace(here: ChatRequestCopy, conversationId: string): P
  * Whether `community`'s copy or list holds `conversationId` as a group's chat ({@link holdsAsGroup}), asked by the chat's
  * route before the chat opens there in place, through a held, read-only handle, as {@link heldChatIsDm} is asked.
  */
-export async function heldChatIsGroup(myPubkey: string, community: string, conversationId: string): Promise<boolean> {
+export function heldChatIsGroup(myPubkey: string, community: string, conversationId: string): Promise<boolean> {
+    return heldChatIsThread('group', myPubkey, community, conversationId);
+}
+
+/**
+ * The same for an event's chat ({@link holdsAsEvent}). One that copy has seen locked never opens in the event's screen,
+ * which posts readable words (chat-route.ts, rule 2b): the phone moves there, and the route there decides.
+ */
+export function heldChatIsEvent(myPubkey: string, community: string, conversationId: string): Promise<boolean> {
+    return heldChatIsThread('event', myPubkey, community, conversationId);
+}
+
+async function heldChatIsThread(kind: ThreadKind, myPubkey: string, community: string, conversationId: string): Promise<boolean> {
     if (!myPubkey || !community || !conversationId) return false;
     const file = getDatabaseFilenameForNode(community);
     try {
@@ -1308,8 +1344,8 @@ export async function heldChatIsGroup(myPubkey: string, community: string, conve
             await heldCopies.readsSettled(file);
             rows = await heldCopies.all<any>(file, 'dmFacts', dmFactsParams(myPubkey, conversationId));
         }
-        if (!rows?.length) return false;
-        return await holdsAsGroup(conversationId, rows[0], listedAsGroup(myPubkey, file, conversationId), () => dmMemoryOf(myPubkey, file));
+        if (!rows?.length || (kind === 'event' && rows[0].highest != null)) return false;
+        return await holdsAsThread([kind], myPubkey, file, conversationId, rows[0]);
     } catch {
         return false;
     }
@@ -4398,13 +4434,22 @@ export async function removeEnterpriseThreadMessage(treasury: string, messageId:
 // node serves it to the host and everyone marked Going and to nobody else, so nothing here is cached —
 // the private note in particular never touches the phone's database.
 
-/** Throws the node's own message, which the screen shows, rather than a bare "failed". */
-export async function getEventChat(postId: string, limit = 50, offset = 0): Promise<any> {
-    const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat?limit=${limit}&offset=${offset}`);
+/**
+ * Throws the node's own message, which the screen shows, rather than a bare "failed". `community`: an event of another
+ * community this phone holds as a member, read in place (slice S6): its own server decides who reads it (the host, and the
+ * people Going it lets in), asked under its name, at its saved address. A chat its node answers locked is marked in that
+ * community's own file before the answer is handed on, as a group's is ({@link noteGroupLocked}).
+ */
+export async function getEventChat(postId: string, limit = 50, offset = 0, community?: ChatCommunity): Promise<any> {
+    const asked = await groupContextFor(postId, community, ['event']).catch((e) => { if (community) throw e; return null; });
+    const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat?limit=${limit}&offset=${offset}`, { anchorUrl: asked?.nodeUrl });
     const body = await res.json().catch(() => ({}));
     // The node's code rides on the error: `waiting_for_host` is someone Going whom the host hasn't let in (events.ts isWaitingForHost).
     if (!res.ok) throw Object.assign(new Error(body?.error || 'Could not open this event chat.'), { code: body?.code });
-    if (chatIsLocked(body)) noteAnsweredLocked(postId);
+    if (chatIsLocked(body)) {
+        if (asked) await noteGroupLocked(asked, postId, community);
+        else noteAnsweredLocked(postId);
+    }
     return body;
 }
 
@@ -4416,13 +4461,28 @@ export async function letInToEvent(postId: string, who: { memberPublicKey: strin
     return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/let-in`, { ...who, letIn });
 }
 
-export async function postEventChatMessage(postId: string, text: string, clientId?: string): Promise<any> {
-    const to = await readableChatAddress(postId);
+export async function postEventChatMessage(postId: string, text: string, clientId?: string, community?: ChatCommunity): Promise<any> {
+    const to = await readableChatAddress(postId, community);
     return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat/message`, { text, clientId }, to);
 }
 
-export async function removeEventChatMessage(postId: string, messageId: string): Promise<any> {
-    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat/remove`, { messageId });
+export async function removeEventChatMessage(postId: string, messageId: string, community?: ChatCommunity): Promise<any> {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat/remove`, { messageId }, await groupAddressOf(postId, community, ['event']));
+}
+
+/**
+ * Report an event from its chat, to its own community's moderators (slice S6: in place, that community's). About the event
+ * and its host, whom the node reads from it, as the event page's Report is ({@link reportAbuse}); the words as any report's.
+ */
+export async function reportEvent(postId: string, reason: string, community?: ChatCommunity): Promise<any> {
+    const { nodeUrl, identity, at } = await groupContextFor(postId, community, ['event']);
+    const sending = await reportReasonFor(postId, reason, at);
+    try {
+        const res = await _signedRequest('/api/reports', { reporterPubkey: identity.publicKey, reason: sending.reason, targetPostId: postId }, nodeUrl);
+        return sending.wordsLeftOut ? { ...res, wordsLeftOut: sending.wordsLeftOut } : res;
+    } catch (e: any) {
+        throw reportRefusal(e);
+    }
 }
 
 /** The local conversation's kind, so /chat/:id can hand an event chat to its own screen. */
@@ -8430,9 +8490,12 @@ function isGroupSealedNonce(nonce: unknown): boolean {
     return typeof nonce === 'string' && nonce.slice(0, GROUP_NONCE_PREFIX.length).toLowerCase() === GROUP_NONCE_PREFIX;
 }
 
-/** Where a line of an event's or an enterprise's chat goes (readable by design): the community in use as it is begun ({@link readableLineTo}). */
-async function readableChatAddress(conversationId: string): Promise<ReadableTo> {
-    return readableLineTo(await groupContextAt(await chatCopyForRequest()), conversationId);
+/**
+ * Where a line of an event's or an enterprise's chat goes (readable by design): the community in use as it is begun, or
+ * (slice S6) the event's own, in place ({@link readableLineTo}).
+ */
+async function readableChatAddress(conversationId: string, community?: ChatCommunity): Promise<ReadableTo> {
+    return readableLineTo(await groupContextAt(await onlyThreadInPlace(await chatCopyForRequest(community), conversationId, ['event'])), conversationId);
 }
 
 /**
@@ -12025,7 +12088,7 @@ export async function fetchYourGroups(): Promise<import('./your-groups').YourCha
 /**
  * Another community's "Your groups" for its member (slice S6): one signed read of that community's own list, at the address
  * the caller names (held-chats.ts: a community this phone holds as a member, never a guest's look), for Chat's rows there.
- * Nothing is written to any copy; the groups it names are noted as that community's for this run ({@link holdsAsGroup}). A
+ * Nothing is written to any copy; the groups and events it names are noted as that community's for this run ({@link holdsAsThread}). A
  * picture its node stored is that community's, never the one in use's. Null: not asked, not answered, or the account left
  * the phone meanwhile (ownListRead).
  */
@@ -12039,7 +12102,10 @@ export async function fetchHeldYourGroups(myPubkey: string, community: string, s
         const body = await res.json();
         if (!(await asked.still()) || !Array.isArray(body?.items)) return null;
         const items = (body.items as import('./your-groups').YourChat[]).filter((c) => c && typeof c.conversationId === 'string');
-        groupsListedThere.set(`${myPubkey}\n${getDatabaseFilenameForNode(community)}`, new Set(items.filter((c) => c.kind === 'group').map((c) => c.conversationId)));
+        const there = `${myPubkey}\n${getDatabaseFilenameForNode(community)}`;
+        const groups = new Set(items.filter((c) => c.kind === 'group').map((c) => c.conversationId));
+        groupsListedThere.set(there, groups);
+        eventsListedThere.set(there, new Set(items.filter((c) => c.kind === 'event' && !groups.has(c.conversationId)).map((c) => c.conversationId)));
         return items.map((c) => ({ ...c, avatarUrl: onCommunity(community, c.avatarUrl) }));
     } catch (e: any) {
         console.warn(`[Held] Could not read the groups of ${getDatabaseFilenameForNode(community)}: ${e?.message || e}`);
@@ -12331,16 +12397,16 @@ interface GroupContext {
 
 /**
  * The community a group's chat lives in, for one call (slice S6): `community`'s own address, key store and copy, only for a
- * group that community's copy or list holds ({@link onlyGroupInPlace}; refused before anything is asked otherwise); left out,
- * the community in use, as before.
+ * group that community's copy or list holds ({@link onlyThreadInPlace}; refused before anything is asked otherwise); left
+ * out, the community in use, as before. `kinds`: an event's chat, or either, instead.
  */
-async function groupContextFor(groupId: string, community: ChatCommunity): Promise<GroupContext> {
+async function groupContextFor(groupId: string, community: ChatCommunity, kinds: readonly ThreadKind[] = ['group']): Promise<GroupContext> {
     if (!community) {
         const stays = accountStays();
         const { nodeUrl, identity } = await groupKeyContext();
         return { nodeUrl, identity, store: groupKeyStore(nodeUrl), handle: () => copyStillFor(getDatabaseFilenameForNode(nodeUrl)), stays };
     }
-    return groupContextAt(await onlyGroupInPlace(await chatCopyForRequest(community), groupId));
+    return groupContextAt(await onlyThreadInPlace(await chatCopyForRequest(community), groupId, kinds));
 }
 
 /** A chat request's copy as a group's context: the one community the request goes to, its key store and its copy. */
@@ -12356,9 +12422,9 @@ async function groupContextAt(here: ChatRequestCopy): Promise<GroupContext> {
 /** A group's keyring in the community `asked` was taken for (shared for the session). */
 const ringOf = (asked: GroupContext, groupId: string): GroupKeyring => groupKeyring(asked.nodeUrl, asked.identity, groupId, asked.store);
 
-/** The address a group's read goes to: `community`'s own in place (only for a group held there), else the one in use (undefined). */
-async function groupAddressOf(groupId: string, community: ChatCommunity): Promise<string | undefined> {
-    return community ? (await groupContextFor(groupId, community)).nodeUrl : undefined;
+/** The address a group's read goes to (`kinds`: an event's): `community`'s own in place (only for a chat held there), else the one in use (undefined). */
+async function groupAddressOf(groupId: string, community: ChatCommunity, kinds?: readonly ThreadKind[]): Promise<string | undefined> {
+    return community ? (await groupContextFor(groupId, community, kinds)).nodeUrl : undefined;
 }
 
 /** One group's keyring on this node, for this identity (shared for the session: the opened keys with it). */
@@ -12427,7 +12493,7 @@ export async function getInvitablePeople(options?: { membersOnDemand?: boolean }
  */
 export async function muteChatApi(conversationId: string, duration: '8h' | '1w' | 'always' | 'off', community?: ChatCommunity): Promise<any> {
     // Kept by the chat's own community (slice S2: a chat open in place is muted there, by its own server), and in place only
-    // a direct chat or (slice S6) a group's that community holds (#3305 review F1): nothing asked or remembered for any other id.
+    // a direct chat or (slice S6) a group's or an event's that community holds (#3305 review F1): nothing asked or remembered for any other id.
     const here = await onlyChatInPlace(await chatCopyForRequest(community), conversationId);
     const res = await _signedRequest('/api/messages/mute', { conversationId, duration }, here.anchorUrl);
     rememberChatMute(conversationId, duration === 'off' ? null : (res?.mute ?? { conversationId, mutedUntil: null, always: duration === 'always' }));
@@ -12584,8 +12650,8 @@ export async function getGroupActiveMembers(id: string): Promise<GroupMemberItem
  * has it, so "Your groups" can drop the count knowing a later refresh agrees.
  */
 export async function markThreadReadOnNode(conversationId: string, myPubkey: string, community?: ChatCommunity): Promise<void> {
-    // In place (slice S6): only a group held there, marked on its own server; its row's count is that server's own list's.
-    const anchorUrl = await groupAddressOf(conversationId, community);
+    // In place (slice S6): only a group or an event held there, marked on its own server; its row's count is that server's own list's.
+    const anchorUrl = await groupAddressOf(conversationId, community, ['group', 'event']);
     if (!community) markConversationReadLocally(conversationId, myPubkey, community).catch(() => { });
     await _signedRequest('/api/messages/mark-read', { pubkey: myPubkey, conversationId }, anchorUrl);
 }

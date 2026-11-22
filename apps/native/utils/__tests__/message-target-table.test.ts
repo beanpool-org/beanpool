@@ -172,8 +172,8 @@ const record = (id: string, using: string, peerId: string, list: string[] | null
 });
 /**
  * What each community answers of its own names now (its info), written out, never read from SERVERS: every name its server
- * answers as, as a real server lists them. Both are servers from before round 5 for the names taken*: each still lists as a
- * name it had before one it lost, which the other goes by now.
+ * answers as, as a real server lists them. For the names taken* neither has heard yet that it lost one: each still lists as a
+ * name it had before one the other goes by now.
  */
 interface Told { addresses: string[]; primaryAddress: string | null; formerAddresses: string[] }
 let TOLD: Record<'riverside' | 'hillside', Told>;
@@ -708,18 +708,37 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         { name: 'a recovery under way there for the key: not settled', set: () => {}, says: [200, { isMember: false, isRecovering: true }], want: 'held' },
         { name: 'it answers with something else: as this phone holds it', set: () => {}, says: [500, { error: 'busy' }], want: 'held' },
         { name: 'it answers with no JSON: as this phone holds it', set: () => {}, says: [200, null], want: 'held' },
-    ] as Array<{ name: string; set: () => void; says?: [number, unknown]; want: string }>)('an existing direct chat in a held community: $name -> $want', async ({ set, says, want }) => {
+        { name: 'no chat there yet, a member there', set: () => {}, none: true, want: 'held' },
+        { name: 'no chat there yet, a visitor there (it would start none)', set: () => { SERVERS.hillside.members.delete(ME); }, none: true, want: 'new' },
+        { name: 'no chat there yet, removed', set: REMOVE, none: true, want: 'new' },
+        { name: 'no chat there yet, its key there replaced by a re-key', set: () => {}, says: [403, { code: 'key_invalidated' }], none: true, want: 'new' },
+        { name: 'no chat there yet, a recovery under way: not settled, as this phone holds it', set: () => {}, says: [200, { isMember: false, isRecovering: true }], none: true, want: 'held' },
+        { name: 'no chat there yet, signed by another key as far as it can tell: no answer', set: () => {}, says: [403, { code: 'not_your_key' }], none: true, want: 'held' },
+    ] as Array<{ name: string; set: () => void; says?: [number, unknown]; none?: boolean; want: string }>)('a direct chat in a held community: $name -> $want', async ({ set, says, none, want }) => {
         saysNow(); heard();
-        phone.directHeld = [dm('d-held')]; SERVERS.hillside.members.add(K); SERVERS.faraway.members.add(K);
+        SERVERS.hillside.members.add(K); SERVERS.faraway.members.add(K);
+        if (!none) phone.directHeld = [dm('d-held')];
         set();
         const real = fetch;
         vi.stubGlobal('fetch', async (url: string) => {
             if (says && url === STANDS) return new Response(says[1] === null ? '<html>' : JSON.stringify(says[1]), { status: says[0] });
             return real(url);
         });
-        const got = await message(at(FARAWAY));
+        const got = await message(at(none ? HILLSIDE : FARAWAY));
         expect(word(got)).toBe(want);
         if (!says) expect(nowhere(got)).toBeNull();
+    });
+
+    it('removed, and that community does not answer: nothing on this phone says so, so its chat opens, as Chat opens it; asked again at the next tap', async () => {
+        saysNow(); heard(); REMOVE();
+        phone.directHeld = [dm('d-held')]; SERVERS.hillside.members.add(K); SERVERS.faraway.members.add(K);
+        phone.info.delete(HILLSIDE);
+        const got = await message(at(FARAWAY));
+        expect(word(got)).toBe('held');
+        // The one thing this leaves: a line there is refused, with words, once its server answers.
+        expect(nowhere(got)).toBe('its server takes nothing of a member it removed (403 account_closed)');
+        saysNow();
+        expect(word(await message(at(FARAWAY)))).toBe('new');
     });
 
     it('asked at most once a tap, and only where it decides: never beside a chat here, nor for a contact of neither with no chat', async () => {
@@ -895,7 +914,7 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         expect(await cardRefusal(RIVERSIDE, card('river.example'), null)).toBe('here');
     });
 
-    it('a name an older server lists as former that a held community goes by now: never the community in use, as the chat is made', async () => {
+    it('a name the one in use lists as former that a held community goes by now: never the community in use, as the chat is made', async () => {
         saysNow(); heard(); SERVERS.hillside.members.add(K);
         expect(await openAcrossChat({ key: K, home: 'takenriver.example', name: 'Ana' })).toEqual({ refused: 'uncertain' });
         expect(made()).toEqual([]);

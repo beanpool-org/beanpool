@@ -16,7 +16,8 @@
  * message goes to no one: a chat across counts, and one is made, only while this community takes messages from other
  * communities, has an address of its own to send from (core saysNoHome), this account is a member here (its server takes a
  * line across from members alone, and nothing from one it removed), and the person is for certain not in this community, by
- * any of its names. Where that can't be said for certain nothing opens: `elsewhere`, the link to that address the contact had before this slice.
+ * any of its names. Where that can't be said for certain nothing opens: `elsewhere`, the link to that address the contact had
+ * before this slice.
  */
 import { FIND_WORDS, acrossChatListed, messagePathFor, nodeHomeOf, saysNames, saysNoHome, t, whoseName, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
 import { checkMembership, nodeAddress, type CommunityInfo, type Conversation, type ConversationsAnswer } from './api';

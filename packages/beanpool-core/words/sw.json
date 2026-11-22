@@ -2945,7 +2945,7 @@
   "Could not add the bill": "Imeshindwa kuongeza bili",
   "No answer": "Hakuna jibu",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "Hakuna jibu lililorudi, kwa hivyo haijulikani kama mwaliko ulitengenezwa. Jaribu bili ileile tena ukiwa mtandaoni: kama ulitengenezwa, utapata mwaliko huo, si wa pili. Bili haiwezi kwenda na tiketi ya nje ya mtandao.",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "Wao huchagua kama watalipa, baada ya kujiunga. Hakuna kinachochukuliwa chenyewe.",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "Wanachagua kama watalipa, mara tu watakapokuwa wamejiunga. Hakuna kinachochukuliwa chenyewe.",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "Aliye na kiungo hataweza kukitumia, na bili iliyokwenda nacho imeondolewa.",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "Na mwaliko · {whatFor} · maharagwe {n} · inasubiri wajiunge",
   "bill {n} Beans": "bili ya maharagwe {n}",

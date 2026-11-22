@@ -3197,7 +3197,7 @@
   "Could not add the bill": "Не удалось добавить счёт",
   "No answer": "Нет ответа",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "Ответ не пришёл, поэтому неизвестно, создано ли приглашение. Попробуйте тот же счёт ещё раз, когда будете в сети: если приглашение создано, вы получите его, а не второе. Счёт нельзя приложить к офлайн-билету.",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "Этот человек сам решает, платить ли, после того как присоединится. Ничего не списывается само по себе.",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "Платить ли, человек решит сам, когда вступит. Ничего не списывается само.",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "Тот, у кого есть ссылка, не сможет ею воспользоваться, а счёт, приложенный к ней, отозван.",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "С приглашением · {whatFor} · {n} бобов · ждём, когда человек присоединится",
   "bill {n} Beans": "счёт на {n} бобов",

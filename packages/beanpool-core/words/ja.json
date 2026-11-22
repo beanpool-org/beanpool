@@ -2819,7 +2819,7 @@
   "Could not add the bill": "請求を付けられませんでした",
   "No answer": "応答なし",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "応答が返ってこなかったため、招待が作成されたかどうかわかりません。オンラインのときに同じ請求でもう一度お試しください：作成されていれば、2つ目ではなくその招待が届きます。請求はオフラインチケットには付けられません。",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "参加した後で、支払うかどうかはその人が選びます。勝手に引き落とされることはありません。",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "参加したあとで、支払うかどうかは相手が選びます。勝手に引き落とされることはありません。",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "リンクを持っている人は使えなくなり、一緒に送った請求も取り下げられます。",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "招待付き · {whatFor} · {n}豆 · 参加を待っています",
   "bill {n} Beans": "請求 {n}豆",

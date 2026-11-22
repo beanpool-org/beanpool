@@ -2945,7 +2945,7 @@
   "Could not add the bill": "Não foi possível adicionar a cobrança",
   "No answer": "Sem resposta",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "Nenhuma resposta voltou, então não se sabe se o convite foi criado. Tente a mesma cobrança de novo quando estiver on-line: se ele foi criado, você recebe esse convite, não um segundo. Uma cobrança não pode ir com um convite offline.",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "A pessoa escolhe se vai pagar, depois de entrar. Nada é tirado automaticamente.",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "A pessoa decide se paga, depois de entrar. Nada é tirado por conta própria.",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "Quem tiver o link não poderá usá-lo, e a cobrança que foi com ele é retirada.",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "Com um convite · {whatFor} · {n} feijões · esperando a pessoa entrar",
   "bill {n} Beans": "cobrança de {n} feijões",

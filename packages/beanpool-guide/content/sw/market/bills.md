@@ -23,7 +23,7 @@ Kwa sasa, mahali pekee pa kutuma ombi la malipo ni mwaliko: unaweza kuongeza omb
 ## Kuongeza ombi la malipo kwenye mwaliko
 
 - Fungua **Mialiko**: kwenye simu, mtu mwenye alama ya kujumlisha juu kulia; kwenye programu ya wavuti, **Watu**, kisha **Mialiko**. Tazama "Kujiunga na BeanPool".
-- Chini ya dokezo (na chini ya **Wadhamini**, kama wewe ni mdhamini), gusa **Mwongezee ombi la malipo (si lazima)**. Visanduku viwili vinafunguka: **Ni la nini?** na **Maharagwe mangapi?**
+- Chini ya dokezo (na chini ya **Wadhamini**, kama wewe ni mdhamini), gusa **Ongeza bili kwa ajili yao (si lazima)**. Visanduku viwili vinafunguka: **Ni la nini?** na **Maharagwe mangapi?**
 - Chini yake inasema utakachopokea, kama vile **Unapokea 59.10 kati ya maharagwe 60: 1.5% inakwenda kwa jumuiya.**, na **Wanachagua kama watalipa, mara tu watakapokuwa wamejiunga. Hakuna kinachochukuliwa chenyewe.**
 - Gusa **Tengeneza Tiketi** (kwenye programu ya wavuti, **Tengeneza Mwaliko Mpya**). Ombi la malipo linaenda na mwaliko tu wakati sehemu imefunguliwa: ifunge na mwaliko unaenda bila ombi la malipo. Ulichoandika kinabaki, endapo utaifungua tena.
 - Ombi moja la malipo kwa kila mwaliko. Ombi la malipo haliwezi kuwekwa kwenye tiketi iliyotengenezwa bila muunganisho. Kama jibu halirudi, programu inasema haijulikani kama mwaliko ulitengenezwa, na **Jaribu tena ombi lilelile la malipo ukiwa mtandaoni: kama ulitengenezwa, utapata mwaliko huo, si wa pili.**
@@ -31,7 +31,7 @@ Kwa sasa, mahali pekee pa kutuma ombi la malipo ni mwaliko: unaweza kuongeza omb
 
 **Wanachoona.** Unaposhiriki mwaliko, ujumbe unasema **Rob pia amekutumia ombi la malipo ya kulipa kwa maharagwe ukishajiunga.** Haulitaji kiasi kamwe. Kujiunga hakuonyeshi ombi la malipo kamwe wala hakulisubiri: hakuna kitu katika kujiunga kinachouliza kulihusu.
 
-**Wakati hakuna aliyetumia mwaliko.** Chini ya **Inasubiri** mwaliko unasema **ombi la malipo maharagwe 60**. Ukiufuta, programu inasema **Mwenye kiungo hawezi kuutumia, na ombi la malipo lililoenda nao limeondolewa.** Mwaliko ambao hakuna anayeutumia ndani ya siku zake 30 unaisha, na ombi lake la malipo linaisha pamoja nao.
+**Wakati hakuna aliyetumia mwaliko.** Chini ya **Inasubiri** mwaliko unasema **bili ya maharagwe 60**. Ukiufuta, programu inasema **Aliye na kiungo hataweza kukitumia, na bili iliyokwenda nacho imeondolewa.** Mwaliko ambao hakuna anayeutumia ndani ya siku zake 30 unaisha, na ombi lake la malipo linaisha pamoja nao.
 
 **Wakishajiunga.** Ombi la malipo linakuwa lao tangu wanapojiunga kwa mwaliko huo, na linasubiri siku 30 kuanzia siku hiyo. Udhamini kwenye mwaliko huohuo unawapa mkopo, lakini hauwezi kulipa ombi lako la malipo: ombi la kwanza kutoka kwako linaweza kulipwa tu kwa maharagwe walio nayo, hadi nyinyi wawili mmemaliza makubaliano (tazama hapa chini).
 
@@ -67,7 +67,7 @@ Ikiwa wanachama watatu tofauti wataripoti maombi ya malipo ya mtu mmoja ndani ya
 ## Mazuri kujua
 
 - **Biashara.** Biashara bado haiwezi kulipa maombi ya malipo, kwa hiyo hakuna anayeweza kuitumia ombi la malipo.
-- **Mahali palipo na maombi ya malipo.** Maombi ya malipo yanahitaji maharagwe. Jumuiya ya kimataifa na jumuiya isiyo na maharagwe hazina maombi ya malipo, na **Mwongezee ombi la malipo** haipo.
+- **Mahali palipo na maombi ya malipo.** Maombi ya malipo yanahitaji maharagwe. Jumuiya ya kimataifa na jumuiya isiyo na maharagwe hazina maombi ya malipo, na **Ongeza bili kwa ajili yao** haipo.
 
 ## Inakuja hivi karibuni
 

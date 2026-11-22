@@ -2819,7 +2819,7 @@
   "Could not add the bill": "無法加上帳單",
   "No answer": "沒有回應",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "沒有收到回應，所以不知道邀請是否已建立。連上網路後請用同一張帳單再試一次：如果已建立，你會收到那份邀請，而不是第二份。帳單不能隨離線憑證一起送出。",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "對方加入後，自行選擇是否支付。不會自動扣走任何東西。",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "對方加入之後，由對方選擇是否支付。不會有任何款項被自動扣走。",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "持有連結的人將無法使用，隨附的帳單也已撤回。",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "隨邀請 · {whatFor} · {n} 豆子 · 等待對方加入",
   "bill {n} Beans": "帳單 {n} 豆子",

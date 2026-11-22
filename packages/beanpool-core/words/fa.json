@@ -2945,7 +2945,7 @@
   "Could not add the bill": "افزودن صورت‌حساب ممکن نشد",
   "No answer": "بی‌پاسخ",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "پاسخی برنگشت، پس معلوم نیست دعوت ساخته شد یا نه. وقتی آنلاین شدید، همان صورت‌حساب را دوباره امتحان کنید: اگر ساخته شده باشد، همان دعوت را می‌گیرید، نه دعوت دوم. صورت‌حساب نمی‌تواند همراه بلیت آفلاین برود.",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "خودشان پس از پیوستن انتخاب می‌کنند که بپردازند یا نه. هیچ چیز خودبه‌خود برداشته نمی‌شود.",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "آن‌ها پس از پیوستن خودشان انتخاب می‌کنند که بپردازند یا نه. هیچ چیز خودبه‌خود برداشته نمی‌شود.",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "هر کس پیوند را دارد نمی‌تواند از آن استفاده کند، و صورت‌حسابی که همراهش بود پس گرفته می‌شود.",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "همراه دعوت · {whatFor} · {n} لوبیا · در انتظار پیوستن",
   "bill {n} Beans": "صورت‌حساب {n} لوبیا",

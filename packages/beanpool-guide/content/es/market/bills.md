@@ -23,7 +23,7 @@ Por ahora, el único lugar para enviar una factura es una invitación: puedes a�
 ## Añadir una factura a una invitación
 
 - Abre **Invitaciones**: en el teléfono, la persona con un más arriba a la derecha; en la aplicación web, **Personas** y luego **Invitaciones**. Consulta «Unirse a BeanPool».
-- Bajo la nota (y bajo **Avalar**, si avalas a personas), toca **Añadir una factura para esa persona (opcional)**. Se abren dos cuadros: **¿Para qué es?** y **¿Cuántos frijoles?**
+- Bajo la nota (y bajo **Avalar**, si avalas a personas), toca **Añadir un cobro para esa persona (opcional)**. Se abren dos cuadros: **¿Para qué es?** y **¿Cuántos frijoles?**
 - Debajo dice lo que recibirías, por ejemplo **Recibes 59,10 de 60 frijoles: el 1,5% va a la comunidad.**, y **La persona decide si paga, cuando ya se haya unido. No se toma nada por sí solo.**
 - Toca **Generar boleto** (en la aplicación web, **Generar nueva invitación**). La factura va con la invitación solo mientras la sección desplegable está abierta: ciérrala y la invitación sale sin factura. Lo que escribiste se queda, por si la abres de nuevo.
 - Una factura por invitación. No se puede poner una factura en un boleto hecho sin conexión. Si no llega respuesta, la aplicación dice que no se sabe si la invitación se creó, y **Vuelve a intentar con la misma factura cuando estés en línea: si se creó, recibirás esa invitación, no una segunda.**
@@ -31,7 +31,7 @@ Por ahora, el único lugar para enviar una factura es una invitación: puedes a�
 
 **Lo que ve la persona.** Cuando compartes la invitación, el mensaje dice **Rob también te ha enviado una factura para pagar en frijoles cuando entres.** Nunca dice cuánto. Unirse nunca muestra la factura ni la espera: nada en el proceso de unirse pregunta por ella.
 
-**Mientras nadie haya usado la invitación.** Bajo **Pendiente**, la invitación dice **factura de 60 frijoles**. Si la revocas, la aplicación dice **Quien tenga el enlace no puede usarla, y la factura que iba con ella se retira.** Una invitación que nadie usa en sus 30 días termina, y su factura termina con ella.
+**Mientras nadie haya usado la invitación.** Bajo **Pendiente**, la invitación dice **cobro de 60 frijoles**. Si la revocas, la aplicación dice **Quien tenga el enlace no podrá usarlo, y el cobro que iba con él queda retirado.** Una invitación que nadie usa en sus 30 días termina, y su factura termina con ella.
 
 **Cuando la persona se une.** La factura es suya desde el momento en que se une con esa invitación, y espera 30 días desde ese día. Un aval en la misma invitación le da crédito, pero no puede pagar tu factura: una primera factura tuya solo puede pagarse con frijoles que la persona tenga, hasta que ustedes dos hayan terminado un trato (ver abajo).
 
@@ -67,7 +67,7 @@ Si tres miembros distintos denuncian las facturas de una persona en 7 días, sus
 ## Bueno saber
 
 - **Emprendimientos.** Un emprendimiento aún no puede pagar facturas, así que nadie puede enviarle una.
-- **Dónde hay facturas.** Las facturas necesitan frijoles. La comunidad global y una comunidad sin frijoles no tienen facturas, y **Añadir una factura para esa persona** no aparece.
+- **Dónde hay facturas.** Las facturas necesitan frijoles. La comunidad global y una comunidad sin frijoles no tienen facturas, y **Añadir un cobro para esa persona** no aparece.
 
 ## Próximamente
 

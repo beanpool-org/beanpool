@@ -2945,7 +2945,7 @@
   "Could not add the bill": "بل شامل نہیں ہو سکا",
   "No answer": "کوئی جواب نہیں",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "کوئی جواب واپس نہیں آیا، اس لیے معلوم نہیں کہ دعوت بنی یا نہیں۔ آن لائن ہونے پر وہی بل دوبارہ آزمائیں: اگر دعوت بن گئی تھی تو آپ کو وہی دعوت ملے گی، دوسری نہیں۔ بل آف لائن ٹکٹ کے ساتھ نہیں جا سکتا۔",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "شامل ہونے کے بعد وہ خود چنتے ہیں کہ ادا کریں یا نہیں۔ کچھ بھی خود بخود نہیں لیا جاتا۔",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "وہ شامل ہونے کے بعد خود چنتے ہیں کہ ادا کرنا ہے یا نہیں۔ کچھ بھی خود بخود نہیں لیا جاتا۔",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "جس کے پاس لنک ہے وہ اسے استعمال نہیں کر سکے گا، اور اس کے ساتھ گیا بل واپس لے لیا گیا ہے۔",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "دعوت کے ساتھ · {whatFor} · {n} پھلیاں · ان کے شامل ہونے کا انتظار",
   "bill {n} Beans": "بل {n} پھلیاں",

@@ -2945,7 +2945,7 @@
   "Could not add the bill": "Hindi naidagdag ang singil",
   "No answer": "Walang sagot",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "Walang sagot na bumalik, kaya hindi alam kung nagawa ang imbitasyon. Subukan muli ang parehong singil kapag online ka na: kung nagawa ito, matatanggap mo ang imbitasyong iyon, hindi ng pangalawa. Hindi puwedeng isama ang singil sa offline ticket.",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "Sila ang pipili kung magbabayad, kapag nakasali na sila. Walang kusang kinukuha.",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "Sila ang pipili kung magbabayad, kapag nakasali na sila. Walang kinukuha nang kusa.",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "Hindi na ito magagamit ng may hawak ng link, at nabawi na ang singil na kasama nito.",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "May imbitasyon · {whatFor} · {n} munggo · hinihintay silang sumali",
   "bill {n} Beans": "singil na {n} munggo",

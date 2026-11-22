@@ -3197,7 +3197,7 @@
   "Could not add the bill": "Не вдалося додати рахунок",
   "No answer": "Немає відповіді",
   "No answer came back, so it isn't known whether the invite was made. Try the same bill again when you're online: if it was made, you'll get that invite, not a second one. A bill can't go with an offline ticket.": "Відповідь не надійшла, тож невідомо, чи створено запрошення. Спробуйте той самий рахунок ще раз, коли будете в мережі: якщо запрошення створено, ви отримаєте його, а не друге. Рахунок не можна додати до офлайн-квитка.",
-  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "Ця людина сама вирішує, чи платити, після того як приєднається. Ніщо не списується само собою.",
+  "They choose whether to pay, once they have joined. Nothing is taken by itself.": "Сплатити чи ні, людина вирішить сама, коли приєднається. Нічого не списується само.",
   "Whoever has the link can’t use it, and the bill that went with it is withdrawn.": "Той, у кого є посилання, не зможе ним скористатися, а рахунок, доданий до нього, відкликано.",
   "With an invite · {whatFor} · {n} Beans · waiting for them to join": "Із запрошенням · {whatFor} · {n} бобів · чекаємо, поки людина приєднається",
   "bill {n} Beans": "рахунок на {n} бобів",

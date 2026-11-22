@@ -1172,16 +1172,20 @@ export default function WelcomeScreen() {
     // The name box is in view on the name step, keyboard or not (walk 148: on a 320 dp phone it sat under the Join footer). A
     // long greeting or the address box above it can push it past the footer: the step is then scrolled just far enough, as
     // its parts are laid out, and again once the keyboard has gone (the keyboard's scroll view goes back to where it was).
+    // While the keyboard is up that scroll view keeps the box being typed in clear of it, told when the parts above it move.
     const nameStepAt = useRef({ view: 0, card: 0, name: 0, height: 0 });
     const keepNameInView = useCallback(() => {
         const at = nameStepAt.current;
         const y = offsetToShow({ top: at.card + at.name, height: at.height, view: at.view }, 12);
         if (y > 0) inviteStepScroll.current?.scrollTo({ y, animated: false });
     }, []);
-    const nameStepMeasured = (part: Partial<typeof nameStepAt.current>) => {
+    /** A part's place, as laid out. `opened`: the step's scroll view, whose own layout is the step drawn anew, at its top. */
+    const nameStepMeasured = (part: Partial<typeof nameStepAt.current>, opened = false) => {
         const was = nameStepAt.current;
         nameStepAt.current = { ...was, ...part };
-        if ((Object.keys(part) as Array<keyof typeof was>).some((k) => was[k] !== nameStepAt.current[k])) keepNameInView();
+        if (!opened && (Object.keys(part) as Array<keyof typeof was>).every((k) => was[k] === nameStepAt.current[k])) return;
+        if (Keyboard.isVisible()) inviteStepScroll.current?.assureFocusedInputVisible();
+        else keepNameInView();
     };
     useEffect(() => {
         if (mode !== 'create') return;
@@ -3300,23 +3304,25 @@ export default function WelcomeScreen() {
         // one it was checked for and the address the one it was checked at, as Join reads them (join names N1). Else "You're
         // invited": a new code for the same community never shows the previous code's inviter.
         let greet: { community: string; inviter: string | null } | null = null;
-        // The same check's refusal, while the fields still hold that code for that address.
+        // The same check's refusal, while the fields still hold that code for that address. Only for the address the invite
+        // named: one being typed is checked half typed too, and Join says what is wrong with it.
         let refusedWords: string | null = null;
         const codeHere = normaliseInviteCode(inviteCode.trim());
+        const addressNamed = namedByInvite?.code === codeHere && namedByInvite.at === createAnchorUrl;
         if (greeting?.community || refusal) {
             try {
                 const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
                 if (at && greeting?.community && at === greeting.at && greeting.code === codeHere) greet = { community: greeting.community, inviter: greeting.inviter };
-                if (at && refusal && at === refusal.at && refusal.code === codeHere) refusedWords = inviteProblemMessage(refusal.reason, refusal.at);
+                if (addressNamed && at && refusal && at === refusal.at && refusal.code === codeHere) refusedWords = inviteProblemMessage(refusal.reason, refusal.at);
             } catch { /* an address that is not plain host[:port]: Join says so; no name is claimed for it */ }
         }
         // The address box is for a bare code that names no community (onboarding §3.1 B), or an invite's own address that didn't do.
-        const addressHeld = !addressAsked && namedByInvite?.code === codeHere && namedByInvite.at === createAnchorUrl;
+        const addressHeld = addressNamed && !addressAsked;
         const bold = (text: string) => <Text style={styles.greetingName}>{text}</Text>;
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight} onLayout={(e) => nameStepMeasured({ view: e.nativeEvent.layout.height })}>
+                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight} onLayout={(e) => nameStepMeasured({ view: e.nativeEvent.layout.height }, true)}>
                     {/* ‹ is the front door. It waits while Join is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
                     <StepBar step="name" flow={joinFlow} wayBack={!skipWayBack} notify={notifyDue} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
                     <View style={styles.card} onLayout={(e) => nameStepMeasured({ card: e.nativeEvent.layout.y })} testID="name-step-card">

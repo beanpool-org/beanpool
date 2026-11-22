@@ -66,7 +66,7 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
     };
 
     return (
-        <View style={[styles.wrap, { height, borderRadius, backgroundColor: frame }]} onLayout={onLayout} testID="photo-carousel">
+        <View style={[styles.wrap, { height, borderRadius, backgroundColor: frame }]} onLayout={onLayout}>
             <ScrollView
                 ref={scroller}
                 horizontal

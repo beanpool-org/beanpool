@@ -38,8 +38,8 @@ const backs = vi.hoisted(() => ({ handlers: new Set<() => boolean>() }));
 
 /** §6: the parts' onLayout by testID, the step's scroll view (its onLayout and where it was last scrolled), and the system bars. */
 const laid = vi.hoisted(() => new Map<string, (e: unknown) => void>());
-const scrolled = vi.hoisted(() => ({ to: [] as number[] }));
-const keyboard = vi.hoisted(() => ({ hidden: new Set<() => void>() }));
+const scrolled = vi.hoisted(() => ({ to: [] as number[], assured: 0 }));
+const keyboard = vi.hoisted(() => ({ hidden: new Set<() => void>(), up: false }));
 const bars = vi.hoisted(() => ({ top: 24, bottom: 0 }));
 const look148 = vi.hoisted(() => ({ dark: false }));
 /** A scroll view as React Native lays one out: its frame, and its content inside it. */
@@ -98,7 +98,7 @@ vi.mock('react-native', () => {
             },
         },
         DeviceEventEmitter: { addListener: listener, emit() {} },
-        Keyboard: { addListener: (event: string, fn: () => void) => { if (event === 'keyboardDidHide') keyboard.hidden.add(fn); return { remove() { keyboard.hidden.delete(fn); } }; }, dismiss() {} },
+        Keyboard: { addListener: (event: string, fn: () => void) => { if (event === 'keyboardDidHide') keyboard.hidden.add(fn); return { remove() { keyboard.hidden.delete(fn); } }; }, dismiss() {}, isVisible: () => keyboard.up },
         AccessibilityInfo: { announceForAccessibility: () => {}, isScreenReaderEnabled: async () => false, addEventListener: listener },
         I18nManager: { getConstants: () => ({ localeIdentifier: 'en_US' }), allowRTL: () => {}, forceRTL: () => {} },
         NativeModules: {},
@@ -171,7 +171,7 @@ vi.mock('react-native-keyboard-controller', async () => {
     const { forwardRef, useImperativeHandle } = await import('react');
     const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
     const aware = forwardRef((props: Record<string, any>, ref) => {
-        useImperativeHandle(ref, () => ({ scrollTo: (o: { y: number }) => { scrolled.to.push(o.y); }, scrollToEnd() {} }));
+        useImperativeHandle(ref, () => ({ scrollTo: (o: { y: number }) => { scrolled.to.push(o.y); }, scrollToEnd() {}, assureFocusedInputVisible() { scrolled.assured++; } }));
         return scrollBox(props);
     });
     return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: aware, KeyboardStickyView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
@@ -440,7 +440,7 @@ beforeEach(() => {
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Riverside' };
     phone.checkFor = null;
     keyItem.value = null; keyItem.throws = false;
-    laid.clear(); scrolled.to.length = 0; bars.top = 24; bars.bottom = 0; look148.dark = false;
+    laid.clear(); scrolled.to.length = 0; scrolled.assured = 0; keyboard.up = false; bars.top = 24; bars.bottom = 0; look148.dark = false;
     knocking.asked = [knockAt(RIVERSIDE, 'Riverside')];
     knocking.statuses = {};
     knocking.mark = KNOCKER.publicKey;
@@ -967,10 +967,10 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
     }
     const part = (id: string) => { const el = byId(id); expect(el, id).toBeTruthy(); return el!; };
     /** The phone measures the name step's parts, as the layout has them, and each tells the step. */
-    async function measureNameStep() {
+    async function measureNameStep(opened = true) {
         const { box } = lay();
         const tell = async (id: string, el: Element) => { await act(async () => { laid.get(id)!({ nativeEvent: { layout: { y: box(el).top, height: box(el).height } } }); }); };
-        await tell('scroll', part('scroll'));
+        if (opened) await tell('scroll', part('scroll'));
         await tell('name-step-card', part('name-step-card'));
         await tell('name-step-name', part('name-step-name'));
     }
@@ -1026,8 +1026,27 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
             expect(scrolled.to.length).toBe(before + 1);
             expect(scrolled.to.at(-1)).toBe(scrolled.to.at(-2));
             // Nothing moved: nothing is scrolled under the reader.
-            await measureNameStep();
+            await measureNameStep(false);
             expect(scrolled.to.length).toBe(before + 1);
+            // The step drawn anew (the pencil and back) starts at its top: scrolled again, though every part is where it was.
+            await measureNameStep();
+            expect(scrolled.to.length).toBe(before + 2);
+        });
+
+        it('the greeting grows while the name is being typed: the keyboard keeps its box clear, never scrolled back behind it', async () => {
+            smallPhone(dark);
+            params.now = { invite: 'INV-ABCD-EFGH', t: '1' };
+            await mount();
+            await measureNameStep();
+            const before = scrolled.to.length;
+            keyboard.up = true;
+            phone.invite = { valid: true, inviterCallsign: 'Wilhelmina', communityName: 'The Riverside and Upper Valley Growers' };
+            await type(ADDRESS, RIVERSIDE);
+            await checkAnswers();
+            expect(byId('invite-greeting')?.textContent).toContain('Wilhelmina');
+            await measureNameStep(false);
+            expect(scrolled.to.length).toBe(before);
+            expect(scrolled.assured).toBeGreaterThan(0);
         });
 
         it('the front door: below the status bar, and at the end of its scroll "More ways in ›" is above the navigation bar', async () => {
@@ -1149,6 +1168,16 @@ describe('6. an old small phone: 320 × 569 dp, the text at 1.3×, the navigatio
             expect(text().split(UNKNOWN).length - 1).toBe(1);
             expect(byId('invite-refused')).toBeNull();
             expect(phone.redeems).toEqual([]);
+        });
+
+        it('an address being typed for a bare code: checked half typed, nothing said until Join', async () => {
+            smallPhone(false);
+            params.now = { invite: 'INV-ABCD-EFGH', t: '1' };
+            phone.invite = { valid: false, reason: 'not_a_community' };
+            await mount();
+            await type(ADDRESS, 'https://river.example.org');
+            await checkAnswers();
+            expect(byId('invite-refused')).toBeNull();
         });
 
         it('belongs to its code: another code for the same community has none until its own check', async () => {

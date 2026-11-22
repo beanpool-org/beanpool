@@ -61,7 +61,8 @@ const style = (el: Element | null) => JSON.parse(el?.getAttribute('data-style') 
 describe('the empty picture frame', () => {
     it.each(SETS)('%s: the set\'s own sunken ground; the counter and the lit dot white on the photo', async (set) => {
         await draw(set, createElement(PhotoCarousel, { photos: ['https://node.example/a.jpg', 'https://node.example/b.jpg'], height: 220 }));
-        expect(style(host!.querySelector('[data-testid="photo-carousel"]')).backgroundColor).toBe(COLOUR_SETS[set].surface.subtle);
+        const frame = Array.from(host!.querySelectorAll('div')).find((d) => style(d).height === 220 && style(d).overflow === 'hidden')!;
+        expect(style(frame).backgroundColor).toBe(COLOUR_SETS[set].surface.subtle);
         const counter = Array.from(host!.querySelectorAll('span')).find((s) => /1\s*\/\s*2/.test(s.textContent ?? ''))!;
         expect(style(counter).color).toBe('#ffffff');
         const lit = Array.from(host!.querySelectorAll('div')).find((d) => style(d).width === 18)!;

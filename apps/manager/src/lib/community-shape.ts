@@ -178,6 +178,39 @@ export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'vouch
 export type CoreSettingKey = (typeof CORE_SETTINGS)[number];
 export const isCoreSetting = (k: string): k is CoreSettingKey => (CORE_SETTINGS as readonly string[]).includes(k);
 
+/**
+ * Whether a change of `setting` (a shape setting, or a known-floor line `knownFloor.<part>`) to `to` is a Core change: the
+ * server's rule, copied (apps/server config/core-settings.ts isCoreChange; community-shape.test.ts holds the two bodies
+ * equal). Who can join is two things in one setting: the door (Core) and the pause (everyday). A change to a door other
+ * than the one stored (`doorBefore`) is Core; pausing, and un-pausing to the door it had, are not.
+ */
+export function isCoreChange(setting: string, to: string, doorBefore: string): boolean {
+    const base = setting.split('.')[0];
+    if (base === 'join') return to !== 'paused' && to !== doorBefore;
+    return isCoreSetting(base);
+}
+
+const isDoor = (v: string | null): v is 'members' | 'admins' => v === 'members' || v === 'admins';
+
+/**
+ * Whether a Changes line (newest first, as the server sends them) changed a Core setting, by the server's rule
+ * (isCoreChange): a pause, and an un-pause back to the door the community had, are everyday (the Invites & QR card shows
+ * them). A Who can join line's door before is its `from` when that is a door; an un-pause's is the door the pause before
+ * it left (that line's `from`). An un-pause whose pause is no longer in the log stays a Core line: nothing says which door
+ * it had.
+ */
+export function isCoreLogLine(log: readonly ShapeLogLine[], i: number): boolean {
+    const line = log[i];
+    const base = line.setting.split('.')[0];
+    if (base !== 'join') return isCoreSetting(base);
+    if (line.to === null) return true;
+    if (isDoor(line.from)) return isCoreChange(line.setting, line.to, line.from);
+    if (line.to === 'paused') return false;
+    const pause = log.slice(i + 1).find((l) => l.setting === 'join');
+    if (!pause || pause.to !== 'paused' || !isDoor(pause.from)) return true;
+    return isCoreChange(line.setting, line.to, pause.from);
+}
+
 /** The three one-way changes: once locked, Save waits until this word is typed (design §4.2). */
 export function typedWordFor(setting: string, to: unknown): string | null {
     if (setting === 'beans' && to === false) return 'off';

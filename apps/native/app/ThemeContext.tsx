@@ -7,6 +7,7 @@ import { brandScheme, type BrandSet } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
 import { drawnColours } from '../utils/drawn-colours';
 import { onboardingColors } from '../utils/onboarding-colors';
+import { paintNavBar } from '../modules/nav-bar-colour';
 import {
     type ResolvedTheme,
     type ThemePreference,
@@ -92,6 +93,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         SystemUI.setBackgroundColorAsync(resolvedColors.surface.app).catch(() => {});
         if (Platform.OS === 'android') {
             try { NavigationBar.setStyle(theme === 'dark' ? 'dark' : 'light'); } catch { /* older module */ }
+            // Android 8 and 9 only: from Android 10 the bar is see-through over the page and needs no colour.
+            paintNavBar(resolvedColors.surface.chrome, Number(Platform.Version));
         }
     }, [theme, resolvedColors]);
 

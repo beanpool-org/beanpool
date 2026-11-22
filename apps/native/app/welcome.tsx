@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Image, FlatList, BackHandler, Keyboard, Platform, AppState } from 'react-native';
 import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { inviteFromScan } from '../utils/invite-scan';
+import { offsetToShow } from '../utils/offset-to-show';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity, StoredKeyUnreadableError, readStoredIdentity } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
@@ -116,6 +118,9 @@ import { forgetHeldInvite, heldInviteKey, onHeldInvite, readHeldInvite, type Hel
  *  'unknown_inviter': the node says it of an inviter paused "for now" too (engine members.ts), so that code stays held until
  *  it lapses. */
 const DEAD_INVITE_REASONS = new Set(['used', 'expired', 'invalid', 'malformed']);
+/** The invite check's answers about the address: the address box is drawn, even for one the invite named. 'unknown_inviter'
+ *  is one: its words say to check it is the right community. */
+const ADDRESS_REASONS = new Set(['invites_off', 'not_a_community', 'unknown_inviter']);
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
@@ -185,7 +190,12 @@ export default function WelcomeScreen() {
         }
     }
 
-    const { styles, profileStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+    // Android draws these screens edge to edge, and react-native's SafeAreaView pads iOS only: the status bar's and the
+    // navigation bar's room is kept here, so words never scroll under the one or end under the other (walk 148, API 26).
+    const insets = useSafeAreaInsets();
+    const barTop = Platform.OS === 'android' ? insets.top : 0;
+    const barBottom = Platform.OS === 'android' ? insets.bottom : 0;
+    const { styles, profileStyles } = useMemo(() => makeStyles(colors, dark, barTop, barBottom), [colors, dark, barTop, barBottom]);
     // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
     const accentInk = dark ? palette.blue400 : palette.blue600;
     const params = useGlobalSearchParams();
@@ -397,6 +407,42 @@ export default function WelcomeScreen() {
      * community reads "You're invited" until its own check answers (review of #3317). Not heard yet, or offline: the same.
      */
     const [greeting, setGreeting] = useState<{ at: string; code: string; community: string | null; inviter: string | null } | null>(null);
+    /**
+     * That same check's refusal, for an address the invite named: said under the band before a name is typed (Join says it
+     * again, after its own check). Kept with the code and the address it was for, as the greeting is.
+     */
+    const [refusal, setRefusal] = useState<{ at: string; code: string; reason?: string } | null>(null);
+    /**
+     * The community an invite named itself (its link, or its message's "Community address" line), with the code it came
+     * with. The address box is for a bare code that names none (onboarding §3.1 B), so it isn't drawn while this holds for
+     * the code and the address in hand.
+     */
+    const [namedByInvite, setNamedByInvite] = useState<{ code: string; at: string } | null>(null);
+    /** The address the invite named turned out not to do (no community there, not answering, not the inviter's), or is being typed: the box is drawn, to put it right. */
+    const [addressAsked, setAddressAsked] = useState(false);
+    /** An invite arrived, naming its community (`at`) or not. The same code typed again alone still has the community its link named. */
+    const noteInviteAddress = useCallback((invite: string, at: string | null | undefined) => {
+        const code = normaliseInviteCode(invite.trim());
+        setAddressAsked(false);
+        setNamedByInvite((was) => (at ? { code, at } : was?.code === code ? was : null));
+    }, []);
+    const codeHere = normaliseInviteCode(inviteCode.trim());
+    /** The address in hand is the one the invite in hand named: not one being typed. */
+    const addressNamed = namedByInvite?.code === codeHere && namedByInvite.at === createAnchorUrl;
+    /**
+     * A community refused an invite: all that follows from its answer but the words, wherever it was heard (the check as the
+     * step opens, Join's, or the one after a redeem it refused), so none says the words and leaves the rest undone (review
+     * of #3361).
+     * - A dead code (used by someone else, expired, not recognised): a link's held invite is never offered again, or every
+     *   launch would reopen this step on it. A good code at the wrong address, or at a community whose invites are off for
+     *   now, stays held. A newer one held meanwhile stays too.
+     * - An answer about the address: its box is drawn, to put it right.
+     */
+    const inviteRefused = useCallback((code: string, reason: string | undefined) => {
+        if (!reason) return;
+        if (DEAD_INVITE_REASONS.has(reason)) void forgetHeldInvite(AsyncStorage, code);
+        if (ADDRESS_REASONS.has(reason)) setAddressAsked(true);
+    }, []);
     /** iOS 16+ only: the phone holds copied text (`hasStringAsync`, which reads nothing): Apple's button is drawn. */
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
     /** Your invite's box (onboarding §3.1 B): what is typed there, read only at its Next. */
@@ -639,6 +685,7 @@ export default function WelcomeScreen() {
         setWaitJoining(yes.url);
         setInviteCode(yes.invite);
         setCreateAnchorUrl(yes.url);
+        noteInviteAddress(yes.invite, yes.url);
         setCallsign(accountOnPhone.callsign || '');
         knockYesRef.current = yes;
         setKnockJoin(yes);
@@ -937,6 +984,7 @@ export default function WelcomeScreen() {
             setInviteCode(held.invite);
             noteLandingPost(held.invite, held.post);
             if (held.server) setCreateAnchorUrl(held.server);
+            noteInviteAddress(held.invite, held.server);
         } else if (!inviteCodeRef.current && ourButtonReadsClipboard({ os: Platform.OS, pasteButton: Clipboard.isPasteButtonAvailable })) {
             const invite = inviteOnly(await Clipboard.getStringAsync().catch(() => ''));
             if (invite) {
@@ -980,6 +1028,7 @@ export default function WelcomeScreen() {
         const code = read.code ?? (!fullUrl.startsWith('http') && (fullUrl.startsWith('BP-') || fullUrl.startsWith('INV-')) ? fullUrl : null);
         if (code) {
             setInviteCode(code);
+            noteInviteAddress(code, read.origin);
             // The listing an invite-and-share link was sent from rides on its link only: a code pasted alone leaves the one
             // an earlier link noted as it was, as before.
             if (/[?&]invite=/.test(fullUrl)) noteLandingPost(code, postIdFromInviteLink(fullUrl));
@@ -1042,6 +1091,7 @@ export default function WelcomeScreen() {
                             if (parsed.queryParams.server) {
                                 setCreateAnchorUrl(parsed.queryParams.server as string);
                             }
+                            noteInviteAddress(parsed.queryParams.invite as string, parsed.queryParams.server as string | undefined);
                             setMode('create');
                         }
                     }
@@ -1058,6 +1108,7 @@ export default function WelcomeScreen() {
                         setCreateAnchorUrl(arrival.server);
                         setRecoveryAnchorUrl(arrival.server);
                     }
+                    noteInviteAddress(arrival.invite, arrival.server);
                     setMode('create');
                 }
                 return;
@@ -1081,6 +1132,7 @@ export default function WelcomeScreen() {
                 setInviteCode(referred.invite);
                 noteLandingPost(referred.invite, referred.post);
                 if (referred.server) setCreateAnchorUrl(referred.server);
+                noteInviteAddress(referred.invite, referred.server);
                 setMode('create');
                 return;
             }
@@ -1120,6 +1172,7 @@ export default function WelcomeScreen() {
         setInviteCode(held.invite);
         noteLandingPost(held.invite, held.post);
         if (held.server) setCreateAnchorUrl(held.server);
+        noteInviteAddress(held.invite, held.server);
         setMode('create');
     }, []);
     useEffect(() => {
@@ -1133,6 +1186,30 @@ export default function WelcomeScreen() {
         });
         return () => { live = false; off(); };
     }, [applyHeldInvite]);
+
+    // The name box is in view on the name step, keyboard or not (walk 148: on a 320 dp phone it sat under the Join footer). A
+    // long greeting or the address box above it can push it past the footer: the step is then scrolled just far enough, as
+    // its parts are laid out, and again once the keyboard has gone (the keyboard's scroll view goes back to where it was).
+    // While the keyboard is up that scroll view keeps the box being typed in clear of it, told when the parts above it move.
+    const nameStepAt = useRef({ view: 0, card: 0, name: 0, height: 0 });
+    const keepNameInView = useCallback(() => {
+        const at = nameStepAt.current;
+        const y = offsetToShow({ top: at.card + at.name, height: at.height, view: at.view }, 12);
+        if (y > 0) inviteStepScroll.current?.scrollTo({ y, animated: false });
+    }, []);
+    /** A part's place, as laid out. `opened`: the step's scroll view, whose own layout is the step drawn anew, at its top. */
+    const nameStepMeasured = (part: Partial<typeof nameStepAt.current>, opened = false) => {
+        const was = nameStepAt.current;
+        nameStepAt.current = { ...was, ...part };
+        if (!opened && (Object.keys(part) as Array<keyof typeof was>).every((k) => was[k] === nameStepAt.current[k])) return;
+        if (Keyboard.isVisible()) inviteStepScroll.current?.assureFocusedInputVisible();
+        else keepNameInView();
+    };
+    useEffect(() => {
+        if (mode !== 'create') return;
+        const sub = Keyboard.addListener('keyboardDidHide', keepNameInView);
+        return () => sub.remove();
+    }, [mode, keepNameInView]);
 
     useEffect(() => {
         if (mode !== 'create' || !error) return;
@@ -1249,6 +1326,9 @@ export default function WelcomeScreen() {
             setPendingInviteCode(plan.inviteCode);
             setInviteRedeemed(plan.redeemed);
             if (plan.anchorUrl) setCreateAnchorUrl(plan.anchorUrl);
+            // The community this join was at: not asked for again after a restart, at this step or by the photo step's ‹. The
+            // record is written past the invite check, so a typed one is whole too, and Join draws the box if nothing answers.
+            if (plan.flow === 'invite') noteInviteAddress(plan.inviteCode, plan.anchorUrl);
             if (plan.avatar) setPendingAvatar(plan.avatar);
             setJoinFlow(plan.flow);
             setJoinDoor(plan.joinDoor);
@@ -1346,12 +1426,18 @@ export default function WelcomeScreen() {
         if (!nodeUrl || !looksLikeNodeAddress(nodeUrl) || shouldBlockCleartextNodeUrl(nodeUrl)) return;
         let cancelled = false;
         const timer = setTimeout(() => {
-            void import('../utils/db').then(({ checkInvite }) => checkInvite(normaliseInviteCode(code), nodeUrl)).then((check) => {
-                if (!cancelled && check) setGreeting({ at: nodeUrl, code: normaliseInviteCode(code), community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
+            void import('../utils/db').then(({ checkInvite }) => checkInvite(normaliseInviteCode(code), nodeUrl)).then(async (check) => {
+                // A spent code may have been spent by the key on this phone: only Join asks the node that (afterSpentInvite). And
+                // an address being typed is checked half typed too, and may be another community: what it says is only Join's.
+                const refused = !!check && !check.valid && addressNamed && !(check.reason === 'used' && await loadIdentity().catch(() => true));
+                if (cancelled || !check) return;
+                setGreeting({ at: nodeUrl, code: codeHere, community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
+                setRefusal(refused ? { at: nodeUrl, code: codeHere, reason: check.reason } : null);
+                if (refused) inviteRefused(codeHere, check.reason);
             }).catch(() => {});
         }, 600);
         return () => { cancelled = true; clearTimeout(timer); };
-    }, [mode, inviteCode, createAnchorUrl]);
+    }, [mode, inviteCode, createAnchorUrl, addressNamed]);
 
     /**
      * The name box given an invite (Marty, 14 Nov 2026, card callsign-link-guard: a member's invite link pasted there became
@@ -1406,14 +1492,17 @@ export default function WelcomeScreen() {
         const nodeUrl = normalizeNodeUrl(extractedOrigin || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
         if (!nodeUrl) {
             setError(t('Enter your community node address — you need it to connect to your community.'));
+            setAddressAsked(true);
             return;
         }
         if (!looksLikeNodeAddress(nodeUrl)) {
             setError(t("That doesn't look right. Try your community name, like riverside, or its full address."));
+            setAddressAsked(true);
             return;
         }
         if (shouldBlockCleartextNodeUrl(nodeUrl)) {
             setError(t('That node address is insecure (http on a public host). Ask your inviter for the https:// address.'));
+            setAddressAsked(true);
             return;
         }
 
@@ -1464,10 +1553,7 @@ export default function WelcomeScreen() {
                         return;
                     }
                     if (spent !== 'carryOn') {
-                        // A dead code (used by someone else, expired, not recognised): a link's held invite is never offered
-                        // again, or every launch would reopen this step on it. A good code at the wrong address, or at a community
-                        // whose invites are off for now, stays held. A newer one held meanwhile stays too.
-                        if (check.reason && DEAD_INVITE_REASONS.has(check.reason)) void forgetHeldInvite(AsyncStorage, parsedCode);
+                        inviteRefused(parsedCode, check.reason);
                         setError(inviteProblemMessage(check.reason, nodeUrl));
                         return;
                     }
@@ -1584,11 +1670,13 @@ export default function WelcomeScreen() {
                     setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
                     return;
                 }
-                // A redeem refused for the code itself (spent meanwhile, expired): asked once more, a dead held invite is forgotten
-                // as at the check above. No answer, or a good code: it stays held.
+                // A redeem refused for the code itself (spent meanwhile, expired): asked once more, and what the answer means is
+                // done as at the check above. No answer, or a good code: it stays held.
                 const heldCode = normaliseInviteCode(rawInvite);
                 const again = await import('../utils/db').then(({ checkInvite }) => checkInvite(heldCode, nodeUrl)).catch(() => null);
-                if (again && !again.valid && again.reason && DEAD_INVITE_REASONS.has(again.reason)) void forgetHeldInvite(AsyncStorage, heldCode);
+                if (again && !again.valid) inviteRefused(heldCode, again.reason);
+                // Nothing answers there: the address it tried is drawn, to be read and put right.
+                if (!again) setAddressAsked(true);
                 // The reason: a lower layer's sentence in the member's language, or the node's own words as they came.
                 setError(t('Failed to register identity: {reason}', { reason: welcomeLineWords(String(err?.message || err)) }));
                 console.error(err);
@@ -3234,20 +3322,47 @@ export default function WelcomeScreen() {
         // one it was checked for and the address the one it was checked at, as Join reads them (join names N1). Else "You're
         // invited": a new code for the same community never shows the previous code's inviter.
         let greet: { community: string; inviter: string | null } | null = null;
-        if (greeting?.community) {
+        // The same check's refusal, while the fields still hold that code for the address the invite named.
+        let refusedWords: string | null = null;
+        if (greeting?.community || refusal) {
             try {
                 const at = normalizeNodeUrl(extractNodeOrigin(inviteCode.trim()) || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
-                if (at && at === greeting.at && greeting.code === normaliseInviteCode(inviteCode.trim())) greet = { community: greeting.community, inviter: greeting.inviter };
+                if (at && greeting?.community && at === greeting.at && greeting.code === codeHere) greet = { community: greeting.community, inviter: greeting.inviter };
+                if (addressNamed && at && refusal && at === refusal.at && refusal.code === codeHere) refusedWords = inviteProblemMessage(refusal.reason, refusal.at);
             } catch { /* an address that is not plain host[:port]: Join says so; no name is claimed for it */ }
         }
+        // The address box is for a bare code that names no community (onboarding §3.1 B), or an invite's own address that didn't do.
+        const addressHeld = addressNamed && !addressAsked;
         const bold = (text: string) => <Text style={styles.greetingName}>{text}</Text>;
+        // What is wrong, as the step opens or at Join. Under a spent code, the way back: it may be a returning member's own old
+        // link, and a fresh invite would make them a second account.
+        const problem = (words: string, spent: boolean, testID?: string) => (
+            <View style={{ marginBottom: 12 }}>
+                <Text style={styles.error} accessibilityLiveRegion="polite" testID={testID}>{words}</Text>
+                {spent && (
+                    <Pressable
+                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: dark ? colors.feedback.info.bg : (palette.blue50 || '#eff6ff'), borderRadius: 8, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : (palette.blue200 || '#bfdbfe'), alignItems: 'center' }}
+                        onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {
+                            setError(null);
+                            setMode('recover');
+                        })}
+                        disabled={loading}
+                        accessibilityRole="button"
+                    >
+                        <Text style={{ color: dark ? palette.blue400 : (palette.blue600 || '#2563eb'), fontWeight: 'bold', fontSize: 13 }}>
+                            {t('🔑 Recover an existing account with seed phrase →')}
+                        </Text>
+                    </Pressable>
+                )}
+            </View>
+        );
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight}>
+                <KeyboardAwareScrollView ref={inviteStepScroll} key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24 + stepFooterHeight} onLayout={(e) => nameStepMeasured({ view: e.nativeEvent.layout.height }, true)}>
                     {/* ‹ is the front door. It waits while Join is out: its answer decides where the member goes (utils/invite-next.ts `runNext`). */}
                     <StepBar step="name" flow={joinFlow} wayBack={!skipWayBack} notify={notifyDue} busy={loading} onBack={() => leaveUnlessNextIsOut(nextOutRef, goBack)} backLabel={t('Back to Home')} />
-                    <View style={styles.card}>
+                    <View style={styles.card} onLayout={(e) => nameStepMeasured({ card: e.nativeEvent.layout.y })} testID="name-step-card">
                         <View style={styles.greetingBand} testID="invite-greeting">
                             <Text style={styles.greetingText} accessibilityRole="header">
                                 {greet?.inviter
@@ -3269,14 +3384,18 @@ export default function WelcomeScreen() {
                             </Pressable>
                         </View>
 
-                        {inviteCode && !inviteCode.startsWith('http') && (
+                        {refusedWords && !error && problem(refusedWords, refusal?.reason === 'used', 'invite-refused')}
+
+                        {inviteCode && !inviteCode.startsWith('http') && !addressHeld && (
                             <>
                                 <TextInput
                                     style={styles.input}
+                                    testID="name-step-address"
                                     placeholder={t('Community name or address (e.g. riverside)')}
                                     placeholderTextColor={colors.text.muted}
                                     value={createAnchorUrl}
-                                    onChangeText={setCreateAnchorUrl}
+                                    // Never hidden under the typing, when what is typed comes to the address the invite named.
+                                    onChangeText={(text) => { setAddressAsked(true); setCreateAnchorUrl(text); }}
                                     autoCapitalize="none"
                                     autoCorrect={false}
                                     keyboardType="url"
@@ -3289,22 +3408,24 @@ export default function WelcomeScreen() {
                             </>
                         )}
 
-                        <Text style={styles.callsignLabel}>{t('What should we call you?')}</Text>
-                        {/* No maxLength: the box would cut a pasted invite link to 20 before it is read. The 20 is kept here. */}
-                        <TextInput
-                            style={styles.callsignInput}
-                            placeholder={t('Your name or nickname')}
-                            placeholderTextColor={colors.text.muted}
-                            value={callsign}
-                            onChangeText={(text) => {
-                                if (inviteFromNameBox(text)) return;
-                                setCallsign(text.slice(0, MAX_JOIN_NAME));
-                                if (callsignSuggestions.length) setCallsignSuggestions([]);
-                            }}
-                            autoFocus={true}
-                            autoCapitalize="words"
-                            accessibilityLabel={t('Your name or nickname')}
-                        />
+                        <View onLayout={(e) => nameStepMeasured({ name: e.nativeEvent.layout.y, height: e.nativeEvent.layout.height })} testID="name-step-name">
+                            <Text style={styles.callsignLabel}>{t('What should we call you?')}</Text>
+                            {/* No maxLength: the box would cut a pasted invite link to 20 before it is read. The 20 is kept here. */}
+                            <TextInput
+                                style={styles.callsignInput}
+                                placeholder={t('Your name or nickname')}
+                                placeholderTextColor={colors.text.muted}
+                                value={callsign}
+                                onChangeText={(text) => {
+                                    if (inviteFromNameBox(text)) return;
+                                    setCallsign(text.slice(0, MAX_JOIN_NAME));
+                                    if (callsignSuggestions.length) setCallsignSuggestions([]);
+                                }}
+                                autoFocus={true}
+                                autoCapitalize="words"
+                                accessibilityLabel={t('Your name or nickname')}
+                            />
+                        </View>
                         <Text style={styles.callsignHelper}>{t('You can change it later.')}</Text>
 
                         {callsignSuggestions.length > 0 && (
@@ -3334,27 +3455,8 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        {error && (
-                            <View style={{ marginBottom: 12 }}>
-                                <Text style={styles.error}>{error}</Text>
-                                {/* A spent invite: said by the node in English, or by this screen in the member's language. */}
-                                {(error.includes('already been used') || error.includes('already used') || error === inviteProblemMessage('used')) && (
-                                    <Pressable
-                                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: dark ? colors.feedback.info.bg : (palette.blue50 || '#eff6ff'), borderRadius: 8, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : (palette.blue200 || '#bfdbfe'), alignItems: 'center' }}
-                                        onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {
-                                            setError(null);
-                                            setMode('recover');
-                                        })}
-                                        disabled={loading}
-                                        accessibilityRole="button"
-                                    >
-                                        <Text style={{ color: dark ? palette.blue400 : (palette.blue600 || '#2563eb'), fontWeight: 'bold', fontSize: 13 }}>
-                                            {t('🔑 Recover an existing account with seed phrase →')}
-                                        </Text>
-                                    </Pressable>
-                                )}
-                            </View>
-                        )}
+                        {/* A spent invite: said by the node in English, or by this screen in the member's language. */}
+                        {error && problem(error, error.includes('already been used') || error.includes('already used') || error === inviteProblemMessage('used'))}
 
                         {/* The ways back for a returning member are the front door's third button (§3.1 A), one ‹ away; a
                             spent invite still offers one above. */}
@@ -3419,7 +3521,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scrollToEnd} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <StepBar step="name" flow="global" wayBack={!doorSkipsWayBack} notify={notifyDue} busy={loading} />
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">{t('🌍 Join the global community')}</Text>
@@ -3636,7 +3738,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                <ScrollView key={mode} contentContainerStyle={styles.scrollToEnd} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header">{t('🔑 Restore your account')}</Text>
                         <Text style={styles.subtitle}>
@@ -3688,7 +3790,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scrollToEnd} bottomOffset={24}>
                         <View style={styles.card}>
                             <Text style={styles.title}>{t("⚠️ Replace this phone's account?")}</Text>
                             <Text style={styles.subtitle}>
@@ -3802,7 +3904,7 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 {/* "handled": with the keyboard up from the words, one tap on a community chip chooses it. */}
-                    <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+                    <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scrollToEnd} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                     <View style={styles.card}>
                         <Text style={styles.title}>{t('🔑 Recover Identity')}</Text>
                         <RecoveryWordsEntry words={recoveryWords} onChange={setRecoveryWords} labelStyle={styles.subtitle} colors={colors} />
@@ -3876,7 +3978,7 @@ export default function WelcomeScreen() {
                 <StatusBar style={dark ? 'light' : 'dark'} />
                 {/* "handled", as the 12 words' screen: after typing an address, one tap on a sign-in starts it. Without it,
                     Android before API 30 swallowed that first tap while the field kept focus (measured on API 26). */}
-                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scrollToEnd} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
                                 {t('🌐 Recover with Social Sign-In')}
@@ -4027,7 +4129,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scrollToEnd} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
                                 {t('🌐 Recover with Social Sign-In')}
@@ -4267,15 +4369,19 @@ export default function WelcomeScreen() {
     );
 }
 
-function makeStyles(colors: AppColors, dark: boolean) {
+/** `barTop` and `barBottom`: an Android phone's status bar and navigation bar, drawn over the screen; 0 on iOS (its SafeAreaView). */
+function makeStyles(colors: AppColors, dark: boolean, barTop: number, barBottom: number) {
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.page },
-    homeContent: { flexGrow: 1, padding: 24, alignItems: 'center' },
+    // The scroll views end below the status bar: words never pass under its icons.
+    container: { flex: 1, backgroundColor: colors.surface.page, paddingTop: barTop },
+    homeContent: { flexGrow: 1, padding: 24, paddingBottom: 24 + barBottom, alignItems: 'center' },
     homeMain: { width: '100%', alignItems: 'center' },
     // The waiting mode's buttons (components/welcome/WaitingToJoin.tsx); the line under a door when it can't be used.
     homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
     doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+    // A step with no footer under it (StepFooter keeps the bar's room itself): its last line ends above the navigation bar.
+    scrollToEnd: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingBottom: 24 + barBottom },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
     card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },

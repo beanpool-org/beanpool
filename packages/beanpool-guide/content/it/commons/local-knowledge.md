@@ -72,7 +72,7 @@ Quando hai qualcosa in attesa, Impara mostra una riga come **1 tuo aspetta un ad
 
 ## Qualcosa è cambiato?
 
-In qualsiasi pagina, tocca **Qualcosa è cambiato? Suggerisci una correzione**. Dì sotto **Cosa è cambiato?** che cosa è diverso adesso, come "L'ecocentro è chiuso il lunedì da marzo", e cambia le parole se vuoi, oppure invia solo la nota. Un proprietario o un admin la controlla prima: la pagina resta com'è fino ad allora. Puoi avere una correzione in attesa per pagina. Ricevi la risposta come **La tua correzione è dentro** oppure **La tua correzione non è stata usata**.
+In qualsiasi pagina, tocca **Qualcosa è cambiato? Suggerisci una correzione**. Dì sotto **Cosa è cambiato?** che cosa è diverso adesso, come "L'ecocentro è chiuso il lunedì da marzo", e cambia le parole se vuoi, oppure invia solo la nota. Un proprietario o un admin la controlla prima: la pagina resta com'è fino ad allora. Puoi avere una correzione in attesa per pagina. Ricevi la risposta come **La tua modifica è attiva** oppure **La tua modifica non è stata usata**.
 
 Chi ha scritto una pagina può anche toccare **Segna come superata** e dire perché. Questo mette il riquadro ambra sulla pagina finché un proprietario o un admin non toglie il segno.
 

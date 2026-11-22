@@ -963,6 +963,9 @@ export function ownListRead(asking: string | null | undefined): OwnListRead {
 /** Said when a chat action started as the phone was switching community: nothing was sent (chat-line-words.ts translates it). */
 const SWITCHED_SINCE_CHAT_OPENED_TEXT = 'This phone has switched community since this chat was opened.';
 
+/** Said when a deal's step began for another account than the one on the phone now (chat-line-words.ts translates it). */
+const OTHER_ACCOUNT_SINCE_CHAT_OPENED_TEXT = 'The account on this phone has changed since this chat was opened. Nothing was sent.';
+
 /**
  * The community a chat request is for (chatCopyForRequest): its address and its copy, taken at one moment.
  * - `anchorUrl`: where the request goes, passed to signedGet / _signedRequest or built into the fetch's URL. Null with no
@@ -2661,12 +2664,14 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
  * All trades (any status) between me and one peer — powers the consolidated thread's pinned
  * "active deals" strip and lets the timeline label each escrow event by item.
  */
-export async function getDealsBetween(myPubkey: string, peerPubkey: string): Promise<any[]> {
-    const database = await getDb();
+export async function getDealsBetween(myPubkey: string, peerPubkey: string, community?: ChatCommunity): Promise<any[]> {
+    // `community`: a chat in place, whose deals are its own community's, read from that community's copy (slice S6c).
+    const database = await chatDbFor(community);
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.amount_c as amount_c, mt.hours as hours, mt.item_option as item_option,
                mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey, mt.created_at as createdAt,
                mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
+               mt.rated_by_buyer as ratedByBuyer, mt.rated_by_seller as ratedBySeller,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = ?) as iRated
         FROM marketplace_transactions mt
@@ -2675,7 +2680,11 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
            OR (mt.buyer_pubkey = ? AND mt.seller_pubkey = ?)
         ORDER BY mt.created_at DESC
     `, [myPubkey, myPubkey, peerPubkey, peerPubkey, myPubkey]);
-    return rows.map(r => ({ ...r, iAmBuyer: r.buyerPubkey === myPubkey, iRated: !!r.iRated }));
+    return rows.map(({ ratedByBuyer, ratedBySeller, ...r }) => {
+        const iAmBuyer = r.buyerPubkey === myPubkey;
+        // In place the node's own flag counts too: that copy may not hold a rating made since the phone was last set there.
+        return { ...r, iAmBuyer, iRated: !!r.iRated || (!!community && !!(iAmBuyer ? ratedByBuyer : ratedBySeller)) };
+    });
 }
 
 // Throttle server-side read-cursor pushes: chat screens call markConversationRead on
@@ -2863,6 +2872,74 @@ const itemOptionColumn = (tx: any): 'each' | 'lot' | null => {
     const v = tx?.itemOption ?? tx?.item_option;
     return v === 'each' || v === 'lot' ? v : null;
 };
+
+/**
+ * One of the node's own deal rows (GET /api/marketplace/transactions) written into a copy of that community's: the sync's
+ * (applyDelta) and a chat in place's read of its own community ({@link syncDealsBetween}) keep a deal by this one rule.
+ */
+async function writeNodeDeal(txn: SQLite.SQLiteDatabase, tx: any): Promise<void> {
+    const incomingStatus = tx.status ?? 'pending';
+    
+    // Guard: Never downgrade a terminal status (completed/cancelled) back to pending/requested.
+    // This prevents a stale sync payload from reverting a transaction the user just completed locally.
+    const localRow = await txn.getFirstAsync<{ status: string }>('SELECT status FROM marketplace_transactions WHERE id = ?', [tx.id]);
+    if (localRow) {
+        const terminalStates = ['completed', 'cancelled'];
+        const nonTerminalStates = ['pending', 'requested'];
+        if (terminalStates.includes(localRow.status) && nonTerminalStates.includes(incomingStatus)) {
+            console.log(`[DB] Skipping downgrade of tx ${tx.id}: local=${localRow.status}, incoming=${incomingStatus}`);
+            return;
+        }
+    }
+
+    await txn.runAsync(
+        'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing, item_option) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+            tx.id ?? null,
+            tx.postId ?? tx.post_id ?? null,
+            tx.buyerPublicKey ?? tx.buyerPubkey ?? tx.buyer_pubkey ?? null,
+            tx.sellerPublicKey ?? tx.sellerPubkey ?? tx.seller_pubkey ?? null,
+            // What the deal holds, whole hundredths (the node's amount_c); anything else, no figure (shown "—").
+            dealAmountColumn(tx),
+            tx.hours ?? null,
+            incomingStatus,
+            tx.createdAt ?? tx.created_at ?? new Date().toISOString(),
+            tx.completedAt ?? tx.completed_at ?? null,
+            tx.coverImage ?? tx.cover_image ?? null,
+            tx.ratedByBuyer ? 1 : 0,
+            tx.ratedBySeller ? 1 : 0,
+            tx.postTitle ?? tx.post_title ?? null,
+            // The node's read carries the standing deal on its current period's row (S2): a short one's row is
+            // the period last settled, so its phase is kept on that row, not on a pending one.
+            tx.standingId ?? null,
+            tx.periodNo ?? null,
+            standingJsonOf(tx),
+            itemOptionColumn(tx),
+        ]
+    );
+
+    // Heal corresponding post status to match terminal transaction status
+    const associatedPostId = tx.postId ?? tx.post_id;
+    if (associatedPostId && (incomingStatus === 'completed' || incomingStatus === 'cancelled')) {
+        const postRow = await txn.getFirstAsync<{ repeatable: number; price_type: string | null }>('SELECT repeatable, price_type FROM posts WHERE id = ?', [associatedPostId]);
+        if (postRow && postRow.price_type === 'each') {
+            // A listing priced for each one is never a one-off, and its status is the node's alone: one deal taking some
+            // of the units leaves the rest on offer, and a deal that comes back (cancelled) changes nothing about it, so a
+            // paused listing stays paused and a sold-out one stays sold out (settleItemDeal). The node closes it itself when
+            // the count reaches 0 and moves updated_at whenever a count comes back, so the same delta brings the post with
+            // its true count and status; writing a status here, from a deal list that holds every deal on it, would put a
+            // sold-out or paused listing back on the Market, or close one with units left.
+        } else if (incomingStatus === 'completed') {
+            if (postRow && postRow.repeatable !== 1) {
+                await txn.runAsync("UPDATE posts SET status = 'completed', active = 0 WHERE id = ?", [associatedPostId]);
+            } else if (postRow && postRow.repeatable === 1) {
+                await txn.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE id = ?", [associatedPostId]);
+            }
+        } else {
+            await txn.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE id = ?", [associatedPostId]);
+        }
+    }
+}
 
 /**
  * Reads the member's balance from the node, keeps it on the phone, and answers the node's figures; null when the node
@@ -5912,69 +5989,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
 
         if (delta.marketplaceTransactions !== undefined) {
             console.log(`[DB] applying ${delta.marketplaceTransactions.length} marketplace_transactions...`);
-            for (const tx of delta.marketplaceTransactions) {
-                const incomingStatus = tx.status ?? 'pending';
-                
-                // Guard: Never downgrade a terminal status (completed/cancelled) back to pending/requested.
-                // This prevents a stale sync payload from reverting a transaction the user just completed locally.
-                const localRow = await txn.getFirstAsync<{ status: string }>('SELECT status FROM marketplace_transactions WHERE id = ?', [tx.id]);
-                if (localRow) {
-                    const terminalStates = ['completed', 'cancelled'];
-                    const nonTerminalStates = ['pending', 'requested'];
-                    if (terminalStates.includes(localRow.status) && nonTerminalStates.includes(incomingStatus)) {
-                        console.log(`[DB] Skipping downgrade of tx ${tx.id}: local=${localRow.status}, incoming=${incomingStatus}`);
-                        continue;
-                    }
-                }
-
-                await txn.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing, item_option) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [
-                        tx.id ?? null,
-                        tx.postId ?? tx.post_id ?? null,
-                        tx.buyerPublicKey ?? tx.buyerPubkey ?? tx.buyer_pubkey ?? null,
-                        tx.sellerPublicKey ?? tx.sellerPubkey ?? tx.seller_pubkey ?? null,
-                        // What the deal holds, whole hundredths (the node's amount_c); anything else, no figure (shown "—").
-                        dealAmountColumn(tx),
-                        tx.hours ?? null,
-                        incomingStatus,
-                        tx.createdAt ?? tx.created_at ?? new Date().toISOString(),
-                        tx.completedAt ?? tx.completed_at ?? null,
-                        tx.coverImage ?? tx.cover_image ?? null,
-                        tx.ratedByBuyer ? 1 : 0,
-                        tx.ratedBySeller ? 1 : 0,
-                        tx.postTitle ?? tx.post_title ?? null,
-                        // The node's read carries the standing deal on its current period's row (S2): a short one's row is
-                        // the period last settled, so its phase is kept on that row, not on a pending one.
-                        tx.standingId ?? null,
-                        tx.periodNo ?? null,
-                        standingJsonOf(tx),
-                        itemOptionColumn(tx),
-                    ]
-                );
-
-                // Heal corresponding post status to match terminal transaction status
-                const associatedPostId = tx.postId ?? tx.post_id;
-                if (associatedPostId && (incomingStatus === 'completed' || incomingStatus === 'cancelled')) {
-                    const postRow = await txn.getFirstAsync<{ repeatable: number; price_type: string | null }>('SELECT repeatable, price_type FROM posts WHERE id = ?', [associatedPostId]);
-                    if (postRow && postRow.price_type === 'each') {
-                        // A listing priced for each one is never a one-off, and its status is the node's alone: one deal taking some
-                        // of the units leaves the rest on offer, and a deal that comes back (cancelled) changes nothing about it, so a
-                        // paused listing stays paused and a sold-out one stays sold out (settleItemDeal). The node closes it itself when
-                        // the count reaches 0 and moves updated_at whenever a count comes back, so the same delta brings the post with
-                        // its true count and status; writing a status here, from a deal list that holds every deal on it, would put a
-                        // sold-out or paused listing back on the Market, or close one with units left.
-                    } else if (incomingStatus === 'completed') {
-                        if (postRow && postRow.repeatable !== 1) {
-                            await txn.runAsync("UPDATE posts SET status = 'completed', active = 0 WHERE id = ?", [associatedPostId]);
-                        } else if (postRow && postRow.repeatable === 1) {
-                            await txn.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE id = ?", [associatedPostId]);
-                        }
-                    } else {
-                        await txn.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE id = ?", [associatedPostId]);
-                    }
-                }
-            }
+            for (const tx of delta.marketplaceTransactions) await writeNodeDeal(txn, tx);
         }
 
         if (delta.projects !== undefined) {
@@ -8398,8 +8413,11 @@ async function goesAsGroup(conversationId: string, here: ChatRequestCopy): Promi
     return (await ring.seenLocked()) && !(await isKnownDmConversation(conversationId, { pinsMustRead: true, at: here.database }));
 }
 
-/** A readable line's way out ({@link readableLineTo}): its one address, and what is asked last of all, with no await, as its request leaves. */
-interface ReadableTo { address: string; leaving(): void }
+/**
+ * A readable line's way out ({@link readableLineTo}), and a deal's step's ({@link dealStep}): its one address, and what is asked
+ * last of all, with no await, as its request leaves. `signer`: the one account it may be signed by.
+ */
+interface ReadableTo { address: string; leaving(): void; signer?: string }
 
 /**
  * The last thing asked before a readable chat line goes, and the address it goes to. It fails closed (third review of #3358,
@@ -10017,12 +10035,14 @@ async function _signedRequest(endpoint: string, payload: any, to?: string | null
 
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found. You must be logged in.');
+    // A deal's step is its own member's: never signed by another account that is on the phone by now.
+    if (readable?.signer && readable.signer !== identity.publicKey) throw new Error(OTHER_ACCOUNT_SINCE_CHAT_OPENED_TEXT);
 
     const bodyString = JSON.stringify(payload);
     // The language this phone writes in, so the node can answer in it (utils/language-choice.ts; not signed, not stored).
     const headers = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
 
-    // A readable chat line's last ask: nothing is awaited between it and the request.
+    // A readable chat line's last ask, and a deal's step's: nothing is awaited between it and the request.
     readable?.leaving();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -10082,13 +10102,15 @@ async function _signedRequest(endpoint: string, payload: any, to?: string | null
         // Auto-heal stale server profile: if the user has a local avatar but the
         // server doesn't know about it (common for users whose initial onboarding
         // publish failed), push the profile and retry the request once.
-        if (_isProfilePhotoError(errorMsg)) {
+        // Only of the community in use: another community's refusal (a chat in place) asks the one in use nothing.
+        if ((to === undefined || await stillOnCommunity(anchorUrl)) && _isProfilePhotoError(errorMsg)) {
             // The node itself just said it holds no photo for us. Whatever this community holds that never reached
             // it (a pick made here while offline) goes now; a photo chosen in another community does not (Profile S2),
             // so a member with none here is asked for one, as the node's words say.
             const healed = await pushProfileToServer();
             if (healed) {
                 const retryHeaders = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
+                readable?.leaving();
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {
                     method: 'POST',
                     headers: retryHeaders,
@@ -10619,37 +10641,89 @@ export async function acceptMarketplacePost(
     return res;
 }
 
-export async function completeMarketplaceTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number) {
-    const res = await _signedRequest('/api/marketplace/transactions/complete', { transactionId, confirmerPublicKey, finalHours });
-    console.log(`[Escrow] Server complete response: success=${res?.success}, txId=${res?.transaction?.id}`);
+/** A deal a money step is for (slice S6c): its own id, or a standing deal's. */
+type DealNamed = { tx: string } | { standing: string };
 
-    // Await the local write so callers (and any screen they navigate to) read a
-    // consistent status. The FIFO sync lock keeps this to milliseconds.
-    try {
-        await acquireSyncLock({ urgent: true }); // user just released credits — jump the sync queue
-        try {
-            const database = await getDb();
-            const postParam = await database.getFirstAsync<{ repeatable: number, id: string }>('SELECT id, repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
-            if (postParam && postParam.repeatable !== 1) {
-                await database.runAsync("UPDATE posts SET status = 'completed' WHERE pending_transaction_id = ?", [transactionId]);
+/** Whether the copy `database` reads holds that deal as `me`'s, one of its two sides. One that can't be read is not held. */
+async function holdsDealThrough(database: SQLite.SQLiteDatabase, me: string, deal: DealNamed): Promise<boolean> {
+    const [column, id] = 'tx' in deal ? ['id', deal.tx] : ['standing_id', deal.standing];
+    const row = await database.getFirstAsync(`SELECT id FROM marketplace_transactions WHERE ${column} = ? AND (buyer_pubkey = ? OR seller_pubkey = ?) LIMIT 1`, [id, me, me]).catch(() => null);
+    return !!row;
+}
+
+/** The deal steps on their way, by community, account, route and body: the same step asked again meanwhile is that one's answer. */
+const _dealStepsInFlight = new Map<string, Promise<{ res: any; here: ChatRequestCopy }>>();
+
+/**
+ * One step on a deal, asked of the deal's OWN community (slice S6c, scratch/fable-design/DESIGN-no-switch-messaging-fable.md §6):
+ * its address and its copy are taken together as the step begins (chatCopyForRequest), the request is signed for that address
+ * by `me`, the member it is for, and goes there or nowhere. Refused before anything is asked:
+ * - another account is on the phone than `me` (asked again by the signing, and `leaving` refuses an account on its way off);
+ * - `community` (a deal of a chat open in place) has no copy to open in place: a guest's look, a community taken off the phone,
+ *   a chat left (copyInPlaceFor), or its copy doesn't hold that deal as `me`'s; and, as the request leaves, its copy has closed.
+ * The same step asked twice at once (a double tap) is one request with one answer. A retry is a request for the same deal, which
+ * its server takes once: a release already made answers `alreadyCompleted` and pays nothing (engine/escrow.ts), a cancel moves a
+ * deal only from 'pending', a standing deal's stop and lowering only from what they name.
+ * `kept`: what it changes in that community's own file, once its server has said yes (`here.handle()`): never in another's, and
+ * nowhere once the phone has moved on (that community's next read brings it).
+ */
+async function dealStep(
+    community: ChatCommunity, me: string, deal: DealNamed, endpoint: string, payload: object,
+    kept?: (database: SQLite.SQLiteDatabase, here: ChatRequestCopy, res: any) => Promise<void>,
+): Promise<{ res: any; here: ChatRequestCopy }> {
+    const stays = accountStays();
+    const here = await chatCopyForRequest(community);
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found. You must be logged in.');
+    if (identity.publicKey !== me) throw new Error(OTHER_ACCOUNT_SINCE_CHAT_OPENED_TEXT);
+    if (here.inPlace && !(await holdsDealThrough(here.database, me, deal))) throw new NoCopyInPlaceError();
+    const leaving = () => {
+        if (!stays()) throw new Error(OTHER_ACCOUNT_SINCE_CHAT_OPENED_TEXT);
+        if (here.inPlace && !here.openNow()) throw new NoCopyInPlaceError();
+    };
+    // No await from this look to the note below: of two taps at once, one asks.
+    const key = [here.file, me, endpoint, JSON.stringify(payload)].join('\n');
+    const running = _dealStepsInFlight.get(key);
+    if (running) return running;
+    const run = (async () => {
+        const res = await _signedRequest(endpoint, payload, { address: here.anchorUrl ?? '', leaving, signer: me });
+        if (kept) {
+            try {
+                await acquireSyncLock({ urgent: true }); // the member's own step: it jumps the sync queue
+                try {
+                    const database = stays() ? await here.handle() : null;
+                    if (database) await kept(database, here, res);
+                } finally {
+                    releaseSyncLock();
+                }
+            } catch (e) {
+                console.error(`[Escrow] ${endpoint}: this phone's copy was not updated:`, e);
             }
-            await database.runAsync("UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?", [new Date().toISOString(), transactionId]);
-
-            const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
-            const sellerPubkey = res?.transaction?.sellerPublicKey || null;
-            console.log(`[Escrow] Completing: buyer=${buyerPubkey?.slice(0,8)}, seller=${sellerPubkey?.slice(0,8)}, amount_c=${res?.transaction?.amount_c}`);
-
-            // Emit events so Ledger screen refreshes immediately
-            const { DeviceEventEmitter } = require('react-native');
-            DeviceEventEmitter.emit('transaction_completed');
-            DeviceEventEmitter.emit('sync_data_updated');
-        } finally {
-            releaseSyncLock();
         }
-    } catch(e) {
-        console.error('[Escrow] completeMarketplaceTransaction local update failed:', e);
-    }
+        return { res, here };
+    })().finally(() => _dealStepsInFlight.delete(key));
+    _dealStepsInFlight.set(key, run);
+    return run;
+}
 
+/** Release a deal's Beans (its payer). `community`: a deal of a chat open in place, asked of its own community ({@link dealStep}). */
+export async function completeMarketplaceTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, community?: ChatCommunity) {
+    // Awaits the local write so callers (and any screen they navigate to) read a consistent status.
+    const { res, here } = await dealStep(community, confirmerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/complete', { transactionId, confirmerPublicKey, finalHours }, async (database, at) => {
+        const postParam = await database.getFirstAsync<{ repeatable: number, id: string }>('SELECT id, repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
+        if (postParam && postParam.repeatable !== 1) {
+            await database.runAsync("UPDATE posts SET status = 'completed' WHERE pending_transaction_id = ?", [transactionId]);
+        }
+        await database.runAsync("UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?", [new Date().toISOString(), transactionId]);
+        if (at.inPlace) return;
+        // Emit events so Ledger screen refreshes immediately
+        const { DeviceEventEmitter } = require('react-native');
+        DeviceEventEmitter.emit('transaction_completed');
+        DeviceEventEmitter.emit('sync_data_updated');
+    });
+    console.log(`[Escrow] Server complete response: success=${res?.success}, txId=${res?.transaction?.id}`);
+    // A balance is asked of the community in use: another community's deal (in place, or the phone has moved on) asks it for none.
+    if (here.inPlace || !here.openNow()) return res;
     // Balance refreshes are network round-trips — keep them off the caller's critical path
     const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
     const sellerPubkey = res?.transaction?.sellerPublicKey || null;
@@ -10659,29 +10733,58 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
     return res;
 }
 
-export async function cancelMarketplaceTransaction(transactionId: string, cancellerPublicKey: string) {
-    const res = await _signedRequest('/api/marketplace/transactions/cancel', { transactionId, cancellerPublicKey });
+/** Cancel a hold (either side): the Beans go back to the payer. `community`: as {@link completeMarketplaceTransaction}. */
+export async function cancelMarketplaceTransaction(transactionId: string, cancellerPublicKey: string, community?: ChatCommunity) {
+    const { res } = await dealStep(community, cancellerPublicKey, { tx: transactionId }, '/api/marketplace/transactions/cancel', { transactionId, cancellerPublicKey }, async (database, at) => {
+        const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
+        if (postParam && postParam.repeatable !== 1) {
+            await database.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE pending_transaction_id = ?", [transactionId]);
+        }
+        await database.runAsync("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?", [transactionId]);
+        if (at.inPlace) return;
+        const { DeviceEventEmitter } = require('react-native');
+        DeviceEventEmitter.emit('sync_data_updated');
+    });
+    return res;
+}
 
+/**
+ * The deals between me and one person as a chat in place's own community answers them now (its GET /api/marketplace/transactions,
+ * the member's own list), written into that community's copy and nowhere else (slice S6c). Resolves to the deals it wrote, by
+ * id, each with what the node says of its listing (that copy may not hold the listing): the chat offers a money step only on
+ * one of those, read back from that copy ({@link getDealsBetween}). Null when there was no answer, or nowhere of that
+ * community's to keep it (the chat left, the phone switched, an account leaving): nothing then shows as that community's word.
+ * In use: nothing asked (the phone's own sync keeps those).
+ */
+export async function syncDealsBetween(myPubkey: string, peerPubkey: string, community: ChatCommunity): Promise<Map<string, { postAuthorPublicKey?: string | null; postType?: string | null }> | null> {
+    if (!community) return null;
+    const stays = accountStays();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
-        await acquireSyncLock({ urgent: true }); // user just cancelled the deal — jump the sync queue
+        const here = await chatCopyForRequest(community);
+        if (!here.inPlace || !here.anchorUrl || (await loadIdentity())?.publicKey !== myPubkey) return null;
+        const res = await signedGet(`/api/marketplace/transactions?publicKey=${encodeURIComponent(myPubkey)}&limit=200`, { signal: controller.signal, anchorUrl: here.anchorUrl });
+        const rows = res.ok ? await res.json() : null;
+        if (!Array.isArray(rows)) return null;
+        const pair = (a: unknown, b: unknown) => [String(a), String(b)].sort().join(' ');
+        const ours = rows.filter((r: any) => typeof r?.id === 'string' && r.id && typeof r.postId === 'string'
+            && pair(r.buyerPublicKey, r.sellerPublicKey) === pair(myPubkey, peerPubkey));
+        await acquireSyncLock({ urgent: true });
         try {
-            const database = await getDb();
-            const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
-            if (postParam && postParam.repeatable !== 1) {
-                await database.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE pending_transaction_id = ?", [transactionId]);
-            }
-            await database.runAsync("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?", [transactionId]);
-
-            const { DeviceEventEmitter } = require('react-native');
-            DeviceEventEmitter.emit('sync_data_updated');
+            const database = stays() ? await here.handle() : null;
+            if (!database) return null;
+            for (const row of ours) await writeNodeDeal(database, row);
         } finally {
             releaseSyncLock();
         }
-    } catch(e) {
-        console.error('[Escrow] cancelMarketplaceTransaction local update failed:', e);
+        return new Map(ours.map((r: any) => [r.id as string, { postAuthorPublicKey: r.postAuthorPublicKey ?? null, postType: r.postType ?? null }]));
+    } catch (e: any) {
+        console.warn(`[Deals] Could not read the deals of a chat in place: ${e?.message || e}`);
+        return null;
+    } finally {
+        clearTimeout(timeoutId);
     }
-
-    return res;
 }
 
 export async function requestMarketplacePost(postId: string, buyerPublicKey: string, hours?: number) {
@@ -10745,27 +10848,37 @@ export async function signStandingStart(fields: StandingAuthorisationFields): Pr
     return signStandingStatement(anchorUrl, fields, identity.privateKey);
 }
 
+/**
+ * A step on a standing deal (the node reads the side from the signer). `me`: the member it is for; left out, the account on the
+ * phone. `community`: a standing deal of a chat open in place, asked of its own community (slice S6c, {@link dealStep}).
+ */
+async function standingDealStep(standingId: string, step: string, payload: object, me: string | undefined, community: ChatCommunity) {
+    const mine = me ?? (await loadIdentity())?.publicKey;
+    if (!mine) throw new Error('No identity found. You must be logged in.');
+    return (await dealStep(community, mine, { standing: standingId }, `/api/marketplace/standing/${encodeURIComponent(standingId)}/${step}`, payload)).res;
+}
+
 /** Stop a standing deal (either side): after the period already paid, or at once while it is short (in the grace). */
-export async function stopStandingDeal(standingId: string) {
-    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
+export async function stopStandingDeal(standingId: string, me?: string, community?: ChatCommunity) {
+    return standingDealStep(standingId, 'stop', {}, me, community);
 }
 
 /**
  * A short week (DESIGN-getting-paid-fable §3.1): the payee lowers one period alone, or the payer asks to pay less for it
  * (the node reads the side from the signer). `changeId` is the app's UUID (core standingChangeId), the same on a retry.
  */
-export async function lowerStandingPeriod(standingId: string, changeId: string, periodNo: number, beans_c: number) {
-    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/lower`, { id: changeId, periodNo, beans_c });
+export async function lowerStandingPeriod(standingId: string, changeId: string, periodNo: number, beans_c: number, me?: string, community?: ChatCommunity) {
+    return standingDealStep(standingId, 'lower', { id: changeId, periodNo, beans_c }, me, community);
 }
 
 /** The payee answers the payer's open ask: yes, that period costs what was asked; no, it stays as it was. */
-export async function answerStandingAsk(standingId: string, changeId: string, yes: boolean) {
-    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/answer`, { yes });
+export async function answerStandingAsk(standingId: string, changeId: string, yes: boolean, me?: string, community?: ChatCommunity) {
+    return standingDealStep(standingId, `lower/${encodeURIComponent(changeId)}/answer`, { yes }, me, community);
 }
 
 /** The payer takes their open ask back: nothing changes. */
-export async function withdrawStandingAsk(standingId: string, changeId: string) {
-    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/lower/${encodeURIComponent(changeId)}/withdraw`, {});
+export async function withdrawStandingAsk(standingId: string, changeId: string, me?: string, community?: ChatCommunity) {
+    return standingDealStep(standingId, `lower/${encodeURIComponent(changeId)}/withdraw`, {}, me, community);
 }
 
 // ── Bills (DESIGN-getting-paid-fable §4; the node's routes/bills.ts), read and answered on the node, never kept here ──
@@ -10876,48 +10989,39 @@ function reportRefusal(e: any): any {
 }
 
 
-export async function submitRating(raterPublicKey: string, targetPublicKey: string, rating: number, comment: string, transactionId?: string) {
-    const res = await _signedRequest('/api/ratings', { raterPubkey: raterPublicKey, targetPubkey: targetPublicKey, stars: rating, comment, transactionId });
-    if (res?.success && transactionId) {
-        await acquireSyncLock({ urgent: true }); // user just submitted a review — jump the sync queue
-        try {
-            const database = await getDb();
-            await database.withTransactionAsync(async () => {
-                await database.runAsync(`
-                    UPDATE marketplace_transactions 
-                    SET rated_by_buyer = CASE WHEN buyer_pubkey = ? THEN 1 ELSE rated_by_buyer END,
-                        rated_by_seller = CASE WHEN seller_pubkey = ? THEN 1 ELSE rated_by_seller END
-                    WHERE id = ?
-                `, [raterPublicKey, raterPublicKey, transactionId]);
-                console.log(`[Rating] Optimistically marked tx ${transactionId} as rated in local SQLite`);
+/** Rate the other side of a deal. `community`: a deal of a chat open in place, rated in its own community ({@link dealStep}). */
+export async function submitRating(raterPublicKey: string, targetPublicKey: string, rating: number, comment: string, transactionId?: string, community?: ChatCommunity) {
+    const { res } = await dealStep(community, raterPublicKey, { tx: transactionId ?? '' }, '/api/ratings', { raterPubkey: raterPublicKey, targetPubkey: targetPublicKey, stars: rating, comment, transactionId }, async (database, _here, answer) => {
+        if (!answer?.success || !transactionId) return;
+        await database.withTransactionAsync(async () => {
+            await database.runAsync(`
+                UPDATE marketplace_transactions
+                SET rated_by_buyer = CASE WHEN buyer_pubkey = ? THEN 1 ELSE rated_by_buyer END,
+                    rated_by_seller = CASE WHEN seller_pubkey = ? THEN 1 ELSE rated_by_seller END
+                WHERE id = ?
+            `, [raterPublicKey, raterPublicKey, transactionId]);
+            console.log(`[Rating] Optimistically marked tx ${transactionId} as rated in local SQLite`);
 
-                if (res.rating) {
-                    const r = res.rating;
-                    const stars = r.stars ?? r.rating;
-                    if (stars && stars >= 1 && stars <= 5 && r.id && r.targetPubkey && r.raterPubkey) {
-                        await database.runAsync(`
-                            INSERT OR REPLACE INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment, transaction_id, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        `, [
-                            r.id,
-                            r.targetPubkey,
-                            r.raterPubkey,
-                            r.role ?? 'provider',
-                            stars,
-                            r.comment ?? null,
-                            r.transactionId ?? r.transaction_id ?? null,
-                            r.createdAt ?? r.created_at ?? new Date().toISOString()
-                        ]);
-                        console.log(`[Rating] Inserted rating ${r.id} into local SQLite ratings table`);
-                    }
-                }
-            });
-        } catch (e) {
-            console.warn('[Rating] Local DB rating state update failed:', e);
-        } finally {
-            releaseSyncLock();
-        }
-    }
+            const r = answer.rating;
+            const stars = r?.stars ?? r?.rating;
+            if (r && stars && stars >= 1 && stars <= 5 && r.id && r.targetPubkey && r.raterPubkey) {
+                await database.runAsync(`
+                    INSERT OR REPLACE INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment, transaction_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `, [
+                    r.id,
+                    r.targetPubkey,
+                    r.raterPubkey,
+                    r.role ?? 'provider',
+                    stars,
+                    r.comment ?? null,
+                    r.transactionId ?? r.transaction_id ?? null,
+                    r.createdAt ?? r.created_at ?? new Date().toISOString()
+                ]);
+                console.log(`[Rating] Inserted rating ${r.id} into local SQLite ratings table`);
+            }
+        });
+    });
     return res;
 }
 

@@ -138,7 +138,9 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         const src = read('app/chat/[id].tsx');
         const line = src.split('\n').find(l => l.includes('styles.stickyPostCredits}>'))!;
         expect(line).toContain('{showsBeans && <Text style={styles.stickyPostCredits}>');
-        expect(src).toContain('const showsBeans = beansOn(nodeProfile?.features);');
+        // In place (slice S6c) the chat's own community says, from this phone's kept copy of it; else the community in use.
+        expect(src).toContain('const showsBeans = at ? beansOn(placeFeatures) : beansOn(nodeProfile?.features);');
+        expect(src).toContain('getCachedNodeProfile(at).then(p => { if (live) setPlaceFeatures(p?.features ?? null); }');
     });
 
     it('Talk: no "Beans: High / Low" sort', () => {

@@ -13,7 +13,7 @@
  * on a live Learn, to a member with a key. The node's refusal shows in its own words (learnRefusal), never a success it didn't give.
  */
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, DeviceEventEmitter, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -38,7 +38,7 @@ import { LANGUAGE_NAMES } from '../../utils/language-choice';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { ChipText } from './KnowledgeRowCard';
 import { LEARN_LINES, monthYear, topicOf } from './learn-lines';
-import { LEARN_KEEP, pageActions } from './learn-keep';
+import { LEARN_KEEP, LEARN_PAGE_READ, pageActions } from './learn-keep';
 import { learnRefusal } from './learn-write';
 import { useLearnWriter } from './useLearnWriter';
 import { ForumLinkedTopics } from '../forum/ForumLinks';
@@ -154,6 +154,14 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
             setBusy(false);
         }
     };
+    // An owner's or admin's Edit (app/learn/new.tsx) hands back the node's page, after a save or the read after "This page's photos
+    // changed": shown as an action's answer is, until the copy catches up, so a picture taken off is gone from here at once.
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener(LEARN_PAGE_READ, (p: KnowledgePage | null | undefined) => {
+            if (p && p.id === held.id && p.knowledge) setAnswered(p);
+        });
+        return () => sub.remove();
+    }, [held.id]);
     const at = `/api/knowledge/posts/${encodeURIComponent(page.id)}`;
     const styles = useStyles(({ colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -256,9 +264,10 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                 {sources.length > 0 ? (
                     <View style={{ gap: 8 }}>
                         <Text style={styles.label}>{t(LEARN_LINES.sources)}</Text>
-                        {sources.map((s) => (
+                        {/* Keyed by place, not address: a typed source and the node's credit for a picture may share one (§9 slice 4). */}
+                        {sources.map((s, i) => (
                             <Pressable
-                                key={s.url}
+                                key={`source-${i}`}
                                 accessibilityRole="link"
                                 accessibilityLabel={t('{label}, opens in your browser', { label: s.label || hostOf(s.url) })}
                                 onPress={() => { void Linking.openURL(s.url).catch(() => {}); }}
@@ -266,7 +275,9 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                                 testID="knowledge-source"
                             >
                                 <View style={styles.sourceText}>
-                                    <Text style={styles.sourceLabel} numberOfLines={2}>{s.label || hostOf(s.url)}</Text>
+                                    {/* Never cut: a label is at most 80 characters, and a picture's credit ("📷 1 · maker · licence") must
+                                        show whole at 320 dp and 1.3x text (§9 slice 4), so it wraps. */}
+                                    <Text style={styles.sourceLabel}>{s.label || hostOf(s.url)}</Text>
                                     <Text style={styles.sourceHost} numberOfLines={1}>{hostOf(s.url)}</Text>
                                 </View>
                                 <Text style={styles.sourceOut}>↗</Text>

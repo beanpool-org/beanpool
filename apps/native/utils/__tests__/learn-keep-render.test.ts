@@ -76,6 +76,8 @@ vi.mock('../../components/learn/useLearnWriter', () => ({
     forgetLearnRole: vi.fn(async () => {}),
 }));
 vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
+// The form's Edit draws a page's pictures against the node's address (learn-keep.ts pagePhotoUri): read from the phone's store on a device.
+vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => 'https://node.test') }));
 // The form's Tags field (Learn's tags) is the Market's picker, whose icons and sheet need a device: it stands in here, and
 // learn-tags-render.test.ts and tag-picker-sheet-render.test.ts hold it.
 vi.mock('../../components/TagPicker', () => ({ TagPicker: () => null }));

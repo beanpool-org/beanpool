@@ -20,9 +20,17 @@
  *
  * Tags (Learn's tags, 16 Nov 2026): the Market's own Tags field, the member's own tags alone (TagPicker `freeOnly`), after Where,
  * as on the web. A fix and an edit open on the page's tags; a fix sends them only when changed, an edit always ([] takes them off).
+ *
+ * Pictures (DESIGN-learn-web-pictures-fable.md §9 slice 4, the web's slice 3): an Edit lists the page's pictures as the page it
+ * opened on gave them, each with Remove photo (Keep this photo puts it back), and nothing to add one. Save sends the ones kept,
+ * each as the page gave it, only when one was taken off (learn-keep.ts pagePhotosKept); leaving without saving sends nothing.
+ * The node's "This page's photos changed. Open it again." (409 `photos_changed`: another owner or admin changed them after the
+ * form opened) shows in its words, the form keeps the list it opened on, so Save again is refused again and never takes off a
+ * picture nobody chose, and the page behind the form is read again so it shows the pictures the page has now. Edit and Suggest
+ * a fix list and send the page's own sources only, never the node's credit rows for its pictures (formOfPage).
  */
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, DeviceEventEmitter, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -35,7 +43,10 @@ import {
     type KnowledgeFormValues,
 } from '../../components/learn/learn-write';
 import { forgetLearnRole, useLearnWriter } from '../../components/learn/useLearnWriter';
-import { LEARN_KEEP, editBody, fixBody, formOfPage } from '../../components/learn/learn-keep';
+import {
+    LEARN_KEEP, LEARN_PAGE_READ, editBody, fixBody, formOfPage, pagePhotoUri, pagePhotosKept, pagePhotosOf,
+} from '../../components/learn/learn-keep';
+import { anchorUrl } from '../../utils/node-post';
 import { readNodePage, useKnowledgePage } from '../../components/learn/useKnowledgePage';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { useIdentity } from '../IdentityContext';
@@ -73,6 +84,12 @@ export default function NewKnowledgeScreen() {
     const [problem, setProblem] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState<'sent' | 'published' | null>(null);
+    // An Edit's pictures taken off, by their place among the pictures of the page the form opened on (`opened`, never re-read).
+    const [takenOff, setTakenOff] = useState<number[]>([]);
+    const pictures = use === 'edit' ? pagePhotosOf(opened) : [];
+    const toggleTakenOff = (i: number) => { setTakenOff((list) => (list.includes(i) ? list.filter((j) => j !== i) : [...list, i])); setProblem(null); };
+    // The node's address, to draw a picture the page gave as a path (pagePhotoUri); what is sent back is the path as given.
+    const [anchor, setAnchor] = useState<string | null>(null);
     const set = (patch: Partial<KnowledgeFormValues>) => { setForm((f) => ({ ...f, ...patch })); setProblem(null); };
     useEffect(() => {
         if (use === 'fix' && page && !opened) { setForm(formOfPage(page)); setOpened(page); }
@@ -87,6 +104,12 @@ export default function NewKnowledgeScreen() {
         });
         return () => { gone = true; };
     }, [use, pageId, tries]);
+    useEffect(() => {
+        if (use !== 'edit') return undefined;
+        let gone = false;
+        void anchorUrl().then((url) => { if (!gone) setAnchor(url); }, () => {});
+        return () => { gone = true; };
+    }, [use]);
 
     const s = useStyles(({ colors: c }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: c.surface.page },
@@ -124,6 +147,11 @@ export default function NewKnowledgeScreen() {
         secondaryText: { fontSize: 15, fontWeight: '800', color: c.chip.learn.fg, textAlign: 'center' },
         photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
         photo: { width: 64, height: 64, borderRadius: 10, backgroundColor: c.surface.subtle },
+        // An Edit's pictures (slice 4): each beside its button, which grows to two lines rather than cutting its words.
+        pagePhotos: { gap: 10, marginTop: 12 },
+        pagePhoto: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+        photoOff: { opacity: 0.4 },
+        toggle: { flex: 1, minWidth: 0 },
         small: { fontSize: 13, lineHeight: 18, color: c.text.secondary },
         problem: { fontSize: 14, fontWeight: '700', color: c.feedback.danger.fg, marginTop: 12 },
         primary: { minHeight: 52, marginTop: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, backgroundColor: c.brand.fill },
@@ -158,11 +186,21 @@ export default function NewKnowledgeScreen() {
                     await signedRequestWithMethod('POST', '/api/knowledge/drafts', fixBody(opened, form, note), { withStatus: true });
                     setDone('sent');
                 } else {
-                    await signedRequestWithMethod('POST', `/api/knowledge/posts/${encodeURIComponent(opened.id)}/edit`, editBody(opened, form), { withStatus: true });
+                    // The pictures it keeps, from the page it opened on, only when one was taken off.
+                    const keep = pagePhotosKept(pictures, takenOff);
+                    const answer = await signedRequestWithMethod('POST', `/api/knowledge/posts/${encodeURIComponent(opened.id)}/edit`, editBody(opened, form, keep), { withStatus: true });
+                    // The page behind shows the node's answer (a picture taken off is gone from it) until the copy catches up.
+                    if (answer?.post?.knowledge) DeviceEventEmitter.emit(LEARN_PAGE_READ, answer.post);
                     leave();
                 }
             } catch (e) {
                 setProblem(learnRefusal(e));
+                // Another owner or admin changed the page's pictures after this form opened: nothing was removed. The form keeps
+                // the list it opened on (Save again is refused again); the page behind is read again, so it shows the pictures the
+                // page has now, and Edit opened again starts from them.
+                if (use === 'edit' && refusalCode(e) === 'photos_changed') {
+                    void readNodePage(opened.id).then((p) => { if (p) DeviceEventEmitter.emit(LEARN_PAGE_READ, p); });
+                }
             } finally {
                 setBusy(false);
             }
@@ -311,6 +349,29 @@ export default function NewKnowledgeScreen() {
                     <Pressable testID="learn-new-add-link" accessibilityRole="button" style={s.secondary} onPress={() => set({ sources: [...form.sources, { url: LINK_START, label: '' }] })}>
                         <Text style={s.secondaryText}>{t(LEARN_WRITE.addLink)}</Text>
                     </Pressable>
+                ) : null}
+
+                {pictures.length > 0 ? (
+                    // An owner's or admin's Edit: the page's pictures as it opened, each with Remove photo; nothing to add one.
+                    <View style={s.pagePhotos} testID="learn-new-page-photos">
+                        <Text style={s.small}>{t(LEARN_KEEP.photosLine)}</Text>
+                        {pictures.map((src, i) => {
+                            const out = takenOff.includes(i);
+                            const uri = pagePhotoUri(src, anchor);
+                            return (
+                                <View key={`${i}-${src}`} style={s.pagePhoto} testID={`learn-new-page-photo-${out ? 'off' : 'kept'}`}>
+                                    {uri ? (
+                                        <Image source={{ uri }} style={[s.photo, out && s.photoOff]} contentFit="cover" accessibilityLabel={t(LEARN_KEEP.photoN, { n: i + 1 })} />
+                                    ) : <View style={[s.photo, out && s.photoOff]} />}
+                                    <Pressable testID={`learn-new-photo-toggle-${i}`} accessibilityRole="button" disabled={busy}
+                                        accessibilityLabel={out ? t(LEARN_KEEP.keepPhotoN, { n: i + 1 }) : t(LEARN_KEEP.removePhotoN, { n: i + 1 })}
+                                        style={[s.secondary, s.toggle]} onPress={() => toggleTakenOff(i)}>
+                                        <Text style={s.secondaryText}>{out ? t(LEARN_KEEP.keepPhoto) : t(LEARN_WRITE.removePhoto)}</Text>
+                                    </Pressable>
+                                </View>
+                            );
+                        })}
+                    </View>
                 ) : null}
 
                 {wordsOnly ? null : <>

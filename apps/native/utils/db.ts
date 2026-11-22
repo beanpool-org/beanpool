@@ -47,6 +47,7 @@ import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
 import { DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
+import { chatLetsInKey, letInByFacts, memberTookPart, type LetInChat, type LetInDeal, type LetInFacts } from '@beanpool/core';
 import type { StandingAsk, StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
 import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
 // Old chat's photos and cards: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the web opens them).
@@ -2191,70 +2192,85 @@ const MEMBERS_OWN_LINE_SQL = (m: string) => `${m}.author_pubkey = ? AND IFNULL($
       AND (CASE WHEN json_valid(${m}.metadata) THEN json_extract(${m}.metadata, '$.${DM_FROM_ADMINS_KEY}') IS NOT 1 ELSE 1 END)`;
 
 /**
- * A chat `c` (a conversations row) the member took part in themselves (#3319 review at 1697ff89, R2-F1; Marty 21 Nov 2026:
- * "chatted with" counts only chats where the member wrote or accepted themselves): they wrote a line in it
- * ({@link MEMBERS_OWN_LINE_SQL}), or accepted its request by their own act, the node's `acceptedByYou` (engine/dm-requests.ts
- * RequestView), which this phone's row keeps from the node's answer to their Accept (decideMessageRequest, requestDecided).
- * Never a chat only the other person or the node wrote in: one opened by someone taking up the member's Offer (the trade
- * accepts it as nobody's act), a message that arrived straight away where requests are off and was never answered, a notice
- * from the node's inbox. Its one `?` is my key. Let in once's `dm` row ({@link LET_IN_SQL}) and "Add people I've chatted with
- * and my friends" (getChattedWithMembers) both read this one test, so that button never links someone the let-in would not.
+ * Whether the member wrote a line in chat `c` (a conversations row), as 1 or 0: a line of theirs by
+ * {@link MEMBERS_OWN_LINE_SQL}. Its one `?` is my key. With {@link MEMBER_ACCEPTED_SQL}, the two facts core's rule
+ * (@beanpool/core let-in.ts memberTookPart; #3319 review at 1697ff89, R2-F1; Marty 21 Nov 2026: "chatted with" counts only
+ * chats where the member wrote or accepted themselves) reads of a chat. Let in once ({@link LET_IN_SQL}) and "Add people I've
+ * chatted with and my friends" (getChattedWithMembers) both read these two facts and that one rule, so that button never
+ * links someone the let-in would not.
  */
-const MEMBERS_OWN_CHAT_SQL = (c: string) => `(EXISTS (SELECT 1 FROM messages own_line WHERE own_line.conversation_id = ${c}.id AND ${MEMBERS_OWN_LINE_SQL('own_line')})
-           OR (CASE WHEN json_valid(${c}.request)
-                    THEN json_extract(${c}.request, '$.state') = 'accepted' AND json_extract(${c}.request, '$.acceptedByYou') IS 1 ELSE 0 END))`;
+const MEMBER_WROTE_SQL = (c: string) => `(CASE WHEN EXISTS (SELECT 1 FROM messages own_line WHERE own_line.conversation_id = ${c}.id AND ${MEMBERS_OWN_LINE_SQL('own_line')}) THEN 1 ELSE 0 END)`;
 
 /**
- * The people this member let in, as one copy holds them (slice S3b, DESIGN-no-switch-messaging-fable.md §3 "Let in once"):
- * derived at each read, never stored or sent. Only a step the member took lets anyone in (#3319 review F1, the director's
- * call of 21 Nov 2026 on the rule "one person's word doesn't count": a stranger must not skip the door by his own act), so
- * each row is one the member made:
- * - `dm`: a direct chat the member took part in themselves ({@link MEMBERS_OWN_CHAT_SQL}): they wrote a line in it
- *   ({@link MEMBERS_OWN_LINE_SQL}: a sealed line of theirs, from any of their devices; never a line the node wrote in their
- *   name, as a notice from the node's inbox is, #3319 review N1), or accepted its request themselves: the node's
- *   `acceptedByYou` (engine/dm-requests.ts RequestView), never a request that reads accepted by the other's act, a trade's
- *   (acceptOnTrade: someone taking up the member's Offer, even one they Ignored), the node's own line's (nodeLineInRequest)
- *   or a node from before the field. letInOfRows takes the chat's pinned key.
- * - `key`: a friend the member added (owner_pubkey is the signer); a deal (pending or completed: one only asked, declined
- *   or cancelled before that is one person's word) where the member took a step: as its buyer (on an Offer they took it up
- *   or asked for it; on their own Need they approved the other's offer: only the buyer's act makes either), or as the
- *   seller on the buyer's own Need (the member offered, the buyer approved: the listing as this copy holds it names the
- *   buyer its author). A deal on the member's own Offer never counts on its own: a 1-step take-up (escrow.ts acceptPost)
- *   puts it at 'pending' with nothing from the seller, and only the buyer completes; whether the member approved a request
- *   instead is not on the phone. And someone the member paid (from_pubkey is theirs). A payment received is not here:
- *   anyone can send a member a Bean.
- * Binds my key seven times: the chat's other people, the participant row, my line, friends, my buys, my sales, my payments.
+ * Whether the member accepted chat `c`'s request by their own act, as 1 or 0: the node's `acceptedByYou`
+ * (engine/dm-requests.ts RequestView), which this phone's row keeps from the node's answer to their Accept
+ * (decideMessageRequest, requestDecided). Never a request that reads accepted by the other's act: one opened by someone taking
+ * up the member's Offer (the trade accepts it as nobody's act), nor a node from before the field.
+ */
+const MEMBER_ACCEPTED_SQL = (c: string) => `(CASE WHEN json_valid(${c}.request)
+                    AND json_extract(${c}.request, '$.state') = 'accepted' AND json_extract(${c}.request, '$.acceptedByYou') IS 1 THEN 1 ELSE 0 END)`;
+
+/**
+ * What one copy holds for let in once (slice S3b, DESIGN-no-switch-messaging-fable.md §3 "Let in once"), as plain facts:
+ * read at each read, never stored or sent. Whom they let in is core's rule (@beanpool/core let-in.ts letInByFacts, S5 part
+ * 3: the web reads the same rule over its own facts), never decided here. Each row is the member's own:
+ * - `dm`: each direct chat the member is in, its other people (`keys`), whether they wrote a line in it
+ *   ({@link MEMBER_WROTE_SQL}) and whether they accepted its request themselves ({@link MEMBER_ACCEPTED_SQL});
+ *   letInFactsOfRows adds the key its pin says it is sealed to.
+ * - `friend`: each friend row the member is in, either way round (`a` added `b`).
+ * - `deal`: each deal the member is a party to, whatever its state (`a` the buyer, `b` the seller), with the author of the
+ *   listing it is on as this copy holds it.
+ * - `pay`: each payment the member is a party to, either way (`a` paid `b`), once a pair.
+ * Binds my key nine times: the chat's other people, my line, the participant row, friends twice, deals twice, payments twice.
  */
 const LET_IN_SQL = `
-    SELECT 'dm' AS kind, c.id AS id, ${otherKeysSql()} AS keys FROM conversations c
+    SELECT 'dm' AS kind, c.id AS id, ${otherKeysSql()} AS keys, ${MEMBER_WROTE_SQL('c')} AS wrote, ${MEMBER_ACCEPTED_SQL('c')} AS accepted,
+           NULL AS a, NULL AS b, NULL AS status, NULL AS listing_author
+    FROM conversations c
     WHERE (c.type IS NULL OR c.type = 'dm')
       AND c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
-      AND ${MEMBERS_OWN_CHAT_SQL('c')}
-    UNION ALL SELECT 'key', NULL, friend_pubkey FROM friends WHERE owner_pubkey = ?
-    UNION ALL SELECT 'key', NULL, seller_pubkey FROM marketplace_transactions WHERE buyer_pubkey = ? AND status IN ('pending', 'completed')
-    UNION ALL SELECT 'key', NULL, t.buyer_pubkey FROM marketplace_transactions t WHERE t.seller_pubkey = ? AND t.status IN ('pending', 'completed')
-      AND EXISTS (SELECT 1 FROM posts p WHERE p.id = t.post_id AND p.author_pubkey = t.buyer_pubkey)
-    UNION ALL SELECT 'key', NULL, to_pubkey FROM transactions WHERE from_pubkey = ?
+    UNION ALL SELECT DISTINCT 'friend', NULL, NULL, 0, 0, owner_pubkey, friend_pubkey, NULL, NULL FROM friends
+      WHERE owner_pubkey = ? OR friend_pubkey = ?
+    UNION ALL SELECT DISTINCT 'deal', NULL, NULL, 0, 0, t.buyer_pubkey, t.seller_pubkey, t.status,
+           (SELECT p.author_pubkey FROM posts p WHERE p.id = t.post_id)
+      FROM marketplace_transactions t WHERE t.buyer_pubkey = ? OR t.seller_pubkey = ?
+    UNION ALL SELECT DISTINCT 'pay', NULL, NULL, 0, 0, from_pubkey, to_pubkey, NULL, NULL FROM transactions
+      WHERE from_pubkey = ? OR to_pubkey = ?
 `;
-const letInParams = (me: string): string[] => [me, me, me, me, me, me, me];
+const letInParams = (me: string): string[] => [me, me, me, me, me, me, me, me, me];
 
 /**
- * The keys one copy's {@link LET_IN_SQL} rows let in. A direct chat lets in only the key it is sealed to: its pin's (never a
- * key pinned before it, nor one a listing offers), or with no pin its one other person; none when its rows name several.
+ * A `dm` row's chat, as core's rule reads one: its other people, the key its pin says it is sealed to (never a key pinned
+ * before it, nor one a listing offers), and the member's two steps in it.
  */
-function letInOfRows(rows: readonly any[], pins: DmPeerPins | null, me: string): string[] {
-    const out = new Set<string>();
+function dmChatOfRow(row: any, pins: DmPeerPins | null): LetInChat {
+    const pinned = pins ? dmPinFor(pins, String(row.id)) : null;
+    return {
+        others: typeof row.keys === 'string' && row.keys ? row.keys.split(',') : [],
+        sealedTo: pinned?.peer ?? null,
+        memberWrote: Number(row.wrote) === 1,
+        acceptedByMember: Number(row.accepted) === 1,
+    };
+}
+
+/** One copy's {@link LET_IN_SQL} rows as the facts core's rule reads. */
+function letInFactsOfRows(rows: readonly any[], pins: DmPeerPins | null): LetInFacts {
+    const chats: LetInChat[] = [];
+    const friends: { owner: string; friend: string }[] = [];
+    const deals: LetInDeal[] = [];
+    const payments: { from: string; to: string }[] = [];
     for (const row of rows) {
-        if (row.kind === 'key') {
-            if (typeof row.keys === 'string' && row.keys && row.keys !== me) out.add(row.keys);
-            continue;
-        }
-        const pinned = pins ? dmPinFor(pins, String(row.id)) : null;
-        const others = typeof row.keys === 'string' && row.keys ? row.keys.split(',') : [];
-        const key = pinned?.peer ?? (others.length === 1 ? others[0] : null);
-        if (key && key !== me) out.add(key);
+        if (row.kind === 'dm') chats.push(dmChatOfRow(row, pins));
+        else if (row.kind === 'friend') friends.push({ owner: String(row.a ?? ''), friend: String(row.b ?? '') });
+        else if (row.kind === 'deal') deals.push({ buyer: String(row.a ?? ''), seller: String(row.b ?? ''), status: String(row.status ?? ''), listingAuthor: typeof row.listing_author === 'string' ? row.listing_author : null });
+        else if (row.kind === 'pay') payments.push({ from: String(row.a ?? ''), to: String(row.b ?? '') });
     }
-    return [...out];
+    return { chats, friends, deals, payments };
+}
+
+/** The keys one copy's {@link LET_IN_SQL} rows let in, by core's rule (@beanpool/core let-in.ts letInByFacts). */
+function letInOfRows(rows: readonly any[], pins: DmPeerPins | null, me: string): string[] {
+    return [...letInByFacts(me, letInFactsOfRows(rows, pins))];
 }
 
 /**
@@ -11599,10 +11615,10 @@ export async function fetchFriendsFromServer(publicKey: string): Promise<any[]> 
  * Everyone this member has chatted with in a chat of two on this phone, a Market chat too: "Add people I've chatted with and
  * my friends" (private contacts C6, utils/contacts-former.ts), which links each of them by hand, and a linked contact is let
  * in on every community this phone holds (let-in.ts). So only a chat the member took part in themselves counts, by the same
- * test let in once reads ({@link MEMBERS_OWN_CHAT_SQL}: a line they wrote, or a request they accepted themselves; #3319
+ * rule let in once reads (core let-in.ts memberTookPart over {@link MEMBER_WROTE_SQL} and {@link MEMBER_ACCEPTED_SQL}: a line they wrote, or a request they accepted themselves; #3319
  * review at 1697ff89, R2-F1, Marty 21 Nov 2026): never a chat only the other person wrote in, nor one opened by someone
  * taking up the member's Offer, nor a request someone sent them that they haven't accepted. And only the key let in once
- * takes from such a chat ({@link letInOfRows}; #3319 final review, R3-F1): its pin's, else its one other person, nobody when
+ * takes from such a chat (core let-in.ts chatLetsInKey; #3319 final review, R3-F1): its pin's, else its one other person, nobody when
  * its rows name several, never a key pinned before nor one on offer. Each with a card in this copy, and with `keys`, every
  * key that chat knows them by (dm-blocked.ts dmPeerKeys), so a block under any of them holds (blocklist.ts
  * withoutBlockedPeople, slice S7b). Throws when this copy or its DM pins can't be read: nobody is offered on a guess.
@@ -11610,16 +11626,16 @@ export async function fetchFriendsFromServer(publicKey: string): Promise<any[]> 
 export async function getChattedWithMembers(myPubkey: string): Promise<{ publicKey: string; callsign: string; keys: string[] }[]> {
     const here = await chatCopyForRequest();
     const pins = await dmPins.peekReadable(myPubkey, here.file);
-    const rows = await here.database.getAllAsync<{ id: string; keys: string | null }>(
-        `SELECT c.id AS id, ${otherKeysSql()} AS keys FROM conversations c
+    const rows = await here.database.getAllAsync<{ id: string; keys: string | null; wrote: number; accepted: number }>(
+        `SELECT c.id AS id, ${otherKeysSql()} AS keys, ${MEMBER_WROTE_SQL('c')} AS wrote, ${MEMBER_ACCEPTED_SQL('c')} AS accepted FROM conversations c
          WHERE c.type = 'dm' AND c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
-           AND ${NOT_A_REQUEST_FOR_ME('c.request')}
-           AND ${MEMBERS_OWN_CHAT_SQL('c')}`,
+           AND ${NOT_A_REQUEST_FOR_ME('c.request')}`,
         [myPubkey, myPubkey, myPubkey, myPubkey]
     );
     const people = new Map<string, string[]>();
     for (const row of rows) {
-        const [key] = letInOfRows([{ kind: 'dm', id: row.id, keys: row.keys }], pins, myPubkey);
+        const chat = dmChatOfRow(row, pins);
+        const key = memberTookPart(chat) ? chatLetsInKey(chat, myPubkey) : null;
         if (!key) continue;
         const keys = dmPeerKeys(row.keys ?? '', pins ? dmPinFor(pins, String(row.id)) : null);
         people.set(key, [...new Set([...(people.get(key) ?? []), ...keys])]);

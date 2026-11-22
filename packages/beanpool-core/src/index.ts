@@ -113,6 +113,8 @@ export * from './relay-envelope.js';
 export * from './outside-chat.js';
 // Which chat Message opens: an existing chat, the community you share, else across (S5 part 2); a community, all its addresses.
 export * from './message-path.js';
+// Let in once, one rule over plain facts for both apps (S3b; the web's in S5 part 3).
+export * from './let-in.js';
 export * from './community-homes.js';
 // A guest in a group hosted by another community: the step their phone takes from the host's roster (G1b).
 export * from './group-guest-steps.js';

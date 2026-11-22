@@ -591,12 +591,13 @@ describe('7  typed words, ticks, the card', () => {
  */
 // X2b: this browser's mail id (store.metaOrMake), then the ticks (hasLine, setMineState, the cursor's setMeta) before the
 // held item is judged. S5 hold Delivered: after the resend, the chats holding receipts are looked at (store.heldReceiptPeers).
+// #3366 review N1: the first lines left waiting, as this browser keeps them (store.getMeta#2), read once before the first page.
 const ON = [
     'loadIdentity#1', 'communityInfo#1', 'store.unsent#1', 'POST /api/mail/send#1', 'store.setMineState#1', 'store.heldReceiptPeers#1', 'store.getMeta#1',
-    'store.metaOrMake#1', 'store.getMeta#2', 'GET /api/mail#1', 'store.hasLine#1', 'store.setMineState#2', 'store.setMeta#1',
+    'store.metaOrMake#1', 'store.getMeta#2', 'store.getMeta#3', 'GET /api/mail#1', 'store.hasLine#1', 'store.setMineState#2', 'store.setMeta#1',
     'store.hasLine#2', 'store.chat#1', 'store.theirLines#1', 'loadBlocklist#1',
     'store.writeTheirs#1', 'store.oweReceipt#1', 'POST /api/mail/confirm#1', 'store.forgetReceiptsOwedBefore#1',
-    'store.owedReceipts#1', 'store.getMeta#3', 'fetch /api/community/info#1', 'store.setMeta#2', 'sign#1', 'POST /api/mail/send#2',
+    'store.owedReceipts#1', 'store.getMeta#4', 'fetch /api/community/info#1', 'store.setMeta#2', 'sign#1', 'POST /api/mail/send#2',
     'store.receiptsSent#1',
 ];
 const OFF = ['loadIdentity#1', 'communityInfo#1', 'store.unsent#1', 'store.setMineState#1', 'store.unsent#2'];

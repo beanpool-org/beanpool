@@ -68,6 +68,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Could not open this enterprise chat.': word('Could not open this enterprise chat.'),
     'Could not open this event chat.': word('Could not open this event chat.'),
     'This phone has switched community since this chat was opened.': word('This phone has switched community since this chat was opened.'),
+    // utils/db.ts dealStep and _signedRequest: a deal's step begun for another account than the one on the phone now (slice S6c).
+    'The account on this phone has changed since this chat was opened. Nothing was sent.': word('The account on this phone has changed since this chat was opened. Nothing was sent.'),
     "It isn't sealed, so nothing shows who wrote it.": word("It isn't sealed, so nothing shows who wrote it."),
     // utils/group-line-display.ts: a sealed line that names nobody, or names someone no longer in the group.
     'Unverified': word('Unverified', 'chat line'),

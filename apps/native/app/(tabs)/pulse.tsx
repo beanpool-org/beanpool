@@ -530,18 +530,18 @@ export default function PulseScreen() {
                     {...qr.listProps}
                     data={visibleItems}
                     keyExtractor={(item: any) => item.id}
-                    renderItem={({ item }: { item: PulseFeedItem }) => isPulseKnowledgeCard(item) ? (
+                    // `nodeUrl`: each card's pictures are asked of the community its item came from, never the one in use as it is drawn.
+                    renderItem={({ item, item: { nodeUrl } }: { item: PulseFeedItem }) => isPulseKnowledgeCard(item) ? (
                         // Local knowledge's card first, before anything else reads the item (amended §3.8): it has no owner,
                         // no link and nothing to hide or report, so the creator's card must never draw it.
-                        // Each card's pictures are asked of the community its item came from, never the one in use as it is drawn.
-                        <PulseKnowledgeCard item={item} nodeUrl={item.nodeUrl} />
+                        <PulseKnowledgeCard item={item} nodeUrl={nodeUrl} />
                     ) : (
                         <PulseFeedCard
                             item={item}
                             currentPubkey={identity?.publicKey}
                             onMute={handleMute}
                             onReport={handleReport}
-                            nodeUrl={item.nodeUrl}
+                            nodeUrl={nodeUrl}
                         />
                     )}
                     contentContainerStyle={[styles.listContent, { paddingTop: styles.listContent.padding + qr.listInset }]}

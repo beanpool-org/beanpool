@@ -449,6 +449,7 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
             if ('chatId' in opened) router.push(`/outside-chat/${opened.chatId}`);
             else if ('here' in opened) await message(opened.here);
             else Alert.alert(t('Message', undefined, 'button: write to'), opened.refused === 'off' ? t("This community doesn't take messages from other communities.")
+                : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.")
                 : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : t('Connect to your community to start a chat.'));
         }
     };

@@ -12,9 +12,10 @@
  * chat across the member declined (no composer, no Accept) is no existing chat: the community shared opens, or across
  * reopens it as an address card does. A read that fails counts as no chat there: the next rule then decides.
  *
- * Nothing it opens or makes is a chat the member can't write in now (#3354 review round 4, the rule's own invariant): a chat
- * across counts only where its community takes messages from other communities (by its info as this phone keeps it) and
- * its person is in no community the phone shares with them, by any of its addresses (utils/community-homes.ts).
+ * Nothing it opens or makes is a chat the member can't write in now (#3354 review round 4, the rule's own invariant), and no
+ * message goes to no one: a chat across counts only where its community takes messages from other communities and has an
+ * address of its own to send from (by its info as this phone keeps it: {@link acrossRefusal}), and its person is in no
+ * community the phone shares with them, by any of its addresses (utils/community-homes.ts: never a name it lost).
  *
  * On a guest's look (the phone set to a community it only visits as a guest, nodes.ts isGuestCopy) there is no community in
  * use (core's `setTo` null): nothing there is shared, and no chat across is weighed or made in its copy ({@link
@@ -26,7 +27,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { acrossChatListed, communityNamed, messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
 import type { getConversations } from './db';
-import { addressesOf, keptAsOne, keptProfileOf, namesCommunityInUse } from './community-homes';
+import { addressesFor, keptAsOne, keptProfileOf, namesCommunityInUse } from './community-homes';
 import type { NodeProfile } from './node-profile';
 import { sameCommunity } from './push-pins';
 
@@ -111,25 +112,36 @@ export async function messagePathOnPhone(me: string, links: readonly MessageLink
     const says = new Map<string, NodeProfile | null>();
     for (const c of [...(inFront ? [inFront] : []), ...others]) says.set(c, await keptProfileOf(c));
     const { outsideMessagesOn } = await import('./node-profile');
+    const named = [...links.map((l) => l.community), ...chats.map((c) => (c.kind === 'across' ? c.home : null))];
+    const communities = await Promise.all([...says].map(([c, profile]) => addressesFor(c, profile, c === inFront, keys, named)));
     return messagePathFor({
         links, chats, setTo, look, held: others, blocked,
-        whose: communityNamed([...says].map(([c, profile]) => addressesOf(c, profile, c === inFront))),
+        whose: communityNamed(communities),
         // Not heard from yet: its chats across still count (only a community that says it takes none is left out).
-        takesAcross: (c) => { const profile = says.get(c); return !profile || outsideMessagesOn(profile.features); },
+        takesAcross: (c) => { const profile = says.get(c); return !profile || acrossRefusal(profile, outsideMessagesOn) === null; },
     });
 }
 
+/**
+ * Why a community takes no messages across, by its info, or null: its switch is off (not heard from: taken as off), or it
+ * says it has no address of its own (core saysNoHome: its server answers every send 503, so a line would stay "Sending…").
+ */
+function acrossRefusal(profile: NodeProfile | null, on: (features: NodeProfile['features'] | undefined) => boolean): 'off' | 'no-home' | null {
+    return !on(profile?.features) ? 'off' : profile?.noHome ? 'no-home' : null;
+}
+
 /** What became of an across chat asked for: opened (its id); the person is in the community in use after all (`here`, their key); or why not. */
-export type AcrossOpened = { chatId: string } | { here: string } | { refused: 'no-community' | 'off' | 'blocked' };
+export type AcrossOpened = { chatId: string } | { here: string } | { refused: 'no-community' | 'off' | 'no-home' | 'blocked' };
 
 /**
  * A chat across with someone in a community the phone shares none with, made from the contact's link as an address card
  * makes one (outside-mail.ts openChatFromCard: kept in the community in use's file, open, named as the link names them; a
  * declined one there is opened again, and one kept with another home goes to the link's now). Refused with no community in
  * use (a guest's look included: its copy is not the member's, and its server would refuse the line), where the community
- * in use doesn't take messages from other communities, or for someone the account blocked; nothing is made then. Nor when
- * the link's address is one of the community in use's own (its info asked now: outside-chat-live.ts profileNow), where the
- * direct chat here is theirs: its server refuses every line across to one of its own names.
+ * in use doesn't take messages from other communities or has no address of its own to send from, or for someone the account
+ * blocked; nothing is made then. Nor when the link's address is one of the community in use's own (its info asked now:
+ * outside-chat-live.ts profileNow), where the direct chat here is theirs: its server refuses every line across to one of
+ * its own names.
  */
 export async function openAcrossChat(target: { key: string; home: string; name: string | null }): Promise<AcrossOpened> {
     const inFront = await anchorUrl();
@@ -139,8 +151,9 @@ export async function openAcrossChat(target: { key: string; home: string; name: 
     if (!ctx) return { refused: 'no-community' };
     const profile = await live.profileNow(ctx.nodeUrl).catch(() => null);
     const { outsideMessagesOn } = await import('./node-profile');
-    if (await namesCommunityInUse(ctx.nodeUrl, target.home, profile)) return { here: target.key };
-    if (!outsideMessagesOn(profile?.features)) return { refused: 'off' };
+    if (await namesCommunityInUse(ctx.nodeUrl, target.home, target.key, profile)) return { here: target.key };
+    const refused = acrossRefusal(profile, outsideMessagesOn);
+    if (refused) return { refused };
     const { openChatFromCard } = await import('./outside-mail');
     const chatId = await openChatFromCard(ctx, { key: target.key, home: target.home, name: target.name });
     return chatId ? { chatId } : { refused: 'blocked' };

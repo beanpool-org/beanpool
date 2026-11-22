@@ -11,7 +11,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { acrossChatListed, type KnownChat } from '@beanpool/core';
-import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
+import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, isHeldMember, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { communityAddress, sameCommunity } from './push-pins';
@@ -168,6 +168,18 @@ export async function heldChatsWith(myPubkey: string, keys: readonly string[]): 
         await closeUnlessInView();
     }
     return out;
+}
+
+/**
+ * Whether the copy of `community`, another community this phone holds, has `key` as a member (slice S5 part 2, round 5:
+ * community-homes.ts). The handle is Chat's, as {@link heldChatsWith}'s.
+ */
+export async function heldMemberThere(community: string, key: string): Promise<boolean> {
+    try {
+        return await isHeldMember(community, key);
+    } finally {
+        await closeUnlessInView();
+    }
 }
 
 /** A person in another community this phone holds, found by New message's search (slice S5 part 2). */

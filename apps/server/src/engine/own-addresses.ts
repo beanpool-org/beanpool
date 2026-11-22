@@ -19,15 +19,16 @@
  *      this node's own Take offline during the hold. A community never loses its own name through a check, a bug or a
  *      stale registrar (Marty, 2026-09-24). A former name counts as one of 1–4, so a node whose only name went former
  *      is never `unconfigured`. Only the current one is published: a former name is accepted, never advertised;
- *      `/api/community/info` lists former names apart (formerAddresses), with where the community lives now
- *      (primaryAddress), so the web app opened at one can say it has moved (lost-name L4);
+ *      `/api/community/info` lists former names apart (formerAddresses, never a lost one), with where the community
+ *      lives now (primaryAddress), so the web app opened at one can say it has moved (lost-name L4);
  *   5. loopback (localhost, 127.0.0.1, [::1]), a private-range address, a `.local` name and the Android emulator's
  *      10.0.2.2, ONLY on a node with none of 1–4 (a developer's, LAN or development node). A loopback name the
  *      operator listed in 2 doesn't count as one of 1–4 here: it names no community, only whichever machine an app
  *      runs on.
  *
- * A LOST name is refused, whichever of 1–4 it comes from (the mark is per host), and never published, but it still counts
- * as one of 1–4: a node whose only name was lost is never `unconfigured` (which would accept any host until the switch).
+ * A LOST name is refused, whichever of 1–4 it comes from (the mark is per host), and never published, nor listed as a
+ * former name, but it still counts as one of 1–4: a node whose only name was lost is never `unconfigured` (which would
+ * accept any host until the switch).
  * Only services/registrar-name-watch.ts marks a name lost (engine/registrar-names.ts `lost`), and only on:
  *   - proof: the registrar names another key as the name's holder AND an origin reached through the name answers as
  *     someone other than this server, on every counting round of a confirmation period (minutes when both name the same
@@ -558,11 +559,14 @@ export function tlsIdentifiers(): string[] {
 }
 
 /**
- * The BeanPool names this community had before (4), for `/api/community/info`: only so that the web app, opened at one
- * of them, can say where the community lives now (primaryAddress; design §6). Never an address to send an app to:
- * they are accepted here and never published. One that is also set on the server or confirmed in Settings is one of
- * this community's names in use (published), not a former one, and isn't here.
+ * The BeanPool names this community had before (4), for `/api/community/info`: so that the web app, opened at one of them,
+ * can say where the community lives now (primaryAddress; design §6), and so that an app takes a contact saved at one as
+ * someone here (@beanpool/core community-homes.ts). Never an address to send an app to: they are accepted here and never
+ * published. One that is also set on the server or confirmed in Settings is one of this community's names in use
+ * (published), not a former one, and isn't here. Nor is a LOST one: it is another community's now, this server answers as
+ * it no more (audienceStanding `foreign`), and an app that took it as ours would write to someone there in a chat here,
+ * which they would never see (#3354 review, round 5).
  */
 export function formerAddresses(): string[] {
-    return configuredAddresses().filter((a) => a.former).map((a) => a.address);
+    return configuredAddresses().filter((a) => a.former && !a.lost).map((a) => a.address);
 }

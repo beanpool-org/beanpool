@@ -13,10 +13,11 @@
  * **The invariant** (#3354 review, round 4: each round had found one more chat Message opened that no line could go from):
  * Message never opens, picks as the existing chat, or makes a chat the member can't write in now. A direct chat is writable
  * where the member is. A chat across is only while all three hold, and {@link messagePathFor} asks them of every one: Chat
- * lists it ({@link acrossChatListed}); the community that carries it takes messages from other communities (`takesAcross`);
- * and its person is in none of the communities the device shares with them, by any of their addresses (`whose`:
+ * lists it ({@link acrossChatListed}); the community that carries it takes messages from other communities and has an address
+ * of its own to send from (`takesAcross`; community-homes.ts saysNoHome); and its person is in none of the communities the device shares with them, by any of their addresses (`whose`:
  * community-homes.ts communityNamed, the address card's rule). Its carrier refuses every line to one of its own names for
- * good, and in another the direct chat there is the one to write in. A chat across that fails stays in Chat as it is.
+ * good, and in another the direct chat there is the one to write in. A chat across that fails stays in Chat as it is. And a
+ * message never silently goes to no one (round 5): a name a community lost is another's now, so `whose` never gives it.
  *
  * It replaces "Open {community} ›" and the switch question. The web holds one community (`held` empty), so a contact in any
  * other goes across there.
@@ -69,7 +70,7 @@ export type MessagePath =
  * which of those an address names, by any of its addresses (community-homes.ts communityNamed), else null. `chats`: every
  * chat the device's chat list shows that may be with this person (a chat across only when {@link acrossChatListed}); only
  * those under one of `links`' keys count, and a direct one only in `setTo`, `look` or a community in `held`. `takesAcross`:
- * whether a community takes messages from other communities, as far as the device knows. `blocked`: the app's block rule
+ * whether a community takes messages from other communities and can send to one, as far as the device knows. `blocked`: the app's block rule
  * for this person, by any of `links`' keys (the phone: on its own list, Marty 22 Nov, the S7 rule; the web: on this
  * community's list); asked before anything, so no path opens. `nothing`: no link (not on BeanPool yet), or across to an
  * address that isn't one.

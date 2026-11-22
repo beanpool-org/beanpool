@@ -12,15 +12,16 @@
  * opens, or across reopens it as the address card does. Someone unblocked since is messaged as anyone is (only a held
  * Delivered asks that).
  *
- * Nothing it opens or makes is a chat the member can't write in now (#3354 review round 4, the rule's own invariant): a chat
- * across counts, and one is made, only while this community takes messages from other communities, this account is a member
- * here (its server takes a line across from members alone), and the person is not in this community by any of its addresses.
+ * Nothing it opens or makes is a chat the member can't write in now (#3354 review round 4, the rule's own invariant), and no
+ * message goes to no one: a chat across counts, and one is made, only while this community takes messages from other
+ * communities, has an address of its own to send from (core saysNoHome), this account is a member here (its server takes a
+ * line across from members alone), and the person is not in this community by any of its addresses.
  */
-import { FIND_WORDS, acrossChatListed, messagePathFor, t, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
-import { checkMembership, nodeAddress, type Conversation } from './api';
+import { FIND_WORDS, acrossChatListed, messagePathFor, saysNoHome, t, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
+import { checkMembership, nodeAddress, type CommunityInfo, type Conversation } from './api';
 import { getBlocklistStatus, isUserBlocked, loadBlocklist } from './blocklist';
-import { communityInfoKept, communityInfoNow, namedHere } from './community-homes';
-import { chatsShown, openChatFromCard, outsideContext, outsideMessagesHere } from './outside-mail';
+import { communityInfoKept, communityInfoNow, inTime, namedHere } from './community-homes';
+import { chatsShown, openChatFromCard, outsideContext } from './outside-mail';
 
 /** A chat the list shows here, as MessagesPage has it: a direct one is weighed by its people. */
 export type HereChat = Pick<Conversation, 'id' | 'type' | 'participants'>;
@@ -31,9 +32,18 @@ async function blockedForMessage(keys: readonly string[]): Promise<boolean> {
     return keys.some((k) => isUserBlocked(k));
 }
 
-/** Whether the account is a member here, asked now. Not known (no answer): taken as one, as App does. */
+/** Whether the account is a member here, asked now. Not known (no answer, or none in time): taken as one, as App does. */
 async function memberHere(me: string): Promise<boolean> {
-    return (await checkMembership(me).catch(() => null))?.isMember !== false;
+    return (await inTime(() => checkMembership(me)))?.isMember !== false;
+}
+
+/**
+ * Why this community takes no messages across, by its info, or null: its switch is off (not read: taken as off), or it says it
+ * has no address of its own (its server answers every send 503, so a line would stay "Sending…").
+ */
+function acrossRefusal(info: CommunityInfo | null): 'off' | 'no-home' | null {
+    if ((info?.features as { outsideMessages?: unknown } | undefined)?.outsideMessages !== true) return 'off';
+    return saysNoHome(info) ? 'no-home' : null;
 }
 
 /**
@@ -52,31 +62,33 @@ export async function messagePathOnWeb(links: readonly MessageLink[], direct: re
             .map((key) => ({ kind: 'direct' as const, community: here, id: c.id, key }))),
         ...across.map((c) => ({ kind: 'across' as const, community: null, id: c.id, key: c.peerKey, home: c.peerHome })),
     ];
+    const info = links.length && !blocked ? await communityInfoKept() : null;
     // Asked only where a chat across is weighed. Not read yet: its chats across still count (only a community that says it takes none is left out).
-    const takesAcross = ctx && across.length ? (await outsideMessagesHere().catch(() => null)) !== false && await memberHere(ctx.identity.publicKey) : true;
+    const takesAcross = ctx && across.length ? (!info || acrossRefusal(info) === null) && await memberHere(ctx.identity.publicKey) : true;
     return messagePathFor({
         links, chats, setTo: here || null, look: null, held: [], blocked,
-        whose: namedHere(links.length && !blocked ? await communityInfoKept() : null),
+        whose: namedHere(info),
         takesAcross: () => takesAcross,
     });
 }
 
 /** What became of an across chat asked for: opened (its id); the person is in this community after all (`here`, their key); or why not. */
-export type AcrossOpened = { chatId: string } | { here: string } | { refused: 'no-community' | 'off' | 'not-member' | 'blocked' };
+export type AcrossOpened = { chatId: string } | { here: string } | { refused: 'no-community' | 'off' | 'no-home' | 'not-member' | 'blocked' };
 
 /**
  * A chat across made from a contact's link, as an address card makes one (outside-mail.ts openChatFromCard). Refused with no
- * account here, where this community doesn't take messages from other communities (or its info can't be read yet), for an
- * account that is no member here, or for someone the account blocked; nothing is made then. Nor when the link's address is
- * one of this community's own (its info asked now): the chat here is theirs, and its server refuses every line across to
- * one of its own names.
+ * account here, where this community doesn't take messages from other communities (or its info can't be read yet) or has no
+ * address of its own to send from, for an account that is no member here, or for someone the account blocked; nothing is made
+ * then. Nor when the link's address is one of this community's own (its info asked now): the chat here is theirs, and its
+ * server refuses every line across to one of its own names.
  */
 export async function openAcrossOnWeb(target: { key: string; home: string; name: string | null }): Promise<AcrossOpened> {
     const ctx = await outsideContext().catch(() => null);
     if (!ctx) return { refused: 'no-community' };
     const info = await communityInfoNow();
     if (namedHere(info)(target.home) !== null) return { here: target.key };
-    if ((info?.features as { outsideMessages?: unknown } | undefined)?.outsideMessages !== true) return { refused: 'off' };
+    const refused = acrossRefusal(info);
+    if (refused) return { refused };
     if (!(await memberHere(ctx.identity.publicKey))) return { refused: 'not-member' };
     const chatId = await openChatFromCard(ctx, { key: target.key, home: target.home, name: target.name });
     return chatId ? { chatId } : { refused: 'blocked' };
@@ -106,6 +118,7 @@ export async function messageOnWeb(links: ReadonlyArray<{ key: string; community
     if ('here' in opened) return { dm: opened.here };
     return {
         refused: opened.refused === 'off' ? t("This community doesn't take messages from other communities.")
+            : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.")
             : opened.refused === 'not-member' ? t(FIND_WORDS.notAMember)
                 : opened.refused === 'blocked' ? BLOCKED_WORDS() : t("Couldn't reach your community. Check your connection and try again."),
     };

@@ -337,7 +337,7 @@ export default function NewMessageScreen() {
             if (path.open === 'across') {
                 const opened = await openAcrossChat(path);
                 if ('chatId' in opened) { router.replace(`/outside-chat/${opened.chatId}`); return; }
-                if ('refused' in opened) throw new Error(opened.refused === 'off' ? t("This community doesn't take messages from other communities.") : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : '');
+                if ('refused' in opened) throw new Error(opened.refused === 'off' ? t("This community doesn't take messages from other communities.") : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.") : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : '');
             }
             const fromNode = nodeResults.find(m => m.public_key === pubkey);
             if (fromNode) await keepCards([fromNode]);

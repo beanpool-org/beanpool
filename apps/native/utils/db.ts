@@ -2200,8 +2200,19 @@ export async function getHeldMembers(myPubkey: string, community: string, typed:
     }
 }
 
+/** A member of a held copy by their key, not pruned (slice S5 part 2, round 5: community-homes.ts). */
+const HELD_MEMBER_SQL = `SELECT 1 AS here FROM members WHERE public_key = ? AND (status IS NULL OR status != 'pruned') LIMIT 1`;
+
+/**
+ * Whether the copy of `community`, another community this phone holds, has `key` as a member, read through a held, read-only
+ * handle (as {@link getHeldMembers}). No when there is nothing to read; a read that fails throws.
+ */
+export async function isHeldMember(community: string, key: string): Promise<boolean> {
+    return !!(await heldListRead<any>(community, 'member', [key]))?.length;
+}
+
 /** The names of the statements a held copy runs (utils/held-copies.ts takes no SQL from a caller, only one of these). */
-type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews' | 'outsideChats' | 'outsideLastChanges' | 'letIn' | 'members';
+type HeldStatement = 'conversations' | 'dmFacts' | 'latest' | 'previews' | 'outsideChats' | 'outsideLastChanges' | 'letIn' | 'members' | 'member';
 /** Every statement a held copy runs: one plain SELECT each (held-copies.ts isOneRead), refused at its use otherwise. */
 const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
     conversations: HELD_CONVERSATIONS_SQL, dmFacts: DM_FACTS_SQL, latest: HELD_LATEST_SQL, previews: HELD_PREVIEWS_SQL,
@@ -2209,8 +2220,8 @@ const HELD_STATEMENTS: Readonly<Record<HeldStatement, string>> = Object.freeze({
     outsideChats: OUTSIDE_CHATS_HELD_SQL, outsideLastChanges: OUTSIDE_LAST_CHANGES_HELD_SQL,
     // The people the member let in (slice S3b).
     letIn: LET_IN_SQL,
-    // New message's search of every held community's people (slice S5 part 2).
-    members: HELD_MEMBERS_SQL,
+    // New message's search of every held community's people, and one of them by key (slice S5 part 2).
+    members: HELD_MEMBERS_SQL, member: HELD_MEMBER_SQL,
 });
 
 /**

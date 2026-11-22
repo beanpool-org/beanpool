@@ -14,7 +14,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactElement } fr
 import { QRCodeSVG } from 'qrcode.react';
 import {
     FIND_WORDS, OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_DOOR_SWITCH_BROWSER, OUTSIDE_LINE_TEXT_MAX, addressCardFromText,
-    addressCardLink, findRefusal, t, type AddressCard,
+    addressCardLink, findRefusal, saysNoHome, t, type AddressCard,
 } from '@beanpool/core';
 import {
     OUTSIDE_SEND_MS, OutsideMailError, doorOpen, findByName, findMeOn, myAddressCard, myHome, openChatFromCard, outsideContext, outsideErrorWords,
@@ -148,10 +148,13 @@ export function AddressCardPanel({ onBack, onOpenChat }: { onBack: () => void; o
         if (c.key === ctx.identity.publicKey) { setCardNote(t("That's your own card.")); return; }
         // By any of this community's addresses, not one spelling (lib/community-homes.ts, Message's rule too): its server
         // refuses every line across to one of its own names, an older main address among them.
-        if (c.home === await myHome(ctx).catch(() => null) || namedHere(await communityInfoKept(), ctx.nodeUrl)(c.home) !== null) {
+        const info = await communityInfoKept();
+        if (c.home === await myHome(ctx).catch(() => null) || namedHere(info, ctx.nodeUrl)(c.home) !== null) {
             setCardNote(t('{name} is in this community: write to them here.', { name: c.name }));
             return;
         }
+        // It says it has no address of its own: its server sends no line, so no chat is made (Message's rule too).
+        if (saysNoHome(info)) { setCardNote(t("This community's server knows none of its own names yet, so it can't send to another community.")); return; }
         // A block is the account's: no box to write to them (as the phone's card screen).
         if (await ctx.isBlocked(c.key).catch(() => false)) { setCardNote(t('You have blocked this user. Messaging is disabled.')); return; }
         setCardNote(null);

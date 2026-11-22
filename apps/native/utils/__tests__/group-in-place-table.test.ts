@@ -728,7 +728,7 @@ function parted(): string[] {
     if (ring.after > (st?.after ?? 0)) out.push('cursor');
     if (ring.highest > (st?.highest ?? 0)) out.push('highest');
     if (ring.lockKept && !st) out.push('lock');
-    for (const id of ring.signers.keys()) if (!ring.unsavedSigners.has(id) && !signers.has(id)) out.push(`signer ${id}`);
+    for (const id of ring.signers.keys()) if (!ring.unsavedSigners?.has(id) && !signers.has(id)) out.push(`signer ${id}`);
     for (let n = 1; n <= (st?.after ?? 0); n++) if (!epochs.has(n)) out.push(`the cursor past epoch ${n}`);
     return out;
 }
@@ -1062,6 +1062,25 @@ describe('the sticky lock: on disk before any of the chat is shown or sent; a gr
     it('a copy that holds its keys: the same, by the keys (the contrast that was always so)', async () => {
         await restart();
         await nothingReadable();
+    });
+
+    it.each([
+        ['its key', /INTO group_chat_epochs/], ['the cursor', /\(group_id, after\)/], ['the highest epoch', /\(group_id, highest\)/],
+    ])('a line goes only once the file holds its key, the cursor and the highest epoch: %s refused sends nothing', async (_name, sql) => {
+        unheldCopy();
+        db.enterChatInPlace(A);
+        h.cut = { file: A_FILE, sql, times: 1, refuse: true, hit: () => {} };
+        await expect(db.postGroupChatMessage(g, 'sealed', randomUUID(), null, { after: null }, A)).rejects.toMatchObject({ code: 'store', message: GROUP_KEY_STORE_UNREAD_TEXT });
+        expect([h.cut.times, servers[A].lines.length]).toEqual([0, 1]);
+        h.cut = null;
+        const going = holdNext((m, p) => m === 'POST' && p === `/api/groups/${g}/chat/message`);
+        const sending = db.postGroupChatMessage(g, 'sealed', randomUUID(), null, { after: null }, A);
+        await going.asked;
+        expect(onDisk(), 'as the line leaves the phone').toMatchObject({ epochs: [1], after: 1, highest: 1, locked: true });
+        going.letGo();
+        await sending;
+        await db.leaveChatInPlace(A);
+        expect([servers[A].lines.length, servers[A].wordsIn]).toEqual([2, []]);
     });
 
     it('a chat left while its own answer was on its way: the answer is refused, so nothing is shown as locked that a restart would not know', async () => {

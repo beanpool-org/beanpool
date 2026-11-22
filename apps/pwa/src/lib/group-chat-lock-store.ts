@@ -10,8 +10,9 @@
  * groups it holds locked, so the conversations list can ask once; a group's row and the index row are written in one
  * transaction (review of #1816, finding 4), so neither is kept without the other.
  *
- * Reads THROW when the store can't be read (no IndexedDB, an open or a transaction that fails): the caller fails closed,
- * never "never held" (confirmation 2 of #1788, finding 1). Writes never throw. Sign Out and the delete at the last
+ * Reads THROW when the store can't be read (no IndexedDB, an open or a transaction that fails, or one that hasn't answered
+ * in LOCK_STORE_MS): the caller fails closed, never "never held" (confirmation 2 of #1788, finding 1). Writes never throw,
+ * and are waited for no longer than that. Sign Out and the delete at the last
  * community clear it (lib/device-prefs.ts clearAccountStorage); Force Clear & Re-Sync keeps it, as the phone keeps its
  * tables (a security fact, not a cache). Another tab's Sign Out deletes the database: this tab lets go of it at once
  * (`versionchange`), so the delete isn't held up and this tab's next read opens the fresh one (finding 8).
@@ -21,11 +22,22 @@ import type { GroupLockState, GroupLockStore } from './group-chat-keys';
 const DB_NAME = 'beanpool-group-chat-locks';
 const STORE = 'locks';
 
+/** How long this store is waited for: an open or a transaction that never answers is a failed one (the phone's STORE_READ_MS). */
+export const LOCK_STORE_MS = 15_000;
+
+function inTime<T>(work: Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('The group chat lock store did not answer.')), LOCK_STORE_MS);
+        work.then(resolve, reject).finally(() => clearTimeout(timer));
+    });
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
     if (dbPromise) return dbPromise;
-    const p = new Promise<IDBDatabase>((resolve, reject) => {
+    let givenUp = false;
+    const p = inTime(new Promise<IDBDatabase>((resolve, reject) => {
         let req: IDBOpenDBRequest;
         try {
             if (typeof indexedDB === 'undefined' || !indexedDB) throw new Error('This browser has no IndexedDB.');
@@ -37,6 +49,8 @@ function openDb(): Promise<IDBDatabase> {
         req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
         req.onsuccess = () => {
             const db = req.result;
+            // Open too late for anyone: closed, so it never holds up a delete from another tab.
+            if (givenUp) { try { db.close(); } catch { /* already closed */ } return; }
             // A delete or an upgrade from another tab (Sign Out there): close, and open afresh next time.
             (db as IDBDatabase & { onversionchange: unknown }).onversionchange = () => {
                 try { db.close(); } catch { /* already closed */ }
@@ -46,21 +60,21 @@ function openDb(): Promise<IDBDatabase> {
         };
         req.onerror = () => reject(req.error ?? new Error('The group chat lock store did not open.'));
         (req as IDBOpenDBRequest & { onblocked: unknown }).onblocked = () => reject(new Error('The group chat lock store is blocked.'));
-    });
+    }));
     dbPromise = p;
     // A failed open is tried again next time, never remembered.
-    p.catch(() => { if (dbPromise === p) dbPromise = null; });
+    p.catch(() => { givenUp = true; if (dbPromise === p) dbPromise = null; });
     return p;
 }
 
 function get(key: string): Promise<unknown> {
-    return openDb().then((db) => new Promise<unknown>((resolve, reject) => {
+    return inTime(openDb().then((db) => new Promise<unknown>((resolve, reject) => {
         const tx = db.transaction(STORE, 'readonly');
         const req = tx.objectStore(STORE).get(key);
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error ?? new Error('The group chat lock store did not read.'));
         tx.onabort = () => reject(tx.error ?? new Error('The group chat lock store did not read.'));
-    }));
+    })));
 }
 
 function asState(v: unknown): GroupLockState {
@@ -74,7 +88,7 @@ const groupOf = (rowKey: string) => rowKey.slice(rowKey.indexOf('/') + 1);
 
 /** Change a group's row and list the group in its identity's index row, in ONE transaction (finding 4). Never throws. */
 function updateWithIndex(key: string, change: (prev: unknown) => unknown): Promise<void> {
-    return openDb().then((db) => new Promise<void>((resolve) => {
+    return inTime(openDb().then((db) => new Promise<void>((resolve) => {
         try {
             const tx = db.transaction(STORE, 'readwrite');
             const store = tx.objectStore(STORE);
@@ -92,7 +106,7 @@ function updateWithIndex(key: string, change: (prev: unknown) => unknown): Promi
         } catch {
             resolve();
         }
-    })).catch(() => { });
+    }))).catch(() => { });
 }
 
 /** The browser's store. */

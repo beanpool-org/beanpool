@@ -30,7 +30,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     // lib/group-chat-lines.ts: the notice above the box, and why a line wasn't sent or changed.
     "This community's node is older and can read this group's chat. It will be locked once the node is updated.": word("This community's node is older and can read this group's chat. It will be locked once the node is updated."),
     "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned.": word("End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned."),
-    "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": word("This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock."),
+    "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": word("This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock."),
     "This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment.": word("This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment."),
     "It isn't sealed, so nothing shows who wrote it.": word("It isn't sealed, so nothing shows who wrote it."),
     "This message's key isn't in this browser, so it can't be edited here.": word("This message's key isn't in this browser, so it can't be edited here."),

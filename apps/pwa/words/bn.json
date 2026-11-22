@@ -4096,7 +4096,7 @@
   "This month: {trades} · +{in} in · −{out} out": "এই মাসে: {trades} · +{in} এসেছে · −{out} গেছে",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "এই নোড সরাসরি বার্তার বদলে একটি তালাবদ্ধ গ্রুপের আলাপ দিয়ে উত্তর দিয়েছে, তাই কিছুই খোলেনি।",
   "This node is serving an older key than one this app already holds.": "এই নোড এমন একটি চাবি দিচ্ছে, যা এই অ্যাপের কাছে আগে থেকে থাকা চাবির চেয়ে পুরোনো।",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "এই নোড এখন বলছে এই আলাপ তালাবদ্ধ নয়। এই ব্রাউজার এর চাবিগুলো রেখেছে, তাই এটি এখনও প্রতিটি বার্তা তালাবদ্ধ করে, এবং যা তালাবদ্ধ করতে পারে না তার কিছুই পাঠায় না।",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "এই নোড এখন বলছে এই আলাপ তালাবদ্ধ নয়। এই ব্রাউজার এটিকে তালাবদ্ধ দেখেছে, তাই এটি এখনও প্রতিটি বার্তা তালাবদ্ধ করে, এবং যা তালাবদ্ধ করতে পারে না তার কিছুই পাঠায় না।",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "এই নোড বলছে এই আলাপের চাবি এমন কারও কাছে আছে, যিনি এর সদস্য তালিকায় নেই। কিছুই পাঠানো হয়নি।",
   "This project's deadline has passed: it takes no more pledges.": "এই প্রকল্পের সময়সীমা পার হয়ে গেছে: এটি আর কোনো অঙ্গীকার নেয় না।",
   "This request is no longer open. You can ask again.": "এই অনুরোধ আর খোলা নেই। আপনি আবার অনুরোধ করতে পারেন।",

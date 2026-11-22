@@ -109,7 +109,7 @@ vi.mock('../ways-back', async (importOriginal) => {
     };
 });
 
-import { setLanguage, t } from '@beanpool/core';
+import { setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { WAYS_BACK_LINES } from '../../components/WaysBackList';
 import WaysBackScreen from '../../app/ways-back';
@@ -231,7 +231,8 @@ const all = (sel: string) => Array.from(host!.querySelectorAll(sel)) as HTMLElem
 
 describe('a copy the key vault kept after a delete: the words name one path, and its screen offers Remove for that copy (review of #3369)', () => {
     it("the path is the screen's own words, step by step", () => {
-        expect(VAULT_COPIES_REMOVE_PATH).toBe(screenSteps().map((s) => t(s)).join(' → '));
+        // In English each step is its catalog key, as the screen shows it.
+        expect(VAULT_COPIES_REMOVE_PATH).toBe(screenSteps().join(' → '));
     });
 
     for (const row of ROWS) {

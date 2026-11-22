@@ -22,6 +22,7 @@
  * Every word here is MCP tool text an assistant reads, outside the members' word index.
  */
 import { KNOWLEDGE_LIMITS, type KnowledgePhotoCredit } from '@beanpool/core';
+import { licenceAsksCredit } from '../engine/knowledge.js';
 import {
     PayloadTooLargeError, ProhibitedContentTypeError, RequestTimeoutError, type SsrfSafeResponse,
 } from '../engine/pulse-resolver.js';
@@ -77,17 +78,18 @@ export function commonsFilePage(name: string): string {
 
 // ── The licence table (Question 2) ───────────────────────────────────────────────────────────
 
-interface OpenLicence { code: string; names: readonly string[]; name: string; url: string | null; link: RegExp | null; credit: boolean }
+interface OpenLicence { code: string; names: readonly string[]; name: string; url: string | null; link: RegExp | null }
 
 /**
  * The open set, as Commons' answers name each licence (extmetadata: License, LicenseShortName, LicenseUrl), pinned to its
- * real answers. A licence's page may be written with or without a slash, a deed or the legal code.
+ * real answers. A licence's page may be written with or without a slash, a deed or the legal code. Which of them ask for the
+ * maker's credit is engine/knowledge.ts licenceAsksCredit, by `name`.
  */
 export const COMMONS_OPEN_LICENCES: readonly OpenLicence[] = [
-    { code: 'cc-by-4.0', names: ['CC BY 4.0'], name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/', link: /^https?:\/\/creativecommons\.org\/licenses\/by\/4\.0(?:\/(?:deed\.[a-z-]+|legalcode(?:\.[a-z-]+)?)?)?$/i, credit: true },
-    { code: 'cc-by-sa-4.0', names: ['CC BY-SA 4.0'], name: 'CC BY-SA 4.0', url: 'https://creativecommons.org/licenses/by-sa/4.0/', link: /^https?:\/\/creativecommons\.org\/licenses\/by-sa\/4\.0(?:\/(?:deed\.[a-z-]+|legalcode(?:\.[a-z-]+)?)?)?$/i, credit: true },
-    { code: 'cc0', names: ['CC0', 'CC0 1.0'], name: 'CC0', url: 'https://creativecommons.org/publicdomain/zero/1.0/', link: /^https?:\/\/creativecommons\.org\/publicdomain\/zero\/1\.0(?:\/(?:deed\.[a-z-]+|legalcode(?:\.[a-z-]+)?)?)?$/i, credit: false },
-    { code: 'pd', names: ['Public domain'], name: 'Public domain', url: null, link: /^https?:\/\/creativecommons\.org\/publicdomain\/mark\/1\.0(?:\/(?:deed\.[a-z-]+)?)?$/i, credit: false },
+    { code: 'cc-by-4.0', names: ['CC BY 4.0'], name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/', link: /^https?:\/\/creativecommons\.org\/licenses\/by\/4\.0(?:\/(?:deed\.[a-z-]+|legalcode(?:\.[a-z-]+)?)?)?$/i },
+    { code: 'cc-by-sa-4.0', names: ['CC BY-SA 4.0'], name: 'CC BY-SA 4.0', url: 'https://creativecommons.org/licenses/by-sa/4.0/', link: /^https?:\/\/creativecommons\.org\/licenses\/by-sa\/4\.0(?:\/(?:deed\.[a-z-]+|legalcode(?:\.[a-z-]+)?)?)?$/i },
+    { code: 'cc0', names: ['CC0', 'CC0 1.0'], name: 'CC0', url: 'https://creativecommons.org/publicdomain/zero/1.0/', link: /^https?:\/\/creativecommons\.org\/publicdomain\/zero\/1\.0(?:\/(?:deed\.[a-z-]+|legalcode(?:\.[a-z-]+)?)?)?$/i },
+    { code: 'pd', names: ['Public domain'], name: 'Public domain', url: null, link: /^https?:\/\/creativecommons\.org\/publicdomain\/mark\/1\.0(?:\/(?:deed\.[a-z-]+)?)?$/i },
 ];
 
 type Meta = Record<string, { value?: unknown } | undefined>;
@@ -269,7 +271,7 @@ export async function readCommonsPictures(grantId: string, names: readonly strin
         const mime = typeof info.mime === 'string' ? info.mime.toLowerCase() : '';
         if (!STILL.includes(mime)) return refuse(grantId, COMMONS_HOST, 'not still', COMMONS_WORDS.notStill(n, mime));
         const maker = commonsPlainText(metaText(em, 'Artist'));
-        if (!maker && licence.licence.credit) return refuse(grantId, COMMONS_HOST, 'no maker', COMMONS_WORDS.noMaker(n));
+        if (!maker && licenceAsksCredit(licence.licence.name)) return refuse(grantId, COMMONS_HOST, 'no maker', COMMONS_WORDS.noMaker(n));
         const url = copyAddress(info.thumburl);
         if (!url) return refuse(grantId, COMMONS_HOST, 'copy elsewhere', COMMONS_WORDS.copyElsewhere(n));
         if (Number(info.thumbheight) > AGENT_PHOTO_MAX_INPUT_SIDE || Number(info.thumbwidth) > AGENT_PHOTO_MAX_INPUT_SIDE) {

@@ -1080,6 +1080,8 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // photo_urls: this server fetches any public address it is given.
+        openWorld: true,
         // Read each time the tools are listed (agent/mcp-route.ts): whether a price is required follows the Beans switch.
         get inputSchema() { return ownerListingSchema(); },
         outputSchema: POST_OUT,
@@ -1094,6 +1096,8 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // photo_urls: this server fetches any public address it is given.
+        openWorld: true,
         get inputSchema() { return ownerListingSchema(); },
         outputSchema: POST_OUT,
         // As the owner only: an enterprise's Need is create_enterprise_listing's.
@@ -1108,6 +1112,8 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // photo_urls: this server fetches any public address it is given.
+        openWorld: true,
         inputSchema: {
             type: 'object',
             properties: {
@@ -1174,6 +1180,8 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // photo_urls: this server fetches any public address it is given.
+        openWorld: true,
         // Read each time the tools are listed, as create_offer's: whether a price is required follows the Beans switch.
         get inputSchema() { return enterpriseListingSchema(); },
         outputSchema: POST_OUT,
@@ -1859,6 +1867,8 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // photo_urls: this server fetches any public address it is given.
+        openWorld: true,
         inputSchema: {
             type: 'object',
             properties: {

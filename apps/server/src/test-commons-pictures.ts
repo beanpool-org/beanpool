@@ -15,7 +15,7 @@
  *     says it waits; turned down, taken back or disconnected, the pictures and credits go; disconnected, AI assistants off,
  *     "May post for me" unticked or no longer an owner while the copy is fetched, nothing is filed.
  *  E. Which credit ends on which picture, at Approve: keep, remove, reorder, Edit first, a credit sent by the app, a member's own,
- *     an upload byte for byte the same as a Commons picture.
+ *     an upload byte for byte the same as a Commons picture, two Commons files byte for byte the same under any two licences.
  *  F. The page read, and the writes that must not hurt it: 8 rows read; a web Edit, a 1.4.7 phone's Edit (rows typed over or
  *     deleted), a typed source to the same page, an approved fix, Still right and the out-of-date mark; a maker's hostile text;
  *     the standby's copy; Learn off.
@@ -54,8 +54,9 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { issueAutomationToken } from './automation-tokens.js';
 import { admitAgentPhoto, agentPhotosPerDay, agentPhotosToday, resetAgentLimits } from './agent/limits.js';
 import { __usePhotoFetchResolverForTests } from './agent/owner-photos.js';
-import { commonsFileName, commonsLicence, commonsPlainText, commonsUpForDeletion } from './agent/commons-pictures.js';
+import { COMMONS_OPEN_LICENCES, commonsFileName, commonsLicence, commonsPlainText, commonsUpForDeletion } from './agent/commons-pictures.js';
 import { STOPPED_WHILE_FETCHED } from './agent/knowledge.js';
+import { licenceAsksCredit } from './engine/knowledge.js';
 import { knowledgeDraftWhole } from './engine/knowledge-drafts.js';
 import { comparedColumns, TABLES } from './engine/replication-manifest.js';
 import { logger } from './logger.js';
@@ -220,6 +221,8 @@ async function main(): Promise<void> {
         assert(want === null ? !v.ok && v.why === 'not_open' && v.said === 'CC BY-SA 3.0' : v.ok && v.licence.name === want,
             `A. real answer ${start}: ${want ?? 'refused, naming CC BY-SA 3.0'} (${JSON.stringify(v.ok ? v.licence.name : v)})`);
     }
+    assert(COMMONS_OPEN_LICENCES.map((l) => `${l.name}: ${licenceAsksCredit(l.name) ? 'credit' : 'none'}`).join(', ') === 'CC BY 4.0: credit, CC BY-SA 4.0: credit, CC0: none, Public domain: none'
+        && licenceAsksCredit('a licence not in the table'), 'A. which of the open set asks for a credit, by the name kept: the two CC BY ones; one not in the table is taken to');
     const ogg = real('"Hundreaaorsnotti"');
     assert(commonsUpForDeletion(ogg, em(ogg)) === true && ogg.imageinfo[0].mime === 'application/ogg',
         'A. real answer, the .ogg: up for deletion (only its categories say so) and not a still picture');
@@ -561,6 +564,52 @@ async function main(): Promise<void> {
             const got = await coloursOf(post);
             assert(r.status === 200 && got === colours && credits(list) === want,
                 `E. ${what}: pictures [${got}], credits [${credits(list)}] (${r.status === 200 ? '' : r.text.slice(0, 160)})`);
+        }
+        // Two DIFFERENT files on Commons whose copies are byte for byte the same (review of #3351, R1): the page shows the picture
+        // once, with the credit of a file whose licence asks for one, in whichever order the assistant named them.
+        const CC0 = pageUrl(real('Kartagina amfiteater'));
+        const FILES = { 'CC0': CC0, 'Public domain': PANO, 'CC BY 4.0': SAND, 'CC BY-SA 4.0': ROUGH } as const;
+        type Licence = keyof typeof FILES;
+        const FIRST_WORD: Record<Licence, string> = { 'CC0': 'Kartagina', 'Public domain': 'Przełęcz', 'CC BY 4.0': 'Sanderling', 'CC BY-SA 4.0': 'Roughtail' };
+        const fileCopies = async (title: string, named: readonly Licence[]) => {
+            fresh();
+            standIn.copy = 'fixed';
+            standIn.fixed = { path: /./, bytes: blue };
+            const r = await a.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title, commons_pictures: named.map((l) => FILES[l]) } });
+            if (r.isError) throw new Error(errorText(r));
+            const id = structured(r).draftId as string;
+            const whole = (await call(owen, 'GET', `/api/knowledge/drafts/${id}`)).body?.draft;
+            return { id, photos: whole.photos as string[], shown: ((whole.photoCredits ?? []) as any[]).map((c) => (c ? c.licence : null)) };
+        };
+        // The files named, in order, and whose credit the one picture carries: written by hand, every order of every two.
+        const copyRows: Array<[Licence[], Licence]> = [
+            [['CC0', 'CC BY 4.0'], 'CC BY 4.0'], [['CC BY 4.0', 'CC0'], 'CC BY 4.0'],
+            [['CC0', 'CC BY-SA 4.0'], 'CC BY-SA 4.0'], [['CC BY-SA 4.0', 'CC0'], 'CC BY-SA 4.0'],
+            [['Public domain', 'CC BY 4.0'], 'CC BY 4.0'], [['CC BY 4.0', 'Public domain'], 'CC BY 4.0'],
+            [['Public domain', 'CC BY-SA 4.0'], 'CC BY-SA 4.0'], [['CC BY-SA 4.0', 'Public domain'], 'CC BY-SA 4.0'],
+            // Both ask, or neither does: the first named.
+            [['CC BY 4.0', 'CC BY-SA 4.0'], 'CC BY 4.0'], [['CC BY-SA 4.0', 'CC BY 4.0'], 'CC BY-SA 4.0'],
+            [['CC0', 'Public domain'], 'CC0'], [['Public domain', 'CC0'], 'Public domain'],
+            // Three: the first that asks.
+            [['CC0', 'Public domain', 'CC BY-SA 4.0'], 'CC BY-SA 4.0'], [['Public domain', 'CC BY-SA 4.0', 'CC BY 4.0'], 'CC BY-SA 4.0'],
+        ];
+        for (const [i, [named, want]] of copyRows.entries()) for (const keep of ['nothing sent', 'the first copy sent', 'the last copy sent'] as const) {
+            const d = await fileCopies(`Two files, one picture, row ${i + 1}`, named);
+            const photos = keep === 'nothing sent' ? undefined : [keep === 'the first copy sent' ? d.photos[0] : d.photos[d.photos.length - 1]];
+            const r = await call(owen, 'POST', `/api/knowledge/drafts/${d.id}/approve`, { checkedSources: true, ...(photos ? { photos } : {}) });
+            const list = r.body?.post ? stored(r.body.post.id) : [];
+            const row = list.find((s) => s.photo !== undefined);
+            assert(new Set(d.photos).size === 1 && d.shown.length === named.length && d.shown.every((l) => l === want) && r.status === 200 && await coloursOf(r.body?.post) === 'b'
+                && credits(list) === `1=${FIRST_WORD[want]}` && row?.credit?.licence === want && row?.label === knowledgeCreditLabel(1, row.credit.maker, want),
+                `E. ${named.join(' then ')}, byte for byte the same copy, ${keep}: To check shows ${want} under each, the page credits it [${d.shown.join(', ')} | ${credits(list)} | ${row?.label}] (${r.status === 200 ? '' : r.text.slice(0, 160)})`);
+        }
+        // Whether a licence asks for a credit is the one rule (licenceAsksCredit): a file that names nobody is taken only where it doesn't.
+        for (const [licence, taken] of [['CC BY 4.0', false], ['CC BY-SA 4.0', false], ['CC0', true], ['Public domain', true]] as Array<[Licence, boolean]>) {
+            fresh();
+            for (const p of standIn.pages.values()) delete (em(p) as Record<string, unknown>).Artist;
+            const r = await a.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: `Nobody named, ${licence}`, commons_pictures: [FILES[licence]] } });
+            assert(taken ? !r.isError : !!r.isError && /^Commons names nobody who made commons_pictures #1, and its licence needs that credit/.test(errorText(r)),
+                `E. ${licence}, nobody named on Commons: ${taken ? 'taken' : 'refused'} (${errorText(r).slice(0, 90)})`);
         }
         fresh();
         const melSuggests = await call(mel, 'POST', '/api/knowledge/drafts', {

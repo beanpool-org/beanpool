@@ -766,6 +766,13 @@ describe('each event\'s row: its own community and unread count, on Talk → Gro
         expect(rowsNow().filter(([, community]) => community === A)).toEqual([]);
     });
 
+    it('an enterprise its list names has no row here (it doesn\'t open in place); its group and its event do', async () => {
+        keep();
+        servers[A].listed = [eventRow(2), { ...eventRow(1), kind: 'group', id: 'g1', conversationId: 'g1', name: 'Garden Crew' }, { ...eventRow(4), kind: 'enterprise', id: 'e1', conversationId: 'e1', name: 'Bakery' }];
+        await heldGroups.refresh(me.publicKey);
+        expect(rowsNow()).toEqual([['event', A, ev, 2], ['group', A, 'g1', 1]]);
+    });
+
     it('one read in place: its row\'s count goes, and that community\'s number falls by it, at once; a group\'s read there moves no number', async () => {
         keep();
         await noteServerUnread(AsyncStorage, A, 5, 3);
@@ -786,6 +793,7 @@ describe('each event\'s row: its own community and unread count, on Talk → Gro
         ['two events', notice(5, 0), [held(2), held(3)], null],
         ['an event\'s row not listed yet (its list not answered): counted as before', notice(2, 0), [], 2],
         ['a group\'s row there takes nothing off', notice(2, 2), [held(2, { kind: 'group' })], 2],
+        ['a muted group\'s row there (no push told of it) takes nothing off either', notice(2, 0), [held(2, { kind: 'group' })], 2],
         ['another community\'s event takes nothing off', notice(2, 0), [held(2, { community: C })], 2],
         ['its address spelled another way: the same community', notice(2, 0), [held(2, { community: 'HTTPS://Riverside.example/' })], null],
         ['an event line that came since that community\'s last count: what a push told of still shows', notice(1, 1), [held(1)], 1],

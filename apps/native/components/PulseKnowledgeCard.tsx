@@ -25,9 +25,9 @@ import { PULSE_KNOWLEDGE_WORDS as W, formatCount, formatDate, inCapitalsOf, t, t
 import { useStyles } from '../app/ThemeContext';
 import type { AppColors } from '../constants/colors';
 import { pulseAge, type PulseFeedItem } from '../utils/pulse';
-import { useNodeUri } from '../utils/node-uri';
 import { ListPhoto } from './ListPhoto';
 import { ChipText, TopicTile } from './learn/KnowledgeRowCard';
+import { pagePhotoUri } from './learn/learn-keep';
 import { LEARN_LINES, topicOf } from './learn/learn-lines';
 
 const TILE = 64;
@@ -55,13 +55,8 @@ function openLearn() {
     router.push('/learn');
 }
 
-/** A page's picture, which the node names by path, or its topic's. */
-function PagePicture({ post }: { post: PulseKnowledgePost }) {
-    const photo = useNodeUri(post.photo);
-    return <ListPhoto photo={photo} fallback={<TopicTile topic={post.topic} />} style={{ width: TILE, height: TILE }} contentFit="cover" />;
-}
-
-export function PulseKnowledgeCard({ item }: { item: PulseFeedItem }) {
+/** `nodeUrl`: the address of the community whose feed the card came in, which its pages' pictures (paths) are asked of. */
+export function PulseKnowledgeCard({ item, nodeUrl }: { item: PulseFeedItem; nodeUrl?: string | null }) {
     const styles = useStyles(makeStyles);
     const { width, fontScale } = useWindowDimensions();
     const compact = width / fontScale < 360;
@@ -89,7 +84,7 @@ export function PulseKnowledgeCard({ item }: { item: PulseFeedItem }) {
     const row = (post: PulseKnowledgePost) => (
         <View style={styles.row}>
             <View style={styles.picture}>
-                <PagePicture post={post} />
+                <ListPhoto photo={pagePhotoUri(post.photo, nodeUrl)} fallback={<TopicTile topic={post.topic} />} style={{ width: TILE, height: TILE }} contentFit="cover" />
             </View>
             <View style={styles.rowBody}>
                 <Text style={styles.rowTitle} numberOfLines={2}>{post.title}</Text>

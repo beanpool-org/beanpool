@@ -19,8 +19,10 @@ export interface KnowledgePage {
     title: string;
     description: string;
     category: string;
-    /** From the copy, whole addresses on the community whose copy it is (utils/db.ts); in the node's own answer, paths. */
+    /** From the copy, whole addresses on the community whose copy it is (utils/db.ts); in the node's own answer, paths on `nodeUrl`. */
     photos?: string[];
+    /** In a node's answer, the address it was asked of, put there by the phone as it lands (readNodePage, an action's or an Edit's answer). */
+    nodeUrl?: string | null;
     createdAt?: string;
     updatedAt?: string;
     pinnedUntil?: string;

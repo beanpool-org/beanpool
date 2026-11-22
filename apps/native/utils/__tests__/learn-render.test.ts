@@ -69,7 +69,7 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: h.identity }) }));
 vi.mock('../use-learn-mode', () => ({ useLearnMode: () => h.mode }));
-// A picture the node gives by path is drawn from the community's address (utils/node-uri.ts): read from the phone's store on a device.
+// The community's address, which a search and a page's read are asked of and their pictures drawn from: read from the phone's store on a device.
 vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => 'https://node.test') }));
 // Who is writing (slice K4): a member with nothing waiting, here; learn-write-render.test.ts covers the rest.
 vi.mock('../../components/learn/useLearnWriter', () => ({ useLearnWriter: () => ({ checks: false, waiting: 0 }), readMyDrafts: vi.fn(async () => null) }));
@@ -363,6 +363,7 @@ describe("the worldwide community's preview", () => {
 describe('a page', () => {
     const full = () => page({
         id: 'full', title: 'How recycling works at the tip', description: 'Sort it at home.\nGlass in the blue bin.', category: 'local-services', photos: ['/p/1.jpg'],
+        nodeUrl: 'https://node.test', // as readNodePage hands a node's answer on (learn-pictures-drawn-render.test.ts)
     }, {
         place: 'The tip on Manse Road', checkedAt: '2026-11-03T00:00:00.000Z',
         sources: [{ url: 'https://www.council.example.org/tip?x=1', label: 'Council tip page' }, { url: 'https://example.org/bins', label: '' }],

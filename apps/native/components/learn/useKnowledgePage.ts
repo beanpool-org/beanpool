@@ -16,18 +16,23 @@
 import { useEffect, useState } from 'react';
 import { DeviceEventEmitter } from 'react-native';
 import { getKnowledgePost, signedGet } from '../../utils/db';
+import { anchorUrl } from '../../utils/node-post';
 import type { KnowledgePage } from '../../utils/learn-copy';
 
 /**
  * The page as the node has it now, read by id naming the type (the web's lib/learn.ts getLearnPost reads the same). null: the
- * node answered without it. undefined: the node wasn't reached or didn't answer, which says nothing about the page.
+ * node answered without it. undefined: the node wasn't reached or didn't answer, which says nothing about the page. The page
+ * carries the address asked (`nodeUrl`): its pictures are paths on that community, wherever the phone is when they are drawn.
  */
 export async function readNodePage(id: string): Promise<KnowledgePage | null | undefined> {
     try {
-        const res = await signedGet(`/api/marketplace/posts?type=knowledge&id=${encodeURIComponent(id)}`);
+        const nodeUrl = await anchorUrl();
+        const res = await signedGet(`/api/marketplace/posts?type=knowledge&id=${encodeURIComponent(id)}`, { anchorUrl: nodeUrl });
         if (!res.ok) return undefined;
         const rows = await res.json();
-        return Array.isArray(rows) ? rows.find((r: any) => r?.id === id && r?.type === 'knowledge') ?? null : undefined;
+        if (!Array.isArray(rows)) return undefined;
+        const page = rows.find((r: any) => r?.id === id && r?.type === 'knowledge');
+        return page ? { ...page, nodeUrl } : null;
     } catch {
         return undefined;
     }

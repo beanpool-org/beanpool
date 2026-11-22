@@ -36,7 +36,7 @@ import { reportedAlertBody } from '../../utils/reportReasons';
 import { signedRequestWords } from '../signed-request-lines';
 import { LANGUAGE_NAMES } from '../../utils/language-choice';
 import type { KnowledgePage } from '../../utils/learn-copy';
-import { useCommunityAddress } from '../../utils/node-uri';
+import { anchorUrl } from '../../utils/node-post';
 import { ChipText } from './KnowledgeRowCard';
 import { LEARN_LINES, monthYear, topicOf } from './learn-lines';
 import { LEARN_KEEP, LEARN_PAGE_READ, pageActions, pagePhotoUri, pagePhotosOf } from './learn-keep';
@@ -140,14 +140,18 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
             .catch(() => { /* offline: the count is the copy's, and a tap asks the node */ });
         return () => { gone = true; };
     }, [held.id, acts.helped, reads]);
+    /** The node's newer page, shown until the copy catches up; one read before the answer already shown gives way to it, as on the web. */
+    const showAnswer = (next: KnowledgePage) => setAnswered((was) => (was && was.id === next.id && !!was.updatedAt && !!next.updatedAt && was.updatedAt > next.updatedAt ? was : next));
     /** One action, signed: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
     const act = async (method: string, path: string, body?: unknown, after?: (answer: any) => void) => {
         if (busy) return;
         setBusy(true);
         setRefusal(null);
         try {
-            const answer = await signedRequestWithMethod(method, path, body, { withStatus: true });
-            if (answer?.post?.knowledge) setAnswered(answer.post);
+            // The community asked, taken with the ask: the answer names the page's pictures by path, and they are drawn from there.
+            const nodeUrl = await anchorUrl();
+            const answer = await signedRequestWithMethod(method, path, body, { withStatus: true, anchorUrl: nodeUrl });
+            if (answer?.post?.knowledge) showAnswer({ ...answer.post, nodeUrl });
             after?.(answer);
         } catch (e) {
             setRefusal(learnRefusal(e));
@@ -159,7 +163,7 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
     // changed": shown as an action's answer is, until the copy catches up, so a picture taken off is gone from here at once.
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener(LEARN_PAGE_READ, (p: KnowledgePage | null | undefined) => {
-            if (p && p.id === held.id && p.knowledge) setAnswered(p);
+            if (p && p.id === held.id && p.knowledge) showAnswer(p);
         });
         return () => sub.remove();
     }, [held.id]);
@@ -229,10 +233,9 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
     const readerLang = currentLanguage();
     const writtenIn = k.lang && k.lang !== readerLang ? (LANGUAGE_NAMES as Record<string, string>)[k.lang] ?? null : null;
     // A page from the copy names its pictures whole (utils/db.ts getKnowledgePost, on its own community); the node's answer (a page
-    // read by its link, an action's or an Edit's) names them by path, on the community asked, the one in use.
-    const given = pagePhotosOf(page);
-    const community = useCommunityAddress(given.some((p) => p.trim().startsWith('/')));
-    const photos = given.map((p) => pagePhotoUri(p, community)).filter((p): p is string => p !== null);
+    // read by its link, an action's or an Edit's) names them by path, on the community asked, which it carries (`nodeUrl`). Nothing is
+    // read as they are drawn, so the carousel stays the one on screen when an answer takes the copy's place (review of #3355).
+    const photos = pagePhotosOf(page).map((p) => pagePhotoUri(p, page.nodeUrl)).filter((p): p is string => p !== null);
     const sources = (k.sources ?? []).filter((s) => s && openableSource(s.url));
     const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/learn' as any); };
 

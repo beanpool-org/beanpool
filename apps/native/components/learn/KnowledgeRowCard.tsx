@@ -10,7 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LEARN_HOME_WORDS, inCapitalsOf, t, type KnowledgeRow } from '@beanpool/core';
 import { useStyles } from '../../app/ThemeContext';
 import { ListPhoto } from '../ListPhoto';
-import { useNodeUri } from '../../utils/node-uri';
+import { pagePhotoUri } from './learn-keep';
 import { LEARN_LINES, checkedOverAYearAgo, monthYear, topicOf } from './learn-lines';
 
 const TILE = 64;
@@ -43,8 +43,9 @@ export function KnowledgeRowCard({ row, onPress, now, testID, fresh }: { row: Kn
         footOld: { fontSize: 12, fontWeight: '700', color: colors.feedback.warning.fg },
     }));
     const topic = topicOf(row.topic);
-    // A row from the copy names its picture whole (utils/db.ts getKnowledgePosts); the node's own (a search, Home) names it by path.
-    const photo = useNodeUri(row.photo);
+    // Whole by the time it is here, on the community the row came from (the copy's by utils/db.ts getKnowledgePosts, a search's and
+    // Home's by rowOnCommunity): the card reads no address, so it never draws one community's picture from another's. A bare path: the tile.
+    const photo = pagePhotoUri(row.photo, null);
     const when = monthYear(row.checkedAt);
     const old = checkedOverAYearAgo(row.checkedAt, now);
     const checked = old ? t(LEARN_LINES.checkedOver) : when ? t(LEARN_LINES.checked, { date: when }) : '';

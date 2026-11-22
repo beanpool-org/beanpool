@@ -46,7 +46,7 @@ import { forgetLearnRole, useLearnWriter } from '../../components/learn/useLearn
 import {
     LEARN_KEEP, LEARN_PAGE_READ, editBody, fixBody, formOfPage, pagePhotoUri, pagePhotosKept, pagePhotosOf, photoToggleName,
 } from '../../components/learn/learn-keep';
-import { useCommunityAddress } from '../../utils/node-uri';
+import { anchorUrl } from '../../utils/node-post';
 import { readNodePage, useKnowledgePage } from '../../components/learn/useKnowledgePage';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { useIdentity } from '../IdentityContext';
@@ -88,8 +88,6 @@ export default function NewKnowledgeScreen() {
     const [takenOff, setTakenOff] = useState<number[]>([]);
     const pictures = use === 'edit' ? pagePhotosOf(opened) : [];
     const toggleTakenOff = (i: number) => { setTakenOff((list) => (list.includes(i) ? list.filter((j) => j !== i) : [...list, i])); setProblem(null); };
-    // The community's address, to draw a picture the page gave as a path (pagePhotoUri); what is sent back is the path as given.
-    const community = useCommunityAddress(pictures.length > 0);
     const set = (patch: Partial<KnowledgeFormValues>) => { setForm((f) => ({ ...f, ...patch })); setProblem(null); };
     useEffect(() => {
         if (use === 'fix' && page && !opened) { setForm(formOfPage(page)); setOpened(page); }
@@ -182,9 +180,11 @@ export default function NewKnowledgeScreen() {
                 } else {
                     // The pictures it keeps, from the page it opened on, only when one was taken off.
                     const keep = pagePhotosKept(pictures, takenOff);
-                    const answer = await signedRequestWithMethod('POST', `/api/knowledge/posts/${encodeURIComponent(opened.id)}/edit`, editBody(opened, form, keep), { withStatus: true });
-                    // The page behind shows the node's answer (a picture taken off is gone from it) until the copy catches up.
-                    if (answer?.post?.knowledge) DeviceEventEmitter.emit(LEARN_PAGE_READ, answer.post);
+                    const nodeUrl = await anchorUrl();
+                    const answer = await signedRequestWithMethod('POST', `/api/knowledge/posts/${encodeURIComponent(opened.id)}/edit`, editBody(opened, form, keep), { withStatus: true, anchorUrl: nodeUrl });
+                    // The page behind shows the node's answer (a picture taken off is gone from it) until the copy catches up. It
+                    // carries the address asked: its pictures are paths on that community.
+                    if (answer?.post?.knowledge) DeviceEventEmitter.emit(LEARN_PAGE_READ, { ...answer.post, nodeUrl });
                     leave();
                 }
             } catch (e) {
@@ -351,7 +351,8 @@ export default function NewKnowledgeScreen() {
                         <Text style={s.small}>{t(LEARN_KEEP.photosLine)}</Text>
                         {pictures.map((src, i) => {
                             const out = takenOff.includes(i);
-                            const uri = pagePhotoUri(src, community);
+                            // Drawn from the community the page came from; what is sent back is the path as given.
+                            const uri = pagePhotoUri(src, opened?.nodeUrl);
                             const says = out ? t(LEARN_KEEP.keepPhoto) : t(LEARN_WRITE.removePhoto);
                             return (
                                 <View key={`${i}-${src}`} style={s.pagePhoto} testID={`learn-new-page-photo-${out ? 'off' : 'kept'}`}>

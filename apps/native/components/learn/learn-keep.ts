@@ -142,11 +142,13 @@ export function photoToggleName(shown: string, i: number): string {
 }
 
 /**
- * Where a picture of the page is drawn from, on the page (KnowledgeDetail) and in its Edit's list alike: the community's address in
- * front of a path the node gave (utils/photo-address.ts, as the copy's listings and pages), an http(s) address or a `data:` picture
- * as it is, anything else not drawn. Only for drawing: what is sent back is the address as the page gave it (pagePhotosKept).
+ * Where a picture of a page is drawn from, on the page (KnowledgeDetail), in its Edit's list, on its row and on the Pulse's card alike:
+ * the address of the community the page came from (`community`) in front of a path the node gave (utils/photo-address.ts, as the copy's
+ * listings and pages), an http(s) address or a `data:` picture as it is, anything else not drawn. Only for drawing: what is sent back
+ * is the address as the page gave it (pagePhotosKept).
  */
-export function pagePhotoUri(src: string, community: string | null | undefined): string | null {
+export function pagePhotoUri(src: string | null | undefined, community: string | null | undefined): string | null {
+    if (typeof src !== 'string') return null;
     const given = src.trim();
     const at = given.startsWith('//') ? given : photoOnCommunity(community, given);
     return /^(https?:\/\/|data:image\/)/i.test(at) ? at : null;

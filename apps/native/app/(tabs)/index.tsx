@@ -1179,6 +1179,8 @@ export default function HomeScreen() {
 
     // ── What to draw ──
     const answer = stored?.answer ?? null;
+    // The community whose answer is drawn: its pictures are paths on it. Not `url`, which a visitor's read moves before its answer lands.
+    const answeredBy = stored?.url ?? null;
     // The once card is a member's: Home with its answer, and an account (looking around has none to ask for).
     const onceMayNow = !!answer && !!identity && !lookingAround;
     onceMay.current = onceMayNow;
@@ -1532,7 +1534,7 @@ export default function HomeScreen() {
                 <MarketBody
                     items={marketInOrder(c.market.items, interests, profile, normalizeCategory)}
                     examples={!!c.market.examples}
-                    nodeUrl={url}
+                    nodeUrl={answeredBy}
                     showsBeans={showsBeans}
                     colors={colors}
                     onSeeAll={() => router.navigate('/(tabs)/market')}
@@ -1551,7 +1553,7 @@ export default function HomeScreen() {
             case 'asked': return c.asked ? frame(
                 <AskedBody
                     items={starredFirst(c.asked.items, i => i.category, interests, normalizeCategory)}
-                    nodeUrl={url}
+                    nodeUrl={answeredBy}
                     showsBeans={showsBeans}
                     colors={colors}
                     now={now}
@@ -1565,6 +1567,7 @@ export default function HomeScreen() {
                 return frame(
                     <LearnBody
                         lines={lines}
+                        nodeUrl={answeredBy}
                         community={c.community?.name ?? ''}
                         colors={colors}
                         now={now}
@@ -1583,7 +1586,7 @@ export default function HomeScreen() {
             case 'decide': return c.decide ? frame(<DecideBody card={c.decide} features={answer.features} colors={colors} now={now} />) : null;
             case 'groups': return c.groups ? frame(<GroupsBody card={c.groups} colors={colors} />) : null;
             case 'joined': return c.joined ? frame(<JoinedBody card={c.joined} profile={profile} colors={colors} />) : null;
-            case 'pulse': return c.pulse ? frame(<PulseBody card={{ items: starredFirst(c.pulse.items, i => i.category, interests, normalizeCategory) }} nodeUrl={url} colors={colors} />) : null;
+            case 'pulse': return c.pulse ? frame(<PulseBody card={{ items: starredFirst(c.pulse.items, i => i.category, interests, normalizeCategory) }} nodeUrl={answeredBy} colors={colors} />) : null;
             case 'beans': return c.beans ? frame(<BeansBody card={c.beans} colors={colors} />) : null;
             case 'notices': return c.notices ? frame(<NoticesBody card={c.notices} colors={colors} onOpen={openNotice} />) : null;
             case 'invite': return frame(<InviteBody colors={colors} />);
@@ -1591,7 +1594,7 @@ export default function HomeScreen() {
                 <SearchBody
                     settings={inst.settings}
                     card={searchCardFor(answer, inst)}
-                    nodeUrl={url}
+                    nodeUrl={answeredBy}
                     showsBeans={showsBeans}
                     colors={colors}
                     onMore={q => router.navigate({ pathname: '/(tabs)/market', params: { q } })}

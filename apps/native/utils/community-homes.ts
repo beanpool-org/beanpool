@@ -62,11 +62,13 @@ export async function keptNames(communities: readonly string[]): Promise<PhoneNa
     return out;
 }
 
-/** `community`, and every other one this phone saved, as {@link keptNames}. */
+/** `community`, and every other one this phone saved as a member's (never a guest's look), as {@link keptNames}. */
 export async function keptNamesWith(community: string): Promise<PhoneNames[]> {
-    const saved = await import('./nodes').then((m) => m.getSavedNodes()).catch(() => []);
+    const { getSavedNodes, isGuestCopy } = await import('./nodes');
     const all = [community];
-    for (const { url } of saved) if (url && !all.some((c) => keptAsOne(c, url))) all.push(url);
+    for (const { url } of await getSavedNodes().catch(() => [])) {
+        if (url && !all.some((c) => keptAsOne(c, url)) && !await isGuestCopy(url).catch(() => true)) all.push(url);
+    }
     return keptNames(all);
 }
 

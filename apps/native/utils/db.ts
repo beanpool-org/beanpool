@@ -2197,11 +2197,11 @@ export async function getHeldMembers(myPubkey: string, community: string, typed:
     }
 }
 
-/** A member of a held copy by their key, not pruned (slice S5 part 2, round 5: community-homes.ts). */
+/** A row of a held copy's directory by its key, a member's or a visitor's, not pruned (slice S5 part 2: community-homes.ts doubted). */
 const HELD_MEMBER_SQL = `SELECT 1 AS here FROM members WHERE public_key = ? AND (status IS NULL OR status != 'pruned') LIMIT 1`;
 
 /**
- * Whether the copy of `community`, another community this phone holds, has `key` as a member, read through a held, read-only
+ * Whether the copy of `community`, another community this phone holds, has a row for `key`, read through a held, read-only
  * handle (as {@link getHeldMembers}). No when there is nothing to read; a read that fails throws.
  */
 export async function isHeldMember(community: string, key: string): Promise<boolean> {

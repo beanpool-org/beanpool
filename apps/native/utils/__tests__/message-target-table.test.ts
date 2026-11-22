@@ -530,6 +530,17 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         expect(made()).toEqual([]);
     });
 
+    it('a community this phone only looks at as a guest has no claim, and its copy is never read, as the chat is made', async () => {
+        METRIVER(); LOST_METRIVER();
+        saysNow(); heard();
+        TOLD.hillside.addresses.push('metriver.example'); saysNow(); heard();
+        phone.store.set('beanpool_guest_nodes', JSON.stringify([HILLSIDE]));
+        const read: string[] = [];
+        phone.copyOf = (community) => { read.push(community); return new Set(); };
+        expect(await openAcrossChat({ key: K, home: 'metriver.example', name: 'Ana' })).toEqual({ chatId: ACROSS_ID });
+        expect(read).toEqual([RIVERSIDE]);
+    });
+
     it('a row there for someone else, or under another of their links\' keys, is no doubt of this one', async () => {
         METRIVER(); LOST_METRIVER();
         phone.copyOf = () => new Set(['d4'.repeat(32)]);

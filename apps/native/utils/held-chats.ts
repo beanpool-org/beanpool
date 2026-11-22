@@ -171,8 +171,9 @@ export async function heldChatsWith(myPubkey: string, keys: readonly string[]): 
 }
 
 /**
- * Whether the copy of `community`, another community this phone holds, has `key` as a member (slice S5 part 2, round 5:
- * community-homes.ts). The handle is Chat's, as {@link heldChatsWith}'s.
+ * Whether the copy of `community`, another community this phone holds, has a row for `key` (slice S5 part 2:
+ * community-homes.ts doubted). Not proof of a member: the directory lists visitors' rows too, and the copy can't tell them
+ * apart. The handle is Chat's, as {@link heldChatsWith}'s.
  */
 export async function heldMemberThere(community: string, key: string): Promise<boolean> {
     try {

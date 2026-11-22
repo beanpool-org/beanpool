@@ -293,7 +293,6 @@
         "01bf6f3e20",
         "14dc55dd5d",
         "3453b1145e",
-        "3689a3d846",
         "85d15dbaf2",
         "8d666c915f",
         "b905142f89",
@@ -552,17 +551,8 @@
       ]
     },
     "apps/native/words/tr": {
-      "numbers": [
-        "32936e63c3",
-        "3689a3d846"
-      ],
       "untranslatable": [
         "1f78ff9888"
-      ]
-    },
-    "apps/native/words/uk": {
-      "numbers": [
-        "32936e63c3"
       ]
     },
     "apps/native/words/ur": {

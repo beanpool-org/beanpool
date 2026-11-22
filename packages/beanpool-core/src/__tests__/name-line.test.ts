@@ -17,8 +17,11 @@ import { addressCardDigest, addressCardName, addressCardVerifies, signAddressCar
 import { toBase64 } from '../request-signing.js';
 import { LANGS } from '../words.js';
 
-/** What shows nothing, read by Unicode's own property (Node knows it): Cf, the combining grapheme joiner, the Hangul fillers. */
-const INVISIBLE = /[\p{Cf}\u034F\u115F\u1160\u3164\uFFA0]/u;
+/**
+ * What shows nothing, read by Unicode's own property (Node knows it): Cf, the combining grapheme joiner, the Hangul fillers,
+ * the blank braille cell.
+ */
+const INVISIBLE = /[\p{Cf}\u034F\u115F\u1160\u2800\u3164\uFFA0]/u;
 
 const seed = sha256(utf8ToBytes('beanpool relay vector: Ana'));
 const key = bytesToHex(ed25519.getPublicKey(seed));
@@ -89,6 +92,9 @@ const REAL_NAMES: Array<[string, string, string]> = [
     ['ja', 'Japanese, an ideographic space between the names', '山田\u3000太郎'],
     ['ja', 'Japanese, kana', 'さくら カタカナ'],
     ['ja', 'Japanese, an ideographic variation selector', '葛\u{E0100}飾北斎'],
+    // Not a shipped language: the free variation selectors are how Mongolian picks a letter's form (#3275 r3 decide).
+    ['mn', 'Mongolian, a free variation selector after its first letter', 'ᠭ᠋ᠠᠨᠪᠠᠭᠠᠲᠤᠷ'],
+    ['mn', 'Mongolian, the second and third free variation selectors and the fourth', 'ᠨ᠌ᠠᠷᠠ ᠭ᠍ᠣ᠏'],
     ['ko', 'Korean', '김민준'],
     ['zh-Hans', 'Chinese (simplified)', '王小明'],
     ['zh-Hant', 'Chinese (traditional)', '陳大文'],
@@ -119,6 +125,16 @@ const CLEANED: Array<[string, string, string]> = [
     ['isolates, a byte-order mark and a soft hyphen', '\u2066Ana\u2069\uFEFF\u00AD', 'Ana'],
     ['direction marks', '\u200FAna\u200E\u061C', 'Ana'],
     ['Hangul fillers and a combining grapheme joiner', 'A\u3164n\uFFA0a\u115F\u1160\u034F', 'Ana'],
+    // What free tags read a contact past, and names didn't lose (#3275 r3 decide): one list now (shows-nothing.ts).
+    ['blank braille cells after it', `Ana${'\u2800'.repeat(56)}`, 'Ana'],
+    ['blank braille cells before it, between its letters and between two names', '\u2800\u2800A\u2800na\u2800Lee', 'AnaLee'],
+    ['a name of blank braille cells', '\u2800\u2800\u2800', ''],
+    ['the first Mongolian free variation selector, a run after it', `Ana${'\u180B'.repeat(56)}`, 'Ana\u180B'],
+    ['the second, at the start and after a space', '\u180CAna \u180CR\u00EDos', 'Ana R\u00EDos'],
+    ['the third, in a run between two letters', 'A\u180D\u180D\u180Dna', 'A\u180Dna'],
+    ['the fourth, alone after a space at the end', 'Ana \u180F', 'Ana'],
+    ['Mongolian free variation selectors with nothing to pick', '\u180B\u180C\u180D\u180F', ''],
+    ['places Unicode keeps for more of what shows nothing', 'A\u2065n\uFFF0a\u{E0000}\u{E0080}\u{E01F0}\u{E0FFF}', 'Ana'],
     ['invisible characters before, between and after its letters (one joiner between two letters stays)', '\u200BA\u200Dn\u2066a\u202E\uFEFF', 'A\u200Dna'],
     ['runs of spaces, no-break and ideographic spaces', '  Ana \u00A0\u3000 Ríos ', 'Ana Ríos'],
     ['nothing that shows', '\u200B\u200D\uFE0F\u{E007F}', ''],
@@ -178,8 +194,30 @@ describe('cleanName: a name a person really writes is never changed; only paddin
         expect(left).toEqual([]);
     });
 
+    it('everything Unicode counts as showing nothing (\\p{DI}), and the blank braille cell, goes where it spells nothing; between two letters only a joiner or one selector stays', () => {
+        const all: string[] = ['⠀'];
+        for (let cp = 0; cp <= 0x10ffff; cp++) {
+            if (cp >= 0xd800 && cp <= 0xdfff) continue;
+            const ch = String.fromCodePoint(cp);
+            if (/\p{DI}/u.test(ch)) all.push(ch);
+        }
+        expect(all.length).toBeGreaterThan(4000);
+        // eslint-disable-next-line no-misleading-character-class -- each is looked for alone, a joiner and the selectors
+        const kept = (ch: string) => /[‌‍᠋-᠍᠏︀-️\u{E0100}-\u{E01EF}]/u.test(ch);
+        const left: string[] = [];
+        for (const ch of all) {
+            const u = `U+${ch.codePointAt(0)!.toString(16).toUpperCase()}`;
+            if (cleanName(`Ana${ch}${ch}`) !== (kept(ch) && ch !== '‌' && ch !== '‍' ? `Ana${ch}` : 'Ana')) left.push(`${u} in a run at the end`);
+            if (cleanName(`${ch}Ana`) !== 'Ana') left.push(`${u} at the start`);
+            if (cleanName(`An ${ch}a`) !== 'An a') left.push(`${u} after a space`);
+            if (cleanName(`A${ch}na`) !== (kept(ch) ? `A${ch}na` : 'Ana')) left.push(`${u} between two letters`);
+        }
+        expect(left).toEqual([]);
+    });
+
     it('a variation selector stays only as the one straight after a character that shows', () => {
         const selectors: string[] = [];
+        selectors.push('᠋', '᠌', '᠍', '᠏');
         for (let cp = 0xfe00; cp <= 0xfe0f; cp++) selectors.push(String.fromCodePoint(cp));
         for (let cp = 0xe0100; cp <= 0xe01ef; cp++) selectors.push(String.fromCodePoint(cp));
         const left = selectors.filter((vs) => cleanName(`A${vs}${vs}${vs}na`) !== `A${vs}na` || cleanName(`${vs}Ana`) !== 'Ana'
@@ -235,6 +273,7 @@ describe('guestNameLine: the card name is cut, never " · <home> · guest"', () 
         ...[1, 40, 41, 58, 59, 60].map((n): [string, string] => [NAME60.slice(0, n), NAME60.slice(0, n)]),
         [`Ana${'\u200B'.repeat(56)}`, 'Ana'],
         ['\u202EAna\u202C', 'Ana'],
+        [`Ana${'\u2800'.repeat(56)}`, 'Ana'],
         [`${NAME60.slice(0, 30)}\u200B\u202E${NAME60.slice(30, 60)}\u2069`, NAME60.slice(0, 60)],
     ];
 

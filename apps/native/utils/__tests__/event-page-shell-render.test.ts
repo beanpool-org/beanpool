@@ -15,7 +15,7 @@
  * the page box and no grey host line, the counts only above zero, the boxes and buttons on the style box's numbers and the
  * event's library colours, nothing wider than the screen, and none of the old raw violets anywhere.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../components/useKeepCaretVisible', () => ({ useKeepCaretVisible: () => ({ scrollRef: { current: null }, scrollProps: {} }) }));
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -142,6 +142,12 @@ vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }))
 import { MARKET_CARD_SHELL, seriesDateLabel } from '@beanpool/core';
 import { EventDetail } from '../../components/EventDetail';
 import { darkColors, lightColors } from '../../constants/colors';
+
+// A fixed clock (22 Nov 2026, a date bomb): the fixture's dates were today + 9 days, so the date lines' length moved with
+// the day and the time zone (CI runs in UTC, this Mac in Sydney time) and one more wrapped line broke the 'stop' rows
+// on 22 Nov in UTC only. 02:00 UTC is the same calendar day in UTC and in Sydney. Set before the fixture below is built.
+vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-21T02:00:00.000Z') });
+afterAll(() => { vi.useRealTimers(); });
 
 const DAY = 86_400_000;
 /** The Mullum market (Marty's shot, 4 Nov; §2.9's fixture): a two-line title, the third Saturday, a one-line place, one photo. */

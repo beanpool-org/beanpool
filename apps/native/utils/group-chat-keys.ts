@@ -210,6 +210,16 @@ export function groupsLockedIn(copy: string, publicKey: string): string[] {
     return [...lockedRings].filter((id) => id.startsWith(head)).map((id) => id.slice(head.length));
 }
 
+/**
+ * A sync is putting this group's mark in `copy`'s file by itself, with a sealed line of the group in the same write
+ * (utils/db.ts upsertFetchedMessage): known from here to every ring of that copy for `publicKey`, before the write, so a ring
+ * that read its file before it says locked at once, in its route, its `seenLocked` and the last ask of a readable line
+ * (`neverLocked().still()`), never "never" until a restart (max review of #3358, U2). Only for that copy, as its mark.
+ */
+export function noteLockedInCopy(copy: string, publicKey: string, groupId: string): void {
+    lockedRings.add(ringIdOf(copy, publicKey, groupId.toLowerCase()));
+}
+
 /** A node answered the chat of this id locked, for whoever, whatever becomes of its mark ({@link GroupKeyring.noteLocked}): noted for this session, in no file. */
 export function noteAnsweredLocked(conversationId: string): void {
     answeredLocked.add(conversationId.toLowerCase());
@@ -524,12 +534,18 @@ export class GroupKeyring {
 
     /**
      * The verify memo for this group's lines (core GroupLineVerifyMemo): in memory, each new verdict written behind. The one
-     * write that may be lost: a verdict the file doesn't have is worked out again from the line itself.
+     * write that may be lost: a verdict the file doesn't have is worked out again from the line itself. None is written once
+     * this ring is put away, or its account has begun to leave the phone: as every other change ({@link commit}), it never
+     * reaches a file that may be another's by now (max review of #3358, the class of U1).
      */
     get memo(): GroupLineVerifyMemo {
         return {
             has: (k) => this.verdicts.has(k),
-            add: (k) => { this.verdicts.add(k); this.store.addVerdict(this.storeKey, k).catch(() => { }); },
+            add: (k) => {
+                this.verdicts.add(k);
+                if (this.putAway || !this.accountStays()) return;
+                this.store.addVerdict(this.storeKey, k).catch(() => { });
+            },
         };
     }
 

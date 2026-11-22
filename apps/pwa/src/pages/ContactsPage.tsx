@@ -75,8 +75,8 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage, onMe
     start?: 'list' | 'import';
     onBack: () => void;
     onMessage: (pubkey: string) => void;
-    /** Message on a contact in another community (slice S5 part 2): MessagesPage opens a chat across from their link. */
-    onMessageAcross?: (links: Array<{ key: string; community: string }>, name: string) => void;
+    /** Message on a contact in another community (slice S5 part 2): MessagesPage opens a chat; or, nothing certain, answers with the address to go to. */
+    onMessageAcross?: (links: Array<{ key: string; community: string }>, name: string) => Promise<string | null>;
 }): ReactNode {
     const snap = useContacts();
     const [view, setView] = useState<View>(start === 'import' ? { kind: 'import' } : { kind: 'list' });
@@ -239,12 +239,16 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
     /** This community keeps the list the member's old key locked (C6): said, with the way to it (the phone app), and Delete. */
     former: ReactNode;
     onOpen: (id: string) => void; onAdd: () => void; onImport: () => void; onInfo: () => void; onMessage: (pubkey: string) => void; onRemoveAll: () => Promise<boolean>;
-    onMessageAcross?: (links: Array<{ key: string; community: string }>, name: string) => void;
+    onMessageAcross?: (links: Array<{ key: string; community: string }>, name: string) => Promise<string | null>;
     onInvite: (c: Contact) => void; ask: (c: Contact) => ContactInviteUsed | null; onAnswer: (c: Contact, used: ContactInviteUsed, yes: boolean) => void;
 }) {
     const [q, setQ] = useState('');
     const [menu, setMenu] = useState<null | 'menu' | 'file' | 'removeAll'>(null);
     const [, setBlockTick] = useState(0);
+    // A Message under way: no other starts until it has opened or said why not (it asks the community, a few seconds at most).
+    const [messaging, setMessaging] = useState(false);
+    // By contact: the address Message could not place for certain, so its row links to it (#3354 review, round 6).
+    const [elsewhere, setElsewhere] = useState<Record<string, string>>({});
     const here = nodeAddress();
     const typed = q.trim().toLowerCase();
     const shown = list.contacts
@@ -284,8 +288,21 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
         // Another community (slice S5 part 2): the web holds only this one, so Message goes across, from their link (lib/message-anyone.ts),
         // with every link they have, the tapped one first: the block is asked by every key they name, as the phone asks (#3354 review).
         if (link.community !== here) {
+            const there = elsewhere[c.id];
             const links = [link, ...c.links.filter((l) => l !== link)].map((l) => ({ key: l.key, community: l.community }));
-            return <button type="button" className={go} style={goStyle} disabled={!onMessageAcross} onClick={() => onMessageAcross?.(links, c.name)}>{t('Message', undefined, 'button: write to')}</button>;
+            const message = async () => {
+                if (!onMessageAcross || messaging) return;
+                setMessaging(true);
+                const address = await onMessageAcross(links, c.name).catch(() => null);
+                setMessaging(false);
+                if (address) setElsewhere((was) => ({ ...was, [c.id]: address }));
+            };
+            return (
+                <>
+                    <button type="button" className={go} style={goStyle} disabled={!onMessageAcross || messaging} onClick={() => void message()}>{t('Message', undefined, 'button: write to')}</button>
+                    {there && <a href={there} target="_blank" rel="noopener noreferrer" style={{ ...btn, display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>{t('Open {community} ›', { community: hostOf(there) })}</a>}
+                </>
+            );
         }
         if (isUserBlocked(link.key)) {
             return (
@@ -295,7 +312,7 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
                 </span>
             );
         }
-        return <button type="button" className={go} style={goStyle} onClick={() => onMessage(link.key)}>{t('Message', undefined, 'button: write to')}</button>;
+        return <button type="button" className={go} style={goStyle} disabled={messaging} onClick={() => onMessage(link.key)}>{t('Message', undefined, 'button: write to')}</button>;
     };
     return (
         <>

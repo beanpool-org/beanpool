@@ -5,7 +5,7 @@
  * taken out in turn (mutants) and every one gets rows wrong.
  */
 import { describe, expect, it } from 'vitest';
-import { communityNamed, formerHomesOf, homesOfCommunity, saysNoHome, type NamedCommunity } from '../community-homes';
+import { keptClaims, nameStanding, saysNames, saysNoHome, whoseName, type KnownNames, type NameStanding, type WhoseName } from '../community-homes';
 import { ACROSS_FIRST_LINE_NOTE, acrossChatListed, acrossFirstLineNoteUnder, messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '../message-path';
 import { nodeHomeOf } from '../node-request-signing';
 
@@ -16,23 +16,27 @@ const AWAY = 'https://faraway.example';
 const K = 'a'.repeat(64);
 const K2 = 'b'.repeat(64);
 const same = (a: string, b: string) => a.replace(/\/+$/, '').toLowerCase() === b.replace(/\/+$/, '').toLowerCase();
-/** Riverside's older main address (the device's own record), and another of its names (its info says so); Hillside's too. */
+/** Each is a name its community answers it has: an older main it goes by still, another of its names, one it had before. */
 const HERE_OLD = 'https://oldriver.example';
 const HERE_ALIAS = 'https://river.example';
 const HELD_A_ALIAS = 'https://oldhill.example';
-/** A name Riverside had before; and one it lost, which an older server still lists as one, and Lakeside goes by now (round 5). */
 const HERE_FORMER = 'https://formerriver.example';
+/** A name Riverside lost, which Lakeside goes by now; and one Riverside and Hillside both say is theirs, so whose isn't certain. */
 const HERE_LOST = 'https://lostriver.example';
-const COMMUNITIES: NamedCommunity[] = [
-    { community: HERE, known: [HERE_OLD], says: ['riverside.example', 'river.example'], before: ['formerriver.example', 'lostriver.example'] },
-    { community: HELD_A, known: [HELD_A_ALIAS], says: ['hillside.example'] },
-    { community: HELD_B, says: ['lakeside.example', 'lostriver.example'] },
+const BOTH = 'https://both.example';
+const COMMUNITIES: KnownNames[] = [
+    { community: HERE, reached: HERE, kept: {}, answer: { addresses: ['riverside.example', 'oldriver.example', 'river.example', 'both.example'], primaryAddress: 'riverside.example', formerAddresses: ['formerriver.example'] } },
+    { community: HELD_A, reached: HELD_A, kept: {}, answer: { addresses: ['hillside.example', 'oldhill.example'], formerAddresses: ['both.example'] } },
+    { community: HELD_B, reached: HELD_B, kept: {}, answer: { addresses: ['lakeside.example', 'lostriver.example'] } },
 ];
 
 type Input = Parameters<typeof messagePathFor>[0];
-const base = { look: null, whose: communityNamed(COMMUNITIES), takesAcross: () => true };
+const base = { look: null, whose: whoseName(COMMUNITIES), takesAcross: () => true };
 const phone = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): Input => ({ ...base, links, chats, setTo: HERE, held: [HELD_A, HELD_B], blocked });
-const web = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): Input => ({ ...base, links, chats, setTo: HERE, held: [], whose: communityNamed(COMMUNITIES.slice(0, 1)), blocked });
+/** Its own name for a name two claim, as the web has it: it holds one community, so an answer that came too late. */
+const WEB: KnownNames[] = [{ ...COMMUNITIES[0], answer: { ...COMMUNITIES[0].answer, addresses: ['riverside.example', 'oldriver.example', 'river.example'] }, refused: [] }];
+const web = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): Input => ({ ...base, links, chats, setTo: HERE, held: [], whose: whoseName(WEB), blocked });
+const webNoAnswer = (links: MessageLink[]): Input => ({ ...web(links), whose: whoseName([{ community: HERE, reached: HERE, answer: null, kept: { info: COMMUNITIES[0].answer } }]) });
 
 interface Row { name: string; input: Input; want: MessagePath }
 const dHere: KnownChat = { kind: 'direct', community: HERE, id: 'd-here', key: K };
@@ -72,6 +76,7 @@ const ROWS: Row[] = [
     { name: 'phone · across: shares none', input: phone([{ community: AWAY, key: K, name: ' Dee ' }]), want: across(AWAY) },
     { name: 'phone · across: no name', input: phone([{ community: AWAY, key: K }]), want: across(AWAY, K, null) },
     { name: 'phone · across: the first link', input: phone([{ community: AWAY, key: K, name: 'Dee' }, { community: 'https://another.example', key: K2 }]), want: across(AWAY) },
+    { name: 'phone · across: the first link that is an address', input: phone([{ community: 'not an address', key: K2 }, { community: AWAY, key: K, name: 'Dee' }]), want: across(AWAY) },
     { name: 'phone · across: no community set to (a guest look)', input: { ...phone([{ community: HERE, key: K, name: 'Dee' }]), setTo: null, held: [] }, want: across(HERE) },
     // ── phone: nothing ──
     { name: 'phone · nothing: not on BeanPool yet', input: phone([]), want: { open: 'nothing' } },
@@ -114,10 +119,27 @@ const ROWS: Row[] = [
     { name: 'phone · a held community takes none across: its chat is left out', input: { ...phone([{ community: AWAY, key: K, name: 'Dee' }], [xA]), takesAcross: (c) => c !== HELD_A }, want: across(AWAY) },
     { name: 'phone · the community in use takes none across, the held one that carries the chat does: that chat', input: { ...phone([{ community: HERE, key: K }], [xHere, xA]), takesAcross: (c) => c !== HERE }, want: { open: 'existing', chat: xA } },
     { name: 'web · this community takes none across: the chat here', input: { ...web([{ community: HERE, key: K }], [xHere]), takesAcross: () => false }, want: { open: 'shared', community: HERE, key: K } },
-    // ── a name a community had before is its own only while no other goes by it (#3354 review, round 5) ──
+    // ── a name a community had before, and one it lost (#3354 review, rounds 5 and 6) ──
     { name: 'phone · a name the community in use had before is here', input: phone([{ community: HERE_FORMER, key: K }]), want: { open: 'shared', community: HERE, key: K } },
     { name: 'phone · a name it lost to a held community is that community', input: phone([{ community: HERE_LOST, key: K }]), want: { open: 'shared', community: HELD_B, key: K } },
+    { name: 'web · a name it lost: across', input: web([{ community: HERE_LOST, key: K, name: 'Dee' }]), want: across(HERE_LOST) },
     { name: 'phone · an across chat kept with a name a held community goes by now: the direct chat there', input: phone([{ community: AWAY, key: K }], [at(xHere, 'lostriver.example')]), want: { open: 'shared', community: HELD_B, key: K } },
+    // ── whose isn't certain (round 6): nothing opens; to go to that address is offered ──
+    { name: 'phone · a name two communities claim, no chat: to switch', input: phone([{ community: BOTH, key: K }]), want: { open: 'switch', community: BOTH } },
+    { name: 'web · a name only an old page says, no answer: to go there', input: webNoAnswer([{ community: HERE_ALIAS, key: K }]), want: { open: 'switch', community: HERE_ALIAS } },
+    { name: 'web · the address it is open at needs no answer', input: webNoAnswer([{ community: HERE, key: K }]), want: { open: 'shared', community: HERE, key: K } },
+    { name: 'phone · uncertain, a direct chat there is: that chat', input: phone([{ community: BOTH, key: K }], [dA]), want: { open: 'existing', chat: dA } },
+    { name: 'phone · uncertain, a chat across to another community: that chat', input: phone([{ community: BOTH, key: K }], [xHere]), want: { open: 'existing', chat: xHere } },
+    { name: 'phone · a chat across whose own home is uncertain is never picked: the link is followed', input: phone([{ community: AWAY, key: K, name: 'Dee' }], [at(xHere, 'both.example')]), want: across(AWAY) },
+    { name: 'phone · nor does it say a community is shared', input: phone([{ community: BOTH, key: K }], [at(xHere, 'both.example')]), want: { open: 'switch', community: BOTH } },
+    { name: 'phone · a chat across with a certain home beside it is', input: phone([{ community: BOTH, key: K }], [at(xHere, 'both.example'), xA]), want: { open: 'existing', chat: xA } },
+    { name: 'phone · uncertain, another link is of a community shared: there', input: phone([{ community: BOTH, key: K }, { community: HELD_B, key: K2 }]), want: { open: 'shared', community: HELD_B, key: K2 } },
+    { name: 'phone · uncertain, another link is of none: across from that one', input: phone([{ community: BOTH, key: K2 }, { community: AWAY, key: K, name: 'Dee' }]), want: across(AWAY) },
+    { name: 'phone · uncertain, another link is no address: to switch', input: phone([{ community: 'not an address', key: K2 }, { community: BOTH, key: K }]), want: { open: 'switch', community: BOTH } },
+    { name: 'phone · a link the app doubts, of a community shared: to switch', input: phone([{ community: HERE_ALIAS, key: K, doubted: true }]), want: { open: 'switch', community: HERE_ALIAS } },
+    { name: 'phone · a link the app doubts, of none: to switch', input: phone([{ community: AWAY, key: K, doubted: true }]), want: { open: 'switch', community: AWAY } },
+    { name: 'phone · blocked, uncertain: refused', input: phone([{ community: BOTH, key: K }], [], true), want: { open: 'blocked' } },
+    { name: 'look · uncertain, a link of the look\'s own: to switch', input: { ...phone([{ community: BOTH, key: K }]), setTo: null, look: HERE, held: [HELD_A, HELD_B] }, want: { open: 'switch', community: BOTH } },
     // ── a guest's look (#3354 review, round 4): the direct chat a visitor has there is theirs; nothing else of it counts ──
     { name: 'look · a direct chat there opens', input: { ...phone([{ community: HERE, key: K }], [dHere, dA]), setTo: null, look: HERE, held: [HELD_A, HELD_B] }, want: { open: 'existing', chat: dHere } },
     { name: 'look · no chat there: none is started there', input: { ...phone([{ community: HERE, key: K, name: 'Dee' }]), setTo: null, look: HERE, held: [HELD_A, HELD_B] }, want: across(HERE) },
@@ -150,20 +172,27 @@ describe('messagePathFor: which chat Message opens', () => {
             const shared = messagePathFor({ ...i, chats: [] });
             return shared.open === 'shared' ? shared : messagePathFor(i);
         },
-        'chats in communities no longer held count': (i) => messagePathFor({ ...i, held: [...i.held, AWAY], whose: (a) => i.whose(a) ?? (same(a ?? '', AWAY) ? AWAY : null) }),
+        'chats in communities no longer held count': (i) => messagePathFor({ ...i, held: [...i.held, AWAY] }),
         // ── the invariant (round 4) ──
-        'a community is one spelling (the bug: a link at another of its addresses goes across)': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ community }) => ({ community }))) }),
-        'what the device knows of a community left out': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ community, says }) => ({ community, says }))) }),
-        'what a community says of itself left out': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ community, known }) => ({ community, known }))) }),
-        'a name it had before left out': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ before: _before, ...c }) => c)) }),
-        'a name it had before weighed as one it goes by now (the bug: a lost name is here)': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ says, before, ...c }) => ({ ...c, says: [...(says ?? []), ...(before ?? [])] }))) }),
+        'a community is one spelling (the bug: a link at another of its addresses goes across)': (i) => messagePathFor({ ...i, whose: whoseName(COMMUNITIES.map(({ community, reached }) => ({ community, reached, kept: {} }))) }),
+        'a name it had before left out': (i) => messagePathFor({ ...i, whose: whoseName(COMMUNITIES.map((c) => ({ ...c, answer: { ...c.answer, formerAddresses: [] } }))) }),
+        'an uncertain name is the first\'s that claims it (the bug: a chat nobody reads)': (i) => messagePathFor({ ...i, whose: (a) => {
+            const name = i.whose(a);
+            return name.whose === 'uncertain' ? { whose: 'one', community: HERE } : name;
+        } }),
+        'an uncertain name is nobody\'s here (the bug: a chat across its own server refuses)': (i) => messagePathFor({ ...i, whose: (a) => {
+            const name = i.whose(a);
+            return name.whose === 'uncertain' ? { whose: 'none' } : name;
+        } }),
+        'a link the app doubts weighed as any other': (i) => messagePathFor({ ...i, links: i.links.map(({ doubted: _doubted, ...l }) => l) }),
+        'a chat across with an uncertain home counts': (i) => messagePathFor({ ...i, chats: i.chats.map((c) => (c.kind === 'across' && i.whose(c.home).whose === 'uncertain' ? { ...c, home: 'faraway.example' } : c)) }),
         'a dead across chat counts (its person is in a community shared)': (i) => messagePathFor({ ...i, chats: i.chats.map((c) => (c.kind === 'across' ? { ...c, home: 'faraway.example' } : c)) }),
         'a community that takes none across still carries one': (i) => messagePathFor({ ...i, takesAcross: () => true }),
         'a guest\'s look counts as a membership': (i) => messagePathFor({ ...i, setTo: i.setTo ?? i.look, look: null }),
         'a direct chat on a guest\'s look left out': (i) => messagePathFor({ ...i, look: null }),
         'an across chat never says where they are': (i) => {
             const got = messagePathFor(i);
-            return got.open === 'shared' && !i.links.some((l) => i.whose(l.community) === got.community) ? { open: 'across', key: i.links[0].key, home: nodeHomeOf(i.links[0].community)!, name: i.links[0].name?.trim() || null } : got;
+            return got.open === 'shared' && !i.links.some((l) => { const name = i.whose(l.community); return name.whose === 'one' && name.community === got.community; }) ? { open: 'across', key: i.links[0].key, home: nodeHomeOf(i.links[0].community)!, name: i.links[0].name?.trim() || null } : got;
         },
         'no block asked': (i) => messagePathFor({ ...i, blocked: false }),
         'the block asked only where no chat exists': (i) => {
@@ -190,29 +219,112 @@ describe('acrossChatListed: which chats across Message may open as the existing 
     });
 });
 
-// #3354 review, round 4: one community, all its addresses (community-homes.ts), the rule Message and the address card share.
-describe('a community, all its addresses', () => {
+/**
+ * Is this address one of the community's own names? (#3354 review, round 6: five rounds had each closed one source of a wrong
+ * answer, so the precedence is one rule, and this is the whole of it.) Every state of every source: what it answers now x its
+ * signed list x the device's record x its last info x whether the address answered the device as something else. ORACLE is
+ * the precedence written out by hand, as the review gives it; it reads the row's states and shares nothing with the rule.
+ */
+describe('nameStanding: every state of every source', () => {
+    const NAME = 'https://hill.example';
+    const HOME = 'hill.example';
+    const REACHED = 'https://riverside.example';
+    const OTHERS = { addresses: ['riverside.example', 'river.example'], primaryAddress: 'riverside.example', formerAddresses: ['oldriver.example'] };
+    const ANSWERS: Record<string, KnownNames['answer']> = {
+        'not asked': undefined,
+        'no answer': null,
+        'an answer that says nothing of names': { primaryAddress: HOME, formerAddresses: [HOME] },
+        'an answer: no names at all': { addresses: [], primaryAddress: null },
+        'an answer without it': OTHERS,
+        'an answer: it goes by it': { ...OTHERS, addresses: [...OTHERS.addresses, HOME] },
+        'an answer: it lives at it': { addresses: ['riverside.example'], primaryAddress: HOME },
+        'an answer: it had it before': { ...OTHERS, formerAddresses: [...OTHERS.formerAddresses, HOME] },
+    };
+    const COPIES = { 'not kept': null, 'holds it': true, 'without it': false } as const;
+    const INFOS = { ...COPIES, 'says nothing of names': undefined } as const;
+    const infoOf = (state: keyof typeof INFOS): KnownNames['kept']['info'] => (state === 'not kept' ? null : state === 'holds it' ? { ...OTHERS, addresses: [...OTHERS.addresses, HOME] }
+        : state === 'without it' ? OTHERS : { formerAddresses: [HOME] });
+    const ROWS = Object.keys(ANSWERS).flatMap((answer) => (Object.keys(COPIES) as Array<keyof typeof COPIES>).flatMap((list) => (Object.keys(COPIES) as Array<keyof typeof COPIES>).flatMap((record) =>
+        (Object.keys(INFOS) as Array<keyof typeof INFOS>).flatMap((info) => [false, true].map((refused) => ({ answer, list, record, info, refused }))))));
+
+    function ORACLE({ answer, list, record, info, refused }: (typeof ROWS)[number]): NameStanding {
+        switch (answer) {
+            // It said what its names are, and this isn't one: whatever is kept.
+            case 'an answer: no names at all': case 'an answer without it': return 'not';
+            case 'an answer: it goes by it': case 'an answer: it lives at it': case 'an answer: it had it before': return refused ? 'uncertain' : 'own';
+        }
+        const states = [list, record, info];
+        if (!states.includes('holds it')) return 'not';
+        if (answer === 'not asked' || refused) return 'uncertain';
+        return states.every((x, i) => x === 'holds it' || (i === 2 && (x === 'not kept' || x === 'says nothing of names'))) ? 'own' : 'uncertain';
+    }
+    const namesOf = (row: (typeof ROWS)[number]): KnownNames => ({
+        community: REACHED, reached: REACHED, answer: ANSWERS[row.answer],
+        kept: {
+            list: row.list === 'not kept' ? null : row.list === 'holds it' ? ['riverside.example', HOME] : ['riverside.example'],
+            record: row.record === 'not kept' ? null : row.record === 'holds it' ? [REACHED, NAME] : [REACHED],
+            info: infoOf(row.info),
+        },
+        refused: row.refused ? [NAME] : [],
+    });
+
+    it('is the whole of it, and every verdict is in it', () => {
+        expect(ROWS.length).toBe(8 * 3 * 3 * 4 * 2);
+        const count = (standing: NameStanding) => ROWS.filter((r) => ORACLE(r) === standing).length;
+        // own: answered (3 x 36, not refused) and the copies agreeing under two kinds of no answer (3 infos each).
+        expect([count('own'), count('not'), count('uncertain')]).toEqual([3 * 36 + 2 * 3, 2 * 72 + 3 * 2 * (2 * 2 * 3), 576 - 114 - 216]);
+    });
+    for (const row of ROWS) it(`${row.answer} · list ${row.list} · record ${row.record} · info ${row.info}${row.refused ? ' · answered as something else' : ''}`, () => {
+        expect(nameStanding(namesOf(row), NAME)).toBe(ORACLE(row));
+    });
+
+    type Rule = typeof nameStanding;
+    const MUTANTS: Record<string, Rule> = {
+        '(a) a copy outranks an answer without it (the bug: the kept signed list)': (n, a) => (nameStanding(n, a) === 'not' && keptClaims(n, a) ? nameStanding({ ...n, answer: null }, a) : nameStanding(n, a)),
+        '(a) an empty list is no answer (the bug)': (n, a) => nameStanding(saysNames(n.answer) && (n.answer.addresses as unknown[]).length === 0 ? { ...n, answer: null } : n, a),
+        '(b) a name it had before is not its own': (n, a) => nameStanding(n.answer ? { ...n, answer: { ...n.answer, formerAddresses: [] } } : n, a),
+        '(b) an address that answered as something else is own': (n, a) => nameStanding({ ...n, refused: [] }, a),
+        '(c) one copy is enough': (n, a) => (nameStanding(n, a) === 'uncertain' && n.answer !== undefined && !n.refused?.length ? 'own' : nameStanding(n, a)),
+        '(c) the list alone is enough': (n, a) => nameStanding({ ...n, kept: { ...n.kept, record: n.kept.list } }, a),
+        '(c) the record alone is enough': (n, a) => nameStanding({ ...n, kept: { ...n.kept, list: n.kept.record } }, a),
+        '(c) the last info is not weighed': (n, a) => nameStanding({ ...n, kept: { ...n.kept, info: null } }, a),
+        '(c) not asked is as good as no answer': (n, a) => nameStanding({ ...n, answer: n.answer ?? null }, a),
+        'no copy claims anything': (n, a) => nameStanding({ ...n, kept: {} }, a),
+    };
+    for (const [name, mutant] of Object.entries(MUTANTS)) {
+        it(`without the rule: ${name}, gets rows wrong`, () => {
+            expect(ROWS.filter((r) => mutant(namesOf(r), NAME) !== ORACLE(r)).length).toBeGreaterThan(0);
+        });
+    }
+});
+
+describe('nameStanding: what an address is', () => {
+    const said = (answer: KnownNames['answer'], more: Partial<KnownNames> = {}): KnownNames => ({ community: HERE, reached: HERE, answer, kept: {}, ...more });
     it.each([
-        { name: 'the address reached, and every one it says it goes by now: hosts, its main; never a name it had before', at: 'https://Riverside.example/',
-            said: { addresses: ['riverside.example', 'river.example'], primaryAddress: 'river.example', formerAddresses: ['oldriver.example'] },
-            want: ['riverside.example', 'river.example'] },
-        { name: 'a name said with no port is on the port it is reached at, for that host only', at: 'https://coop.example:8443',
-            said: { addresses: ['coop.example', 'other.example', 'third.example:9443'] }, want: ['coop.example:8443', 'other.example', 'third.example:9443'] },
-        { name: 'nothing said (an older server, or not read): the address reached', at: 'https://riverside.example', said: null, want: ['riverside.example'] },
-        { name: 'anything that is no address is dropped', at: 'https://riverside.example',
-            said: { addresses: [7, null, 'not an address', 'river.example'], formerAddresses: 'river2.example', primaryAddress: null }, want: ['riverside.example', 'river.example'] },
-        { name: 'an address that is none', at: 'nowhere at all', said: { addresses: ['river.example'] }, want: ['river.example'] },
-    ])('$name', ({ at: reached, said, want }) => {
-        expect(homesOfCommunity(reached, said)).toEqual(want);
+        { name: 'the address reached: own with nothing asked', names: said(undefined), address: 'HTTPS://Riverside.example:443/x?y', want: 'own' },
+        { name: 'the address reached: own though its answer names none (a server that knows no address of its own)', names: said({ addresses: [], primaryAddress: null }), address: HERE, want: 'own' },
+        { name: 'the address it is kept under is not the one it is reached at: weighed as any other', names: said({ addresses: ['river.example'] }, { community: HERE, reached: 'https://river.example' }), address: HERE, want: 'not' },
+        { name: 'however spelled', names: said({ addresses: ['River.example'] }), address: 'https://RIVER.example/', want: 'own' },
+        { name: 'a home (a card\'s, a chat\'s)', names: said({ addresses: ['river.example'] }), address: 'river.example', want: 'own' },
+        { name: 'the same host on another port is another server', names: said({ addresses: ['riverside.example'] }), address: 'https://riverside.example:8443', want: 'not' },
+        { name: 'a name said with no port is on the port it is reached at, for that host only', names: said({ addresses: ['coop.example', 'other.example'] }, { reached: 'https://coop.example:8443' }), address: 'https://coop.example', want: 'not' },
+        { name: 'and another host it names is on 443', names: said({ addresses: ['coop.example', 'other.example'] }, { reached: 'https://coop.example:8443' }), address: 'https://other.example', want: 'own' },
+        { name: 'unless its signed list spells that host\'s port', names: said({ addresses: ['coop.example', 'other.example'] }, { reached: 'https://coop.example:8443', kept: { list: ['other.example:8443'] } }), address: 'https://other.example:8443', want: 'own' },
+        { name: 'a list spells a port, never a name the answer leaves out', names: said({ addresses: ['coop.example'] }, { kept: { list: ['other.example:8443'] } }), address: 'https://other.example:8443', want: 'not' },
+        { name: 'anything said that is no address is dropped', names: said({ addresses: [7, null, 'not an address', 'river.example'], formerAddresses: 'river2.example', primaryAddress: null }), address: 'https://river2.example', want: 'not' },
+        { name: 'no address', names: said({ addresses: ['river.example'] }), address: 'not an address', want: 'not' },
+        { name: 'none', names: said({ addresses: ['river.example'] }), address: null, want: 'not' },
+    ] as Array<{ name: string; names: KnownNames; address: string | null; want: NameStanding }>)('$name', ({ names, address, want }) => {
+        expect(nameStanding(names, address)).toBe(want);
     });
 
     it.each([
-        { name: 'the names it had before, each once, spelled as homes', at: 'https://riverside.example', said: { addresses: ['riverside.example'], formerAddresses: ['OldRiver.example', 'oldriver.example', 7, 'no address'] }, want: ['oldriver.example'] },
-        { name: 'one with no port is on the port it is reached at, for that host only', at: 'https://coop.example:8443', said: { formerAddresses: ['coop.example', 'other.example'] }, want: ['coop.example:8443', 'other.example'] },
-        { name: 'none said', at: 'https://riverside.example', said: { addresses: ['riverside.example'] }, want: [] },
-        { name: 'nothing read', at: 'https://riverside.example', said: null, want: [] },
-    ])('$name', ({ at: reached, said, want }) => {
-        expect(formerHomesOf(reached, said)).toEqual(want);
+        { name: 'none published', said: { addresses: [], primaryAddress: null }, names: true },
+        { name: 'one', said: { addresses: ['riverside.example'] }, names: true },
+        { name: 'no list (an older server)', said: { primaryAddress: 'riverside.example' }, names: false },
+        { name: 'nothing read', said: null, names: false },
+    ])('says something of its names: $name -> $names', ({ said: s, names }) => {
+        expect(saysNames(s)).toBe(names);
     });
 
     // #3354 review, round 5: a community with no address of its own sends nothing across (its server answers 503 no_home).
@@ -224,33 +336,36 @@ describe('a community, all its addresses', () => {
         { name: 'no main said (an older server): not known', said: { addresses: ['riverside.example'] }, want: false },
         { name: 'nothing said of addresses (an older server): not known', said: { primaryAddress: null }, want: false },
         { name: 'nothing read: not known', said: null, want: false },
-    ])('knows no address of its own: $name -> $want', ({ said, want }) => {
-        expect(saysNoHome(said)).toBe(want);
+    ])('knows no address of its own: $name -> $want', ({ said: s, want }) => {
+        expect(saysNoHome(s)).toBe(want);
     });
+});
 
-    const whose = communityNamed([
-        { community: HERE, known: [HERE_OLD], says: ['river.example', 'hillside.example', 'lakeside-known.example'] },
-        { community: HELD_A, known: ['https://lakeside-known.example'], says: ['shared-claim.example', 'taken.example'], refused: ['https://taken.example'] },
-        { community: HELD_B, says: ['shared-claim.example', 'taken.example'], before: ['river.example', 'had-before.example', 'gone.example'], refused: ['https://gone.example'] },
-    ]);
-    it.each([
-        { name: 'however spelled', address: 'HTTPS://Riverside.example:443/x?y', want: HERE },
-        { name: 'a home (a card\'s, a chat\'s)', address: 'riverside.example', want: HERE },
-        { name: 'an address the device knows as its own', address: 'oldriver.example', want: HERE },
-        { name: 'an address it says is its own', address: 'https://river.example', want: HERE },
-        { name: 'the same host on another port is another server', address: 'https://riverside.example:8443', want: null },
-        { name: 'one community\'s own address is never another\'s, whoever says so', address: 'https://hillside.example', want: HELD_A },
-        { name: 'one the device knows for a community is never another\'s, whoever says so', address: 'lakeside-known.example', want: HELD_A },
-        { name: 'two say it: the first in order', address: 'shared-claim.example', want: HELD_A },
-        { name: 'one that answered the device as something else is not its', address: 'taken.example', want: HELD_B },
-        { name: 'one it had before, and no other goes by', address: 'had-before.example', want: HELD_B },
-        { name: 'one it had before that another goes by now is the other\'s', address: 'https://river.example', want: HERE },
-        { name: 'one it had before that answered the device as something else is not its', address: 'gone.example', want: null },
-        { name: 'another community', address: AWAY, want: null },
-        { name: 'no address', address: 'not an address', want: null },
-        { name: 'none', address: null, want: null },
-    ])('$name', ({ address, want }) => {
-        expect(whose(address)).toBe(want);
+/** Two communities on the device, each with one claim on one name: written out by hand, both ways round. */
+describe('whoseName: one name, two communities', () => {
+    const NAME = 'https://hill.example';
+    const CLAIMS: Record<string, (c: string) => KnownNames> = {
+        'reached at it': (c) => ({ community: c, reached: NAME, kept: {}, answer: { addresses: [] } }),
+        'answers it goes by it': (c) => ({ community: c, reached: c, kept: {}, answer: { addresses: ['hill.example'] } }),
+        'answers it had it before': (c) => ({ community: c, reached: c, kept: {}, answer: { addresses: [], formerAddresses: ['hill.example'] } }),
+        'no answer, its copies agree': (c) => ({ community: c, reached: c, answer: null, kept: { list: ['hill.example'], record: [NAME], info: { addresses: ['hill.example'] } } }),
+        'no answer, its copies differ': (c) => ({ community: c, reached: c, answer: null, kept: { list: ['hill.example'], record: [c], info: null } }),
+        'answers it is not its name, its copies say so': (c) => ({ community: c, reached: c, answer: { addresses: ['elsewhere.example'] }, kept: { list: ['hill.example'], record: [NAME], info: { addresses: ['hill.example'] } } }),
+        'has nothing to do with it': (c) => ({ community: c, reached: c, answer: null, kept: { list: [], record: [c], info: { addresses: [] } } }),
+    };
+    /** `1`: the first's; `2`: the second's; `?`: not certain; `-`: neither's. One line a claim of the first's, one letter a claim of the second's, in CLAIMS' order. */
+    const WANT = ['1111111', '2????11', '2????11', '2????11', '2??????', '2222?--', '2222?--'];
+    const rows = Object.keys(CLAIMS).flatMap((first, i) => Object.keys(CLAIMS).map((second, j) => ({ first, second, want: WANT[i][j] })));
+    it.each(rows)('the first $first; the second $second -> $want', ({ first, second, want }) => {
+        const got: WhoseName = whoseName([CLAIMS[first](HERE), CLAIMS[second](HELD_A)])(NAME);
+        expect(got.whose === 'one' ? (got.community === HERE ? '1' : '2') : got.whose === 'none' ? '-' : '?').toBe(want);
+    });
+    it('the only one with a claim: its, if it is certain', () => {
+        for (const [claim, of] of Object.entries(CLAIMS)) {
+            expect([claim, whoseName([of(HERE)])(NAME).whose]).toEqual([claim, { 'no answer, its copies differ': 'uncertain', 'answers it is not its name, its copies say so': 'none', 'has nothing to do with it': 'none' }[claim] ?? 'one']);
+        }
+        expect(whoseName([])(NAME)).toEqual({ whose: 'none' });
+        for (const address of ['not an address', null, undefined]) expect(whoseName([CLAIMS['answers it goes by it'](HERE)])(address)).toEqual({ whose: 'none' });
     });
 });
 

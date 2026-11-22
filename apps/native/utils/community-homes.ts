@@ -1,117 +1,101 @@
 /**
- * A community on this phone, by any of its addresses (#3354 review round 4; core community-homes.ts): the one rule by which
- * Message (utils/message-anyone.ts) and the address card (app/address-card.tsx) tell whether a contact's link, a card's home
- * or the home of a chat across names a community this phone is in. What it weighs, no network asked:
+ * The communities on this phone, as an address is weighed against them (slice S5 part 2; #3354 review rounds 4 to 6). The rule
+ * is core's alone (community-homes.ts nameStanding, whoseName: what a community answers now outranks every copy; copies count
+ * only where they agree; anything else is uncertain). This file only gathers what the rule weighs, and every caller goes
+ * through it: Message (utils/message-anyone.ts) and the address card (app/address-card.tsx).
  *
- * - the address the phone keeps it under, and the ones its record holds (community-index.ts: where the phone met it, the one
- *   in use, each proved one): an old main address after a move is among them;
- * - what it says of itself: its signed list of addresses, and its info as this phone keeps it (node-profile.ts `addresses`,
- *   `primaryAddress`; then `formerAddresses`, which yield to a community here that goes by the name now).
- *
- * An address that answered the phone as something else (the record's `refused`) is never a HELD community's, whatever that
- * community says. For the community in use it stays one: its own server refuses every line to a name it calls its own.
- *
- * **A name it lost** (round 5) is another community's now: its server answers as it no more, and someone there would never
- * see a chat made here. It stays in the record for good (where the phone met it), so an address only the record holds, when
- * the community says others are its own now, counts only for a person this phone's copy has as a member there.
+ * - **What the phone keeps** ({@link keptNames}, no network): the address it reaches the community at and the ones its record
+ *   holds (community-index.ts: where it met it, each proved one; `refused`: each that answered as something else), its signed
+ *   list as last seen, and its info as last heard (node-profile.ts). Each is as old as it is: the list of a community the
+ *   phone isn't set to has no age limit at all.
+ * - **What the community answers now** ({@link askedNow}): its info, asked within a deadline, and only where a copy kept makes
+ *   the address one of its names. At the address it is reached at nothing is asked.
+ * - **Who the copy has there** ({@link doubted}): where the community says now that an address this phone knew as its own isn't,
+ *   and this phone's copy of it still has a row for the person, where they are is in doubt. A row is no proof of a member:
+ *   the directory lists visitors' rows too, and the phone can't tell them apart.
  */
-import { addressOf, communityNamed, formerHomesOf, homesOfCommunity, type NamedCommunity } from '@beanpool/core';
+import { addressOf, keptClaims, nameStanding, saysNames, type KnownNames } from '@beanpool/core';
 import { communityRecordOf, recordAddresses } from './community-index';
 import type { NodeProfile } from './node-profile';
 
+/** A community on this phone, as the rule weighs it, and its info: its answer now, else as this phone keeps it. */
+export interface PhoneNames extends KnownNames {
+    profile: NodeProfile | null;
+}
+
 /** What `community` says of itself as this phone keeps it: its info under the address in use, else under `community`. Null: not kept. */
-export async function keptProfileOf(community: string): Promise<NodeProfile | null> {
+async function keptProfileOf(community: string): Promise<NodeProfile | null> {
     const { getCachedNodeProfile } = await import('./node-profile');
     const using = communityRecordOf(community)?.using;
     const kept = using && using !== community ? await getCachedNodeProfile(using).catch(() => null) : null;
     return kept ?? await getCachedNodeProfile(community).catch(() => null);
 }
 
-/** Whether the phone itself keeps `a` and `b` as one community (one spelling, or its record of one holds the other), whatever either says. */
+/** Whether the phone itself keeps `a` and `b` as one community: one spelling, or its record of one holds the other. */
 export function keptAsOne(a: string, b: string): boolean {
     const record = communityRecordOf(a);
-    return communityNamed([{ community: a, known: record ? recordAddresses(record) : [] }])(b) !== null;
+    const home = addressOf(b);
+    return home !== null && [a, ...(record ? recordAddresses(record) : [])].some((x) => addressOf(x) === home);
+}
+
+/** What this phone keeps of `community`'s names, nothing asked. */
+export async function keptNames(community: string): Promise<PhoneNames> {
+    const record = communityRecordOf(community);
+    const list = record?.list?.list;
+    const profile = await keptProfileOf(community);
+    return {
+        community, profile,
+        reached: record?.using ?? community,
+        kept: {
+            info: profile,
+            list: record?.peerId && list && list.peerId === record.peerId && Array.isArray(list.addresses) ? list.addresses : null,
+            record: record ? recordAddresses(record) : null,
+        },
+        refused: Object.keys(record?.refused ?? {}),
+    };
+}
+
+/** `community`, and every other one this phone saved, as {@link keptNames}. */
+export async function keptNamesWith(community: string): Promise<PhoneNames[]> {
+    const saved = await import('./nodes').then((m) => m.getSavedNodes()).catch(() => []);
+    const others: string[] = [];
+    for (const { url } of saved) if (url && ![community, ...others].some((c) => keptAsOne(c, url))) others.push(url);
+    return Promise.all([community, ...others].map(keptNames));
 }
 
 /**
- * `community` with every address the phone's record and `profile` (its info) give it. `inUse`: the one the phone is set to.
- * `member`: the person it is asked for is a member there by this phone's copy ({@link addressesFor}), so an address the
- * record alone holds is where they are, one it goes by no more included.
+ * `names`, each community asked now for its own word where a copy this phone keeps makes one of `addresses` its name (or for
+ * which `always` says so): each once, side by side, within the deadline (outside-chat-live.ts answerNow).
  */
-export function addressesOf(community: string, profile: NodeProfile | null, inUse: boolean, member = false): NamedCommunity {
-    const record = communityRecordOf(community);
-    const using = record?.using ?? community;
-    const list = record?.list?.list;
-    const listed = record?.peerId && list && list.peerId === record.peerId && Array.isArray(list.addresses) ? list.addresses : [];
-    const says = [...homesOfCommunity(using, profile), ...listed];
-    const refused = record ? Object.keys(record.refused ?? {}) : [];
-    const answeredElse = new Set(refused.map((a) => addressOf(a)));
-    const before = formerHomesOf(using, profile);
-    // Heard what it goes by now: an address the record alone holds is no proof any more. One it says it had before is that.
-    const now = profile?.addresses?.length ? new Set(says.map((a) => addressOf(a))) : null;
-    const proof = (a: string) => a === using || (!answeredElse.has(addressOf(a)) && (!now || now.has(addressOf(a))));
-    const known = (record ? recordAddresses(record) : []).filter((a) => proof(a) || (member && !before.includes(addressOf(a) ?? '')));
-    return { community, known, says, before, refused: inUse ? [] : refused };
+export async function askedNow(names: readonly PhoneNames[], addresses: ReadonlyArray<string | null>, always: (n: PhoneNames) => boolean = () => false): Promise<PhoneNames[]> {
+    return Promise.all(names.map(async (n) => {
+        if (!always(n) && !addresses.some((a) => nameStanding(n, a) === 'uncertain')) return n;
+        const { answerNow } = await import('./outside-chat-live');
+        const answer = await answerNow(n.reached).catch(() => null);
+        return { ...n, answer, profile: answer ?? n.profile };
+    }));
 }
 
-/** Whether this phone's copy of `community` has any of `keys` as a member (db.ts). A read that fails: not known, so no. */
-async function memberThere(community: string, keys: readonly string[], inUse: boolean): Promise<boolean> {
-    for (const key of keys) {
-        try {
-            if (inUse) {
-                const row = await (await import('./db')).getMemberProfile(key);
-                if (row && row.status !== 'pruned') return true;
-            } else if (await (await import('./held-chats')).heldMemberThere(community, key)) return true;
-        } catch { /* not known */ }
+/** Whether this phone's copy of `community` has a row for `key`, a member's or a visitor's (db.ts). A read that fails: not known, so no. */
+async function rowThere(community: string, key: string, inUse: boolean): Promise<boolean> {
+    try {
+        if (!inUse) return await (await import('./held-chats')).heldMemberThere(community, key);
+        const row = await (await import('./db')).getMemberProfile(key);
+        return !!row && row.status !== 'pruned';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Whether where the person with `key` at `address` is, is in doubt: a community here says now that the address isn't its name,
+ * this phone knew it as one, and its copy there has a row for them (they may be a member there whose contact was saved at the
+ * name, or someone at the community that has it now). `inUse`: the community the phone is set to.
+ */
+export async function doubted(names: readonly PhoneNames[], address: string, key: string, inUse: string | null): Promise<boolean> {
+    for (const n of names) {
+        if (!saysNames(n.answer) || nameStanding(n, address) !== 'not' || !keptClaims(n, address)) continue;
+        if (await rowThere(n.community, key, n.community === inUse)) return true;
     }
     return false;
-}
-
-/**
- * {@link addressesOf} for the person `keys` name, weighed against `addresses` (their links, the homes of chats with them):
- * this phone's copy is asked for them only when one of those is an address the record alone holds.
- */
-export async function addressesFor(
-    community: string, profile: NodeProfile | null, inUse: boolean, keys: readonly string[], addresses: ReadonlyArray<string | null>,
-): Promise<NamedCommunity> {
-    const said = addressesOf(community, profile, inUse);
-    const whole = addressesOf(community, profile, inUse, true);
-    const bySaid = communityNamed([said]);
-    const byWhole = communityNamed([whole]);
-    const recordAlone = addresses.some((a) => bySaid(a) === null && byWhole(a) !== null);
-    return recordAlone && await memberThere(community, keys, inUse) ? whole : said;
-}
-
-/** Whether `address` is the one the phone keeps or reaches `community` at, whatever it says of itself. */
-export function reachedAt(community: string, address: string): boolean {
-    const using = communityRecordOf(community)?.using;
-    return communityNamed([{ community, known: using ? [using] : [] }])(address) !== null;
-}
-
-/**
- * Whether `address` (a home, a link), where the person with `key` is, names the community in use at `community`, by any of
- * its addresses: the check made as a chat across is (message-anyone.ts openAcrossChat), and the address card's. One it goes
- * by now is its own whoever else says so: its server refuses every line there. One it had before is not, when another
- * community this phone saved goes by it now.
- */
-export async function namesCommunityInUse(community: string, address: string, key: string, profile?: NodeProfile | null): Promise<boolean> {
-    const said = profile === undefined ? await keptProfileOf(community) : profile;
-    const communities = [await addressesFor(community, said, true, [key], [address])];
-    if (communityNamed([{ ...communities[0], before: [] }])(address) !== null) return true;
-    if (communityNamed(communities)(address) === null) return false;
-    const saved = await import('./nodes').then((m) => m.getSavedNodes()).catch(() => []);
-    for (const { url } of saved) {
-        if (url && !keptAsOne(community, url)) communities.push(await addressesFor(url, await keptProfileOf(url), false, [key], [address]));
-    }
-    return communityNamed(communities)(address) === community;
-}
-
-/**
- * Why no chat across is made from `card` (the address card's check, Message's rule too), or null: its person is in the
- * community in use at `community` (`home`: its home as this phone signs as it, or null), where the direct chat is theirs; or
- * that community says it has no address of its own, so its server sends no line.
- */
-export async function cardRefusal(community: string, card: { key: string; home: string }, home: string | null): Promise<'here' | 'no-home' | null> {
-    if (card.home === home || await namesCommunityInUse(community, card.home, card.key)) return 'here';
-    return (await keptProfileOf(community))?.noHome ? 'no-home' : null;
 }

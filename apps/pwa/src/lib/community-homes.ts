@@ -1,13 +1,12 @@
 /**
- * This community on the web, by any of its addresses (#3354 review round 4; core community-homes.ts): the one rule by which
- * Message (lib/message-anyone.ts) and the address card (components/AddressCardPanel.tsx) tell whether a contact's link, a
- * card's home or the home of a chat across names the community this web app talks to: the address it is open at, and every
- * one the community says is its own (its info's `addresses`, `primaryAddress` and `formerAddresses`: names it had before,
- * never one it lost, which is another community's now). The phone's is apps/native/utils/community-homes.ts. The web holds
- * one community, so there is no other to tell apart; and it is served by the community it talks to, so the list is from a
- * server that leaves a lost name out.
+ * This community on the web, as an address is weighed against it (slice S5 part 2; #3354 review rounds 4 to 6). The rule is
+ * core's alone (community-homes.ts nameStanding, whoseName), the phone's too (apps/native/utils/community-homes.ts): Message
+ * (lib/message-anyone.ts) and the address card (components/AddressCardPanel.tsx) ask it here whether a contact's link, a card's
+ * home or the home of a chat across is one of this community's own names. The web holds one community, so there is no other
+ * to tell apart; it keeps no signed list and no record of it, only its info as this page read it, which a page open for days
+ * keeps too long. So a name other than the address this app is open at is the community's only by what it answers now.
  */
-import { communityNamed, formerHomesOf, homesOfCommunity } from '@beanpool/core';
+import { whoseName, type KnownNames, type WhoseName } from '@beanpool/core';
 import { getCommunityInfo, nodeAddress, type CommunityInfo } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
 
@@ -26,15 +25,18 @@ export function communityInfoKept(): Promise<CommunityInfo | null> {
     return inTime(() => communityInfoOnce());
 }
 
-/**
- * The community's info asked now, as a chat across is made (a page may have been open for days: a switch turned off, or an
- * address taken on since, never makes a chat whose every line the community refuses); with no answer, as this page read it.
- */
-export async function communityInfoNow(): Promise<CommunityInfo | null> {
-    return (await inTime(() => getCommunityInfo())) ?? communityInfoKept();
+/** The community's info asked now (a page may have been open for days: a switch turned off, a name taken on or lost since); null with no answer in time. */
+export function communityAnswerNow(): Promise<CommunityInfo | null> {
+    return inTime(() => getCommunityInfo());
 }
 
-/** Whether an address names the community at `here` (this one), by any of its addresses as `info` says them: its address, or null. */
-export function namedHere(info: CommunityInfo | null, here: string = nodeAddress()): (address: string | null | undefined) => string | null {
-    return communityNamed([{ community: here, says: homesOfCommunity(here, info), before: formerHomesOf(here, info) }]);
+/** This community's names, as the rule weighs them: `kept` as this page read it; `answer` asked now (left out: not asked). */
+export function namesHere(kept: CommunityInfo | null, answer?: CommunityInfo | null, here: string = nodeAddress()): KnownNames[] {
+    return [{ community: here, reached: here, answer, kept: { info: kept } }];
+}
+
+/** Whose name `address` is: this community's, none of its, or not known for certain. It is asked only where what this page read (`kept`) makes it one of its names. */
+export async function whoseNameNow(kept: CommunityInfo | null, address: string | null | undefined, here: string = nodeAddress()): Promise<WhoseName> {
+    const whose = whoseName(namesHere(kept, undefined, here))(address);
+    return whose.whose === 'uncertain' ? whoseName(namesHere(kept, await communityAnswerNow(), here))(address) : whose;
 }

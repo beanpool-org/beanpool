@@ -14,10 +14,12 @@
  * Message never opens, picks as the existing chat, or makes a chat the member can't write in now. A direct chat is writable
  * where the member is. A chat across is only while all three hold, and {@link messagePathFor} asks them of every one: Chat
  * lists it ({@link acrossChatListed}); the community that carries it takes messages from other communities and has an address
- * of its own to send from (`takesAcross`; community-homes.ts saysNoHome); and its person is in none of the communities the device shares with them, by any of their addresses (`whose`:
- * community-homes.ts communityNamed, the address card's rule). Its carrier refuses every line to one of its own names for
- * good, and in another the direct chat there is the one to write in. A chat across that fails stays in Chat as it is. And a
- * message never silently goes to no one (round 5): a name a community lost is another's now, so `whose` never gives it.
+ * of its own to send from (`takesAcross`; community-homes.ts saysNoHome); and its person is for certain in none of the
+ * communities the device shares with them (`whose`: community-homes.ts whoseName, the address card's rule). Its carrier
+ * refuses every line to one of its own names for good, and in another the direct chat there is the one to write in. A chat
+ * across that fails stays in Chat as it is. And a message never silently goes to no one (rounds 5 and 6): an address whose
+ * community isn't known for certain opens nothing here, neither a direct chat nor one across. Message then offers what the
+ * contact offered before it (`switch`): to go to that address.
  *
  * It replaces "Open {community} ›" and the switch question. The web holds one community (`held` empty), so a contact in any
  * other goes across there.
@@ -27,6 +29,7 @@
  * chats its chat list shows ({@link acrossChatListed} for a chat across), so nothing a block hid is reopened, and no chat
  * across the member declined is opened as "the existing chat": its thread has no composer and no Accept.
  */
+import type { WhoseName } from './community-homes.js';
 import { nodeHomeOf } from './node-request-signing.js';
 import type { OutsideChatState } from './outside-chat.js';
 import { word } from './words.js';
@@ -46,6 +49,8 @@ export interface MessageLink {
     key: string;
     /** The name the contact or result shows (an across chat is named with it until their own line names them). */
     name?: string | null;
+    /** The app has its own reason not to know where this link's person is: its address then counts as uncertain. */
+    doubted?: boolean;
 }
 
 /**
@@ -60,6 +65,7 @@ export type MessagePath =
     | { open: 'existing'; chat: KnownChat }
     | { open: 'shared'; community: string; key: string }
     | { open: 'across'; key: string; home: string; name: string | null }
+    | { open: 'switch'; community: string }
     | { open: 'blocked' }
     | { open: 'nothing' };
 
@@ -67,13 +73,14 @@ export type MessagePath =
  * Where Message on a person goes ({@link MessagePath}). `setTo`: the community the device is set to as a member (null: none,
  * a guest's look). `look`: the one it is set to as a guest only: the direct chats the member has there count, and nothing
  * else of it does. `held`: the other communities it holds as a member, in the order it lists them (the web: none). `whose`:
- * which of those an address names, by any of its addresses (community-homes.ts communityNamed), else null. `chats`: every
- * chat the device's chat list shows that may be with this person (a chat across only when {@link acrossChatListed}); only
- * those under one of `links`' keys count, and a direct one only in `setTo`, `look` or a community in `held`. `takesAcross`:
- * whether a community takes messages from other communities and can send to one, as far as the device knows. `blocked`: the app's block rule
- * for this person, by any of `links`' keys (the phone: on its own list, Marty 22 Nov, the S7 rule; the web: on this
- * community's list); asked before anything, so no path opens. `nothing`: no link (not on BeanPool yet), or across to an
- * address that isn't one.
+ * which of those an address is a name of, none of them, or not known for certain (community-homes.ts whoseName). `chats`:
+ * every chat the device's chat list shows that may be with this person (a chat across only when {@link acrossChatListed}), its
+ * `community` as `setTo`, `look` or `held` has it; only those under one of `links`' keys count, and a direct one only in one
+ * of those. `takesAcross`: whether a community takes messages from other communities and can send to one, as far as the
+ * device knows. `blocked`: the app's block rule for this person, by any of `links`' keys (the phone: on its own list, Marty
+ * 22 Nov, the S7 rule; the web: on this community's list); asked before anything, so no path opens. `switch`: nothing is
+ * certain, so nothing opens; the app offers to go to that address. `nothing`: no link (not on BeanPool yet), or across to
+ * an address that isn't one.
  */
 export function messagePathFor(input: {
     links: readonly MessageLink[];
@@ -81,7 +88,7 @@ export function messagePathFor(input: {
     setTo: string | null;
     look: string | null;
     held: readonly string[];
-    whose: (address: string | null | undefined) => string | null;
+    whose: (address: string | null | undefined) => WhoseName;
     takesAcross: (community: string) => boolean;
     blocked: boolean;
 }): MessagePath {
@@ -93,34 +100,40 @@ export function messagePathFor(input: {
     const theirs = chats.filter((c) => keys.has(c.key));
     const shared = [...(setTo ? [setTo] : []), ...held];
     const isShared = (community: string | null): community is string => community !== null && shared.includes(community);
+    const whoseLink = (l: MessageLink): WhoseName => (l.doubted ? { whose: 'uncertain' } : whose(l.community));
+    const sharedOf = (name: WhoseName): string | null => (name.whose === 'one' && isShared(name.community) ? name.community : null);
     // 1. An existing chat: direct where the device is set to (a guest's look too), then in a held community (the held order) ...
     for (const community of [setTo ?? look, ...held]) {
-        const there = community ? theirs.find((c) => c.kind === 'direct' && whose(c.community) === community) : undefined;
+        const there = community ? theirs.find((c) => c.kind === 'direct' && c.community === community) : undefined;
         if (there) return { open: 'existing', chat: there };
     }
     // ... then across, only one that can be written in now (the invariant above), the set-to community's file first.
     const across = theirs.flatMap((c) => {
-        const carriedBy = c.kind !== 'across' ? null : c.community === null ? setTo : whose(c.community);
+        const carriedBy = c.kind === 'across' ? c.community ?? setTo : null;
         return c.kind === 'across' && isShared(carriedBy) ? [{ chat: c, carriedBy }] : [];
     });
-    const writable = across.filter(({ chat, carriedBy }) => takesAcross(carriedBy) && !isShared(whose(chat.home)));
+    const writable = across.filter(({ chat, carriedBy }) => {
+        const name = whose(chat.home);
+        return takesAcross(carriedBy) && name.whose !== 'uncertain' && sharedOf(name) === null;
+    });
     const acrossChat = writable.find((c) => c.carriedBy === setTo) ?? writable[0];
     if (acrossChat) return { open: 'existing', chat: acrossChat.chat };
     // 2. The community you share, the one set to first, then the held ones in order: named by a link; or, when no link names
     // one, by the home of a chat across with them (their own server's, or their card's, word that they are there).
     for (const community of shared) {
-        const link = links.find((l) => whose(l.community) === community);
+        const link = links.find((l) => sharedOf(whoseLink(l)) === community);
         if (link) return { open: 'shared', community, key: link.key };
     }
     for (const community of shared) {
-        const there = across.find(({ chat }) => whose(chat.home) === community);
+        const there = across.find(({ chat }) => sharedOf(whose(chat.home)) === community);
         if (there) return { open: 'shared', community, key: there.chat.key };
     }
-    // 3. Across, from the contact's first link: no link names a community shared, so never to one of its names.
-    const first = links[0];
-    const home = nodeHomeOf(first.community);
-    if (!home) return { open: 'nothing' };
-    return { open: 'across', key: first.key, home, name: first.name?.trim() || null };
+    // 3. Across, from the contact's first link that is for certain in none of them: never to one of their names.
+    const away = links.find((l) => whoseLink(l).whose !== 'uncertain' && nodeHomeOf(l.community) !== null);
+    if (away) return { open: 'across', key: away.key, home: nodeHomeOf(away.community)!, name: away.name?.trim() || null };
+    // Nothing is certain: nothing opens (the invariant). The app offers to go to the address itself.
+    const unsure = links.find((l) => whoseLink(l).whose === 'uncertain');
+    return unsure ? { open: 'switch', community: unsure.community } : { open: 'nothing' };
 }
 
 /**

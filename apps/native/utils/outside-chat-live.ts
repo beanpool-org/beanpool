@@ -193,16 +193,15 @@ async function profileHere(nodeUrl: string) {
     return (await getCachedNodeProfile(nodeUrl).catch(() => null)) ?? (await fetchNodeProfile(nodeUrl).catch(() => null));
 }
 
-/** How long making a chat across waits for the community's own answer before it goes by what this phone keeps. */
-const PROFILE_NOW_MS = 5_000;
+/** How long Message waits for a community's own answer before it goes by what this phone keeps. */
+const ANSWER_MS = 5_000;
 
 /**
- * What the community says of itself as a chat across is made (utils/message-anyone.ts openAcrossChat; #3354 review round 4):
- * asked now, so a switch turned off or an address taken on since this phone last heard never makes a chat whose every line
- * it refuses; with no answer, as this phone keeps it. Null when neither can be had.
+ * What the community at `nodeUrl` says of itself, asked now (utils/community-homes.ts askedNow; #3354 review round 4): a switch
+ * turned off, a name taken on or one lost since this phone last heard. Null with no answer in time.
  */
-export async function profileNow(nodeUrl: string): Promise<NodeProfile | null> {
-    return (await fetchNodeProfile(nodeUrl, fetch, PROFILE_NOW_MS).catch(() => null)) ?? (await getCachedNodeProfile(nodeUrl).catch(() => null));
+export async function answerNow(nodeUrl: string): Promise<NodeProfile | null> {
+    return fetchNodeProfile(nodeUrl, fetch, ANSWER_MS).catch(() => null);
 }
 
 /**

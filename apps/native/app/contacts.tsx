@@ -22,7 +22,7 @@ import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     CONTACTS_LIMITS, addPeopleWords, cleanContactName, contactInviteAsk, contactInviteAskWords, contactInviteCancelWords, contactInviteCodes, contactInviteNoWords, contactInviteOut,
-    contactInviteWords, contactInvitedLine, emptyContactsList, forgetContactInvite, formatCount, formerContactsWords, linkContactToInvite, newContactId, putContact,
+    contactInviteWords, contactInvitedLine, emptyContactsList, forgetContactInvite, formatCount, formerContactsWords, linkContactToInvite, newContactId, nodeHomeOf, putContact,
     removeContact, removeEveryContact, t, tn, type Contact, type ContactInviteUsed, type ContactsList, type MyInviteSeen,
 } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
@@ -431,6 +431,19 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
     // on this phone's own list (Marty 22 Nov, the S7 rule) is refused on every path, an existing chat included (#3354
     // review), in the across path's words. Nothing it opens or makes is a chat the member can't write in now (the rule's
     // invariant): a chat across they declined, or to someone in a community shared by any of its addresses, is no existing chat.
+    // Where it can't be said for certain whose the contact's address is, nothing opens: the question Contacts always asked for a
+    // community this phone isn't set to, to switch to that address (round 6), so no line is written where no one reads it.
+    const offerSwitch = (name: string, address: string) => {
+        const community = communityLabel(view, address);
+        Alert.alert(
+            t('Switch to this community'),
+            t('{name} is in {community}. Switch to {community} to message them?', { name, community }),
+            // A switch that fails says so, in the words the Communities list uses (useCommunities.switchTo).
+            [{ text: t('Cancel'), style: 'cancel' }, { text: t('Switch'), onPress: () => {
+                switchCommunity(address).catch((e) => Alert.alert(t("Couldn't switch community"), e?.message || t('Please try again.')));
+            } }],
+        );
+    };
     const messageAnyone = async (c: Contact) => {
         if (opening) return;
         const links = c.links.map((l) => ({ community: l.community, key: l.key, name: c.name }));
@@ -442,12 +455,14 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
         else if (path.open === 'nothing') Alert.alert(t('Message', undefined, 'button: write to'), t('Please try again.'));
         else if (path.open === 'existing') router.push(existingChatRoute(path.chat, await anchorUrl(), (community) => communityLabel(view, community)) as any);
         else if (path.open === 'shared') await (here(path.community) ? message(path.key) : messageThere(path.key, path.community));
+        else if (path.open === 'switch') offerSwitch(c.name, path.community);
         else if (path.open === 'across') {
             setOpening(path.key);
             const opened = await openAcrossChat(path).catch(() => ({ refused: 'no-community' as const }));
             setOpening(null);
             if ('chatId' in opened) router.push(`/outside-chat/${opened.chatId}`);
             else if ('here' in opened) await message(opened.here);
+            else if (opened.refused === 'uncertain') offerSwitch(c.name, links.find((l) => nodeHomeOf(l.community) === path.home)?.community ?? `https://${path.home}`);
             else Alert.alert(t('Message', undefined, 'button: write to'), opened.refused === 'off' ? t("This community doesn't take messages from other communities.")
                 : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.")
                 : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : t('Connect to your community to start a chat.'));

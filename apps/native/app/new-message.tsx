@@ -24,6 +24,7 @@ import { useContactsRecord } from '../utils/use-contacts';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal, isNoCopyInPlace } from '../utils/db';
 import { heldCommunityList, heldPeopleMatching, type HeldPerson } from '../utils/held-chats';
 import { sameCommunity } from '../utils/push-pins';
+import { usingOf } from '../utils/community-index';
 import { existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { membersByKey, outsideMessagesOn } from '../utils/node-profile';
@@ -319,11 +320,12 @@ export default function NewMessageScreen() {
             const where = held?.community ?? anchor;
             // Someone blocked on this phone's own list (Marty 22 Nov, the S7 rule) is refused on every path, an existing chat
             // included (#3354 review); lists that can't be read open nothing (`nothing`), and neither falls through to a chat here.
+            // Found in that community's own copy, so named by the address the phone reaches it at: whatever its saved row says.
             const path: MessagePath = where
-                ? await messagePathOnPhone(identity.publicKey, [{ community: where, key: pubkey, name: held?.callsign ?? null }], heldUrls).catch(() => ({ open: 'nothing' as const }))
+                ? await messagePathOnPhone(identity.publicKey, [{ community: usingOf(where), key: pubkey, name: held?.callsign ?? null }], heldUrls).catch(() => ({ open: 'nothing' as const }))
                 : { open: 'nothing' };
             if (path.open === 'blocked') throw new Error(t('You have blocked this user. Messaging is disabled.'));
-            if (path.open === 'nothing' && where) throw new Error(t('Please try again.'));
+            if (path.open === 'switch' || (path.open === 'nothing' && where)) throw new Error(t('Please try again.'));
             const nameOf = (c: string) => heldList.find((h) => sameCommunity(h.url, c))?.name ?? held?.communityName ?? '';
             if (path.open === 'existing') {
                 router.replace(existingChatRoute(path.chat, anchor, nameOf) as any);
@@ -337,7 +339,7 @@ export default function NewMessageScreen() {
             if (path.open === 'across') {
                 const opened = await openAcrossChat(path);
                 if ('chatId' in opened) { router.replace(`/outside-chat/${opened.chatId}`); return; }
-                if ('refused' in opened) throw new Error(opened.refused === 'off' ? t("This community doesn't take messages from other communities.") : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.") : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : '');
+                if ('refused' in opened) throw new Error(opened.refused === 'off' ? t("This community doesn't take messages from other communities.") : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.") : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : opened.refused === 'uncertain' ? t('Please try again.') : '');
             }
             const fromNode = nodeResults.find(m => m.public_key === pubkey);
             if (fromNode) await keepCards([fromNode]);

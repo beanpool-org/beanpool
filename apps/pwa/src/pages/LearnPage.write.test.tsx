@@ -677,9 +677,9 @@ describe('an owner or admin', () => {
                 const waiting: Array<() => void> = [];
                 request.mockImplementation((async (method: string, path: string, body?: unknown) => {
                     if (!held(method, path)) return answer(method, path, body);
-                    const said = given ?? (await answer(method, path, body).then((a) => () => a));
+                    const asked = given ? null : await answer(method, path, body);
                     await new Promise<void>((r) => waiting.push(r));
-                    return said();
+                    return given ? given() : asked;
                 }) as never);
                 return { count: () => waiting.length, land: async () => { waiting.splice(0).reverse().forEach((r) => r()); await wait(); } };
             };

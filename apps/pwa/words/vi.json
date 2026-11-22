@@ -3961,7 +3961,7 @@
   "This month: {trades} · +{in} in · −{out} out": "Tháng này: {trades} · +{in} vào · −{out} ra",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "Máy chủ này đã trả lời bằng cuộc trò chuyện của một nhóm được mã hóa, không phải tin nhắn trực tiếp, nên không có gì được mở.",
   "This node is serving an older key than one this app already holds.": "Máy chủ này đang cung cấp một khóa cũ hơn khóa mà ứng dụng này đã giữ.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "Máy chủ này giờ nói rằng cuộc trò chuyện này không được mã hóa. Trình duyệt này đã giữ các khóa của nó, nên vẫn mã hóa mọi tin nhắn, và không gửi gì mà nó không thể mã hóa.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Máy chủ này giờ nói rằng cuộc trò chuyện này không được mã hóa. Trình duyệt này đã từng thấy nó được mã hóa, nên vẫn mã hóa mọi tin nhắn, và không gửi gì mà nó không thể mã hóa.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "Máy chủ báo rằng có người giữ khóa cuộc trò chuyện này dù không có trong danh sách thành viên. Không có gì được gửi.",
   "This project's deadline has passed: it takes no more pledges.": "Hạn chót của dự án này đã qua: dự án không nhận thêm cam kết đóng góp.",
   "This request is no longer open. You can ask again.": "Yêu cầu này không còn mở nữa. Bạn có thể yêu cầu lại.",

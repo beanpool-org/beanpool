@@ -339,6 +339,8 @@ export const OWNER_SEED_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // photo_urls: this server fetches any public address it is given.
+        openWorld: true,
         inputSchema: {
             type: 'object',
             properties: {
@@ -367,6 +369,8 @@ export const OWNER_SEED_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // photo_urls: this server fetches any public address it is given.
+        openWorld: true,
         get inputSchema() {
             const beansOn = getProfileSwitches().beans;
             return {
@@ -409,6 +413,8 @@ export const OWNER_SEED_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // photo_urls: this server fetches any public address it is given.
+        openWorld: true,
         inputSchema: {
             type: 'object',
             properties: {

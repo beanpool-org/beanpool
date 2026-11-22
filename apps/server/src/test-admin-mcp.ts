@@ -301,6 +301,14 @@ async function main(): Promise<void> {
             // Slice S2: an edit is a write, not destructive; the two removals are destructive, and so is close_poll: nothing reopens a poll.
             && S2_WRITES.every(n => { const a = tools.find(t => t.name === n)?.annotations; return a?.readOnlyHint === false && a?.idempotentHint === false && a?.destructiveHint === (n !== 'update_post'); }),
         'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action, the five creates, photo_upload_link and update_post are writes, neither idempotent nor destructive; remove_post, remove_all_i_made and close_poll are destructive; knowledge_draft says it reaches an outside server (openWorldHint), knowledge_draft_withdraw does not');
+        // openWorldHint, every tool (review of #3351): true for one this server asks an outside server for (a photo's address it
+        // fetches, or Wikimedia Commons), false for every other. By name, and by what each takes, so a new one can't miss it.
+        const OPEN_WORLD = ['create_enterprise', 'create_enterprise_listing', 'create_event', 'create_group', 'create_group_post', 'create_need', 'create_offer', 'knowledge_draft', 'update_post'];
+        const saysOpen = tools.filter(t => t.annotations?.openWorldHint === true).map(t => t.name).sort();
+        const takesAnAddress = tools.filter(t => { const p = (t.inputSchema as { properties?: Record<string, unknown> }).properties ?? {}; return 'photo_urls' in p || 'commons_pictures' in p; }).map(t => t.name).sort();
+        assert(JSON.stringify(saysOpen) === JSON.stringify(OPEN_WORLD) && JSON.stringify(takesAnAddress) === JSON.stringify(OPEN_WORLD)
+            && tools.every(t => typeof t.annotations?.openWorldHint === 'boolean'),
+            `openWorldHint is true on the tools that take photo_urls or commons_pictures, false on every other (says: ${saysOpen.join(', ')}; takes one: ${takesAnAddress.join(', ')})`);
         const prompts = (await client.listPrompts()).prompts.map(p => p.name).sort();
         assert(JSON.stringify(prompts) === JSON.stringify(['backup-check', 'check-old-knowledge', 'draft-announcement', 'draft-local-knowledge', 'safety-settings-check', 'summarise-reports', 'triage-report',
             'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu, and Local knowledge's two where Learn is on (K6) (${prompts.join(', ')})`);

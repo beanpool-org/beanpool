@@ -14,6 +14,8 @@
  * - In IndexedDB, per identity and group (GroupLockStore): the highest epoch this browser has verified or made, which
  *   never falls, and whether it has seen the group locked (provenance §10 pick 1; the director's sticky lock). A read of
  *   that store that fails is never taken as "never seen": nothing is sealed or sent readable until it reads.
+ * - In memory, for the page's life, whoever is signed in: the ids a node answered locked (answeredLocked). No ring's end
+ *   takes one off, and a readable line asks it last of all (lib/group-hold.ts readableLineTo; #3358's review, S1 and R2).
  *
  * Which epoch a line goes under (provenance §7): the node's current one, and only when (1) it is not below the highest
  * this browser holds (else "This node is serving an older key…", nothing sent), (2) its record verifies with its maker
@@ -138,6 +140,31 @@ export function groupKeysLookUnopenable(): boolean {
     return !wrapOpenedThisSession && wrapFailuresBeforeAnyOpened > 0;
 }
 
+/**
+ * The chat ids (lower case) some node's answer showed locked, or served a key of, since this page loaded. It outlives the
+ * rings, which a Sign Out drops, and the store's mark, which a full disk refuses: nothing takes one off but a page load, and
+ * nothing readable goes to one (lib/group-hold.ts readableLineTo). Ids only, in no store.
+ */
+const answeredLocked = new Set<string>();
+
+/** A node's answer for this chat showed it locked: noted at once, whatever becomes of its mark or of who asked. */
+export function noteAnsweredLocked(conversationId: string): void {
+    if (typeof conversationId === 'string' && conversationId) answeredLocked.add(conversationId.toLowerCase());
+}
+
+export function wasAnsweredLocked(conversationId: string): boolean {
+    return answeredLocked.has(conversationId.toLowerCase());
+}
+
+/** Tests only: a page loaded afresh. */
+export function resetAnsweredLockedForTest(): void {
+    answeredLocked.clear();
+}
+
+/** How many times the rings were dropped: a readable line asked about before a drop is refused after it (lib/group-hold.ts). */
+let timesForgotten = 0;
+export function groupKeysForgotten(): number { return timesForgotten; }
+
 const HOLE_REFETCH_MS = 60_000;
 /** `after` past any epoch: the keys answer's header (current, stale, fromEpoch, roster) with no records. */
 const HEADER_ONLY = '?after=999999999';
@@ -167,6 +194,8 @@ export class GroupKeyring {
     private refetched = new Set<number>();
     state: GroupKeysState | null = null;
 
+    /** Dropped once this no longer counts (forgetGroupKeys): the account has left, and no mark of it is put back. */
+    private readonly made = timesForgotten;
     /** What this group's two facts are kept under: this identity's key, then the group's (finding 8: never another's). */
     private readonly storeKey: string;
     private readonly base: string;
@@ -176,22 +205,25 @@ export class GroupKeyring {
         this.base = `/api/groups/${encodeURIComponent(groupId)}`;
     }
 
+    /** Take in what the store keeps now. Throws GroupChatKeyError('store') when it can't be read. */
+    private async readStore(): Promise<void> {
+        let saved: GroupLockState;
+        try {
+            saved = await this.store.load(this.storeKey);
+        } catch {
+            throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
+        }
+        this.highest = Math.max(this.highest, Number(saved?.highest) || 0);
+        this.locked = this.locked || !!saved?.locked;
+    }
+
     /**
-     * Read the two kept facts. A failed read is NOT remembered as "nothing kept" (confirmation 2 of #1788, finding 1): it
-     * throws GroupChatKeyError('store') and the next call reads again.
+     * Read the two kept facts, once. A failed read is NOT remembered as "nothing kept" (confirmation 2 of #1788, finding 1):
+     * it throws GroupChatKeyError('store') and the next call reads again.
      */
     private async ensureLoaded(): Promise<void> {
         if (!this.loaded) {
-            const p = (async () => {
-                let saved: GroupLockState;
-                try {
-                    saved = await this.store.load(this.storeKey);
-                } catch {
-                    throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
-                }
-                this.highest = Math.max(this.highest, Number(saved?.highest) || 0);
-                this.locked = this.locked || !!saved?.locked;
-            })();
+            const p = this.readStore();
             this.loaded = p;
             p.catch(() => { if (this.loaded === p) this.loaded = null; });
         }
@@ -201,11 +233,13 @@ export class GroupKeyring {
     /**
      * True once this browser has seen this group locked (its chat answer locked, an epoch verified, opened or made): the
      * chat is locked here for good, whatever a node says later (director's decision b). When the store can't be read,
-     * true: a read failure never counts as "never held".
+     * true: a read failure never counts as "never held". What this page has seen waits for no read (#3358's review, R3); a
+     * "no" is never remembered, since another tab may have seen the chat locked since.
      */
     async seenLocked(): Promise<boolean> {
+        if (this.seenLockedInMemory()) return true;
         try {
-            await this.ensureLoaded();
+            await this.readStore();
         } catch {
             return true;
         }
@@ -217,10 +251,20 @@ export class GroupKeyring {
         return this.locked || this.highest > 0 || this.keys.size > 0 || [...this.epochs.values()].some((e) => !!e.wrap);
     }
 
-    /** Remember that this browser has seen the group locked (its chat answer carried `encryption`). */
+    /** Remember that this browser has seen the group locked (its chat answer showed it): in memory before anything is put. */
     async noteLocked(): Promise<void> {
+        this.answeredLockedNow();
+        await this.keepMark();
+    }
+
+    private answeredLockedNow(): void {
         this.locked = true;
-        await this.store.markLocked(this.storeKey).catch(() => { });
+        noteAnsweredLocked(this.groupId);
+    }
+
+    /** Put the mark in the store if this page has seen the chat locked: again at each answer and send, for one it refused. */
+    async keepMark(): Promise<void> {
+        if (this.made === timesForgotten && this.seenLockedInMemory()) await this.store.markLocked(this.storeKey).catch(() => { });
     }
 
     /** True if a record's maker is me or someone the screen shows as a member: only such a record raises the highest (finding 6). */
@@ -325,6 +369,8 @@ export class GroupKeyring {
         }
         const list = [...ask].sort((x, y) => y - x).slice(0, EPOCHS_PER_ASK);
         let a = await this.fetchKeys(list.length ? `?epochs=${list.join(',')}` : HEADER_ONLY);
+        // A node that serves this chat a key, or names its current one, says it is locked: kept for this page's life.
+        if (a.current || a.epochs?.length) this.answeredLockedNow();
         this.absorb(a);
         if (a.current !== null && a.current !== undefined && !this.epochs.has(a.current)) {
             const head = a;
@@ -643,6 +689,7 @@ export function groupsSeenLockedInMemory(identityPub: string): string[] {
 /** Sign-out, another identity: every opened key leaves memory, and this load's wrap tally. */
 export function forgetGroupKeys(): void {
     keyrings.clear();
+    timesForgotten += 1;
     wrapOpenedThisSession = false;
     wrapFailuresBeforeAnyOpened = 0;
 }

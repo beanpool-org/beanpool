@@ -3961,7 +3961,7 @@
   "This month: {trades} · +{in} in · −{out} out": "今月：{trades} · 入 +{in} · 出 −{out}",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "このノードはダイレクトメッセージではなく、ロックされたグループのチャットで応答したため、何も開きませんでした。",
   "This node is serving an older key than one this app already holds.": "このノードが提供している鍵は、アプリが既に保持しているものより古い鍵です。",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "このノードは、このチャットはロックされていないと言っています。このブラウザはその鍵を持っていたため、すべてのメッセージを引き続きロックし、ロックできないものは送信しません。",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "このノードは、このチャットはロックされていないと言っています。このブラウザはこのチャットがロックされているのを見たことがあるため、すべてのメッセージを引き続きロックし、ロックできないものは送信しません。",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "このノードは、メンバーリストにいない人物がこのチャットの鍵を保持していると通知しています。何も送信されませんでした。",
   "This project's deadline has passed: it takes no more pledges.": "このプロジェクトの期限が過ぎました：これ以上プレッジは受け付けません。",
   "This request is no longer open. You can ask again.": "このリクエストはもう有効ではありません。もう一度申請できます。",

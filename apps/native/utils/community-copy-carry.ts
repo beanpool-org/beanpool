@@ -47,8 +47,9 @@ import { copyCopyFile, databaseDirectory, deleteCopyFile, exists, fileUri } from
 import { getDatabaseFilenameForNode } from './nodes';
 import {
     PER_FILE_STORE_KEYS, dmConversationsSeenSetAsideStoreKey, dmConversationsSeenStoreKey, dmLinesAtUpdateStoreKey,
-    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey, messageRequestsStoreKey, messageRequestsSeenStoreKey,
+    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey, messageRequestsStoreKey, messageRequestsSeenStoreKey, groupUnsentStoreKey,
 } from './storage-keys';
+import { unsentWithCarried } from './group-unsent';
 import { pinsWithCarried } from './dm-peer-pins';
 import { seenWithCarried } from './dm-guard-list';
 import { addGroupKeyState, type SqliteLike } from './group-chat-store';
@@ -79,6 +80,8 @@ export const MERGES: ReadonlyMap<KeyOf, Merge> = new Map<KeyOf, Merge>([
     [messageRequestsStoreKey, keepHere],
     // How far the requests list was opened (the row's red dot): the new name's own stays, the old name's where there is none.
     [messageRequestsSeenStoreKey, keepHere],
+    // A group's lines not sent: the old name's join the new name's, each once.
+    [groupUnsentStoreKey, (here, carried) => unsentWithCarried(here, carried)],
 ]);
 
 /** One per-account key of a file: its key now, how it goes, and the same key under another file's name. */

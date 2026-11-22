@@ -219,6 +219,18 @@ export function dmLinesAtUpdateStoreKey(publicKey: string, file: string): string
     return `beanpool_dm_lines_at_update:${publicKey.toLowerCase()}:${file}`;
 }
 
+/** Every {@link groupUnsentStoreKey} key starts with this: Sign Out and Replace wipe them (utils/identity.ts). */
+export const GROUP_UNSENT_STORE_PREFIX = 'beanpool_group_unsent:';
+
+/**
+ * The group's and enterprise's chat lines one account wrote in one community file that its node never took, by chat
+ * (utils/group-unsent.ts): shown again as not delivered after a relaunch, with Resend and Discard. `file`: the name db.ts
+ * opens the community under.
+ */
+export function groupUnsentStoreKey(publicKey: string, file: string): string {
+    return `${GROUP_UNSENT_STORE_PREFIX}${publicKey.toLowerCase()}:${file}`;
+}
+
 /**
  * Every key above kept per (account, community file): what goes with a community's copy when it moves to its new address
  * (utils/community-copy-carry.ts). A new key per account and file belongs here too, with its add-only way into a value
@@ -228,7 +240,7 @@ export function dmLinesAtUpdateStoreKey(publicKey: string, file: string): string
  */
 export const PER_FILE_STORE_KEYS: readonly ((publicKey: string, file: string) => string)[] = [
     dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey, dmConversationsSeenStoreKey, dmConversationsSeenSetAsideStoreKey, dmLinesAtUpdateStoreKey,
-    messageRequestsStoreKey, messageRequestsSeenStoreKey,
+    messageRequestsStoreKey, messageRequestsSeenStoreKey, groupUnsentStoreKey,
 ];
 
 /**

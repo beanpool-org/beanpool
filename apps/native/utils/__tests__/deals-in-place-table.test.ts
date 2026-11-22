@@ -538,6 +538,29 @@ describe('a double tap and a retry never move Beans twice', () => {
         expect(moved(servers[A])).toBe(1);
     });
 
+    it('#3363 N3: a release in place on its way, the phone moved onto that community ("Open {community} ›"), and the same release tapped there in use: one request, and the one in use refreshes the balance and tells the screens in use', async () => {
+        db.enterChatInPlace(A);
+        asked = [];
+        let go!: () => void;
+        let sawIt!: () => void;
+        const seen = new Promise<void>((r) => { sawIt = r; });
+        hold = { path: ACTS[0].path(), seen: () => sawIt(), go: new Promise((r) => { go = r; }), used: false };
+        const inPlace = ACTS[0].run(A);
+        await seen;
+        await setToA();
+        h.emitted.length = 0;
+        const inUse = ACTS[0].run(undefined);
+        await settle();
+        go();
+        await Promise.all([inPlace, inUse]);
+        await settle();
+        expect(steps().length, 'one request').toBe(1);
+        expect(moved(servers[A]), 'paid once').toBe(1);
+        expect(asked.filter((r) => r.origin === A && r.path.startsWith('/api/ledger/balance/')).length, 'the balance in use, asked').toBeGreaterThan(0);
+        expect(h.emitted).toEqual(expect.arrayContaining(['transaction_completed', 'sync_data_updated']));
+        expect(dealRow(A_FILE, tx)?.status).toBe('completed');
+    });
+
     it.each(each)('%s, its answer lost on the way and tried again, %s: taken once', async (_n, _w, act, c) => {
         await ready(c);
         servers[A].loseAnswers = 1;

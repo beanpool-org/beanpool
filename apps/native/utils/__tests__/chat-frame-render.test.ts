@@ -381,7 +381,8 @@ const radio = (name: string) => radios().find((r) => r.querySelector('span')?.te
 /** The big title "Chat" (components/PageTitle), however many other headings a pane draws. */
 const chatTitle = () => Array.from(host.querySelectorAll('[role="heading"]')).find((h) => h.textContent === 'Chat') ?? null;
 const forumPane = () => host.querySelector('[data-testid="forum-pane"]');
-const search = () => host.querySelector('input[placeholder="Search chats, posts, partners..."]');
+/** The search box, by its label: its placeholder is the one that fits its width (walk-s6: "Search" at 320 dp × 1.3). */
+const search = () => host.querySelector('input[aria-label="Search chats, posts, partners"]');
 
 describe('the Chat tab where the forum is on: Chats · Forum in the title\'s place', () => {
     it('opens on Chats: the switch, then Messages · Groups · People, the search row and the conversations, and no title', async () => {
@@ -394,6 +395,8 @@ describe('the Chat tab where the forum is on: Chats · Forum in the title\'s pla
         // Under Chats nothing moves.
         expect(radios().map((r) => r.querySelector('span')?.textContent)).toEqual(['Messages', 'Groups', 'People']);
         expect(search()).not.toBeNull();
+        // At 320 dp × 1.3 the long words would be cut ("Search ch" on the walk): the short one, whole.
+        expect(search()!.getAttribute('placeholder')).toBe('Search');
         expect(host.textContent).toContain('Kofi');
         expect(forumPane()).toBeNull();
         // Above Messages · Groups · People, where the title was; the smoke flow's selector stays on the tab's top.

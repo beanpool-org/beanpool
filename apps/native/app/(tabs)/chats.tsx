@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl, AppState } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl, AppState, useWindowDimensions } from 'react-native';
+import { wordsThatFit } from '../../utils/words-that-fit';
 import { useFocusEffect, router } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
-import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatsFilledIn, heldChatsInView, heldChatsShown, heldOutsideChatsShown, outsideChatHref, refreshHeldWhereRose, HELD_QUIET_REFRESH_MS, type HeldChatRow as HeldChat, type HeldOutsideChat, type HeldRowFill } from '../../utils/held-chats';
+import { heldChatInPlaceParams, heldChatOpensInPlace, heldChatShares, heldChatsFilledIn, heldChatsInView, heldChatsShown, heldOutsideChatsShown, outsideChatHref, refreshHeldWhereRose, HELD_QUIET_REFRESH_MS, type HeldChatRow as HeldChat, type HeldOutsideChat, type HeldRowFill } from '../../utils/held-chats';
 import { onNoticeCounts } from '../../utils/notice-counts';
 import { HeldChatRow } from '../../components/HeldChatRow';
 import { requestsWaitingOnGlobal } from '../../utils/global-requests';
@@ -36,7 +37,7 @@ import { MessageRequestsRow } from '../../components/MessageRequestsRow';
 import { useRequestsUnseen } from '../../utils/requests-seen';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
-import { groupsListed, heldGroups, noticesBesideEvents, useHeldGroups } from '../../utils/held-groups';
+import { groupsListed, heldGroupShares, heldGroups, noticesBesideHeldChats, useHeldGroups } from '../../utils/held-groups';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { openNoticeIn } from '../../utils/push-notice-switch';
 import { CHAT_MESSAGES_ROUTE } from '../../utils/push-notice-check';
@@ -63,6 +64,9 @@ const TALK_PANES: ReadonlyArray<{ id: TalkView; label: WordKey }> = [
     { id: 'groups', label: word('Groups', 'talk pane') },
     { id: 'people', label: word('People', 'talk pane') },
 ];
+
+/** The search box's text size, which its placeholder is fitted to. */
+const SEARCH_FONT_SP = 15;
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
@@ -124,6 +128,9 @@ export default function ChatsScreen() {
     const groupsUnread = React.useMemo(() => groupsUnreadTotal(groupsShown), [groupsShown]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    // The search box's own width once laid out (0 until then: the short placeholder), for its placeholder on one line.
+    const [searchRoom, setSearchRoom] = useState(0);
+    const { fontScale } = useWindowDimensions();
     // The member's private contacts (DESIGN-private-contacts-fable.md §3.1): the button in the search row, its one-time line
     // (kept per account: gone once used or closed), the ⓘ, and "Your contacts are back" once a community's copy came in.
     // Only the record beside the list is read here, never the list itself (it is costly to open on an old phone).
@@ -184,9 +191,11 @@ export default function ChatsScreen() {
     const [heldChats, setHeldChats] = useState<HeldChat[]>([]);
     // Each held row's own unread count and its newest line's preview (slice S2b), by its key: read after the rows show.
     const [heldFilled, setHeldFilled] = useState<Map<string, HeldRowFill>>(() => new Map());
-    // Less the lines of the events that have rows of their own under Groups (slice S6): those open in place, with no switch.
+    // Less the lines of every chat there with a row of its own here, which opens in place with no switch: its direct chats
+    // (slice S2) and its groups and events under Groups (S6). Only what can't be opened here is left on the "· Switch" line.
     const noticesElsewhere = useOtherCommunitiesNotices();
-    const otherNotices = React.useMemo(() => noticesBesideEvents(noticesElsewhere, groupsHeld), [noticesElsewhere, groupsHeld]);
+    const inPlaceShares = React.useMemo(() => [...heldChatShares(heldChats, heldFilled), ...heldGroupShares(groupsHeld)], [heldChats, heldFilled, groupsHeld]);
+    const otherNotices = React.useMemo(() => noticesBesideHeldChats(noticesElsewhere, inPlaceShares), [noticesElsewhere, inPlaceShares]);
     // Requests waiting in every other community this phone holds, global's door count among them (Marty, 19 Nov 2026,
     // decision 4 of DESIGN-no-switch-messaging-fable.md, S0; utils/requests-elsewhere.ts): in the row's count and dot, and a
     // card "In {community}" each. Null until read; never a push, a badge or the unread count.
@@ -485,7 +494,7 @@ export default function ChatsScreen() {
         searchBarRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 10, gap: 10, alignItems: 'center' },
         searchContainer: { flex: 1, flexDirection: 'row', backgroundColor: colors.surface.subtle, borderRadius: 12, alignItems: 'center', paddingHorizontal: 10, height: 42 },
         searchIcon: { marginRight: 6 },
-        searchInput: { flex: 1, fontSize: 15, color: colors.text.body, height: '100%', paddingVertical: 0 },
+        searchInput: { flex: 1, fontSize: SEARCH_FONT_SP, color: colors.text.body, height: '100%', paddingVertical: 0 },
         clearBtn: { padding: 4 },
         optionsToggleBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: colors.surface.subtle, justifyContent: 'center', alignItems: 'center' },
         optionsToggleBtnActive: { backgroundColor: colors.accent.fill },
@@ -1168,7 +1177,9 @@ export default function ChatsScreen() {
                     <TextInput
                         accessibilityLabel={t('Search chats, posts, partners')}
                         style={styles.searchInput}
-                        placeholder={t('Search chats, posts, partners...')}
+                        // On its one line: the long words only where the box is wide enough for them (walk-s6: "Search ch").
+                        onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); setSearchRoom((prev) => (prev === w ? prev : w)); }}
+                        placeholder={wordsThatFit([t('Search chats, posts, partners...'), t('Search')], searchRoom, SEARCH_FONT_SP, fontScale)}
                         placeholderTextColor={colors.text.muted}
                         value={searchQuery}
                         onChangeText={setSearchQuery}

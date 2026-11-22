@@ -4,10 +4,12 @@
  * only where they agree; anything else is uncertain). This file only gathers what the rule weighs, and every caller goes
  * through it: Message (utils/message-anyone.ts) and the address card (app/address-card.tsx).
  *
- * - **What the phone keeps** ({@link keptNames}, no network): the address it reaches the community at and the ones its record
- *   holds (community-index.ts: where it met it, each proved one; `refused`: each that answered as something else), its signed
- *   list as last seen, and its info as last heard (node-profile.ts). Each is as old as it is: the list of a community the
- *   phone isn't set to has no age limit at all.
+ * - **What the phone keeps** ({@link keptNames}, no network): the address it reaches the community at (the one it is set to,
+ *   or the saved row's: where its requests go) and the ones its record holds (community-index.ts: where it met it, each proved
+ *   one; `refused`: each that answered as something else), its signed list as last seen, and its info as last heard
+ *   (node-profile.ts `ownNames`: the names as core reads them, never the hosts a link can be). Each is as old as it is: the
+ *   list of a community the phone isn't set to has no age limit at all. The record's `using` is one of the record's addresses
+ *   here and no more: a member's own switch to another address of the community leaves it behind, and it may be lost since.
  * - **What the community answers now** ({@link askedNow}): its info, asked within a deadline, and only where a copy kept makes
  *   the address one of its names. At the address it is reached at nothing is asked.
  * - **Who the copy has there** ({@link doubted}): where the community says now that an address this phone knew as its own isn't,
@@ -23,12 +25,12 @@ export interface PhoneNames extends KnownNames {
     profile: NodeProfile | null;
 }
 
-/** What `community` says of itself as this phone keeps it: its info under the address in use, else under `community`. Null: not kept. */
+/** What `community` says of itself as this phone keeps it: its info at the address it is reached at, else at its record's `using`. Null: not kept. */
 async function keptProfileOf(community: string): Promise<NodeProfile | null> {
     const { getCachedNodeProfile } = await import('./node-profile');
+    const kept = await getCachedNodeProfile(community).catch(() => null);
     const using = communityRecordOf(community)?.using;
-    const kept = using && using !== community ? await getCachedNodeProfile(using).catch(() => null) : null;
-    return kept ?? await getCachedNodeProfile(community).catch(() => null);
+    return kept ?? (using && using !== community ? await getCachedNodeProfile(using).catch(() => null) : null);
 }
 
 /** Whether the phone itself keeps `a` and `b` as one community: one spelling, or its record of one holds the other. */
@@ -45,9 +47,9 @@ async function keptNamesOf(community: string): Promise<PhoneNames> {
     const profile = await keptProfileOf(community);
     return {
         community, profile,
-        reached: record?.using ?? community,
+        reached: community,
         kept: {
-            info: profile,
+            info: profile?.ownNames ?? null,
             list: record?.peerId && list && list.peerId === record.peerId && Array.isArray(list.addresses) ? list.addresses : null,
             record: record ? recordAddresses(record) : null,
         },
@@ -83,7 +85,7 @@ export async function askedNow(names: readonly PhoneNames[], addresses: Readonly
     return Promise.all(names.map(async (n) => {
         if (!asked.includes(n)) return n;
         const answer = await answerNow(n.reached).catch(() => null);
-        return { ...n, answer, profile: answer ?? n.profile };
+        return { ...n, answer: answer?.ownNames ?? null, profile: answer ?? n.profile };
     }));
 }
 

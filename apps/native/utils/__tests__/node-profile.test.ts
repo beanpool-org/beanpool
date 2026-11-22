@@ -176,6 +176,52 @@ describe('readNodeProfile', () => {
         }
     });
 
+    // The names the rule weighs (utils/community-homes.ts), as core reads an address: never the hosts a link can be. One dropped
+    // would read as none of its names, whatever its signed list says (#3354 review, final re-check).
+    describe('its own names, whole, as core reads an address', () => {
+        const INFO = {
+            addresses: ['Beans.Example.ORG', '[2001:DB8:0::7]', 'bean_pool.example.org', 'beans.example.org:8443', 'beans.example.org', 7, null, 'not a host'],
+            primaryAddress: '[2001:db8::7]', formerAddresses: ['[2001:db8::8]', 'old.example.org'], formerExcludesLost: true,
+        };
+        const NAMES = {
+            addresses: ['beans.example.org', '[2001:db8::7]', 'bean_pool.example.org', 'beans.example.org:8443'],
+            primaryAddress: '[2001:db8::7]', formerAddresses: ['[2001:db8::8]', 'old.example.org'], formerExcludesLost: true,
+        };
+        it('said, kept, and read back from the phone', async () => {
+            expect(readNodeProfile(INFO)!.ownNames).toEqual(NAMES);
+            // The hosts a link can be are as they were.
+            expect(readNodeProfile(INFO)!.addresses).toEqual(['beans.example.org', 'beans.example.org:8443']);
+            vi.stubGlobal('fetch', async () => new Response(JSON.stringify(INFO), { status: 200 }));
+            try {
+                expect((await fetchNodeProfile('https://names.example', fetch))!.ownNames).toEqual(NAMES);
+                expect((await getCachedNodeProfile('https://names.example'))!.ownNames).toEqual(NAMES);
+            } finally {
+                vi.unstubAllGlobals();
+            }
+        });
+        it.each([
+            { name: 'not said (an older server)', says: undefined },
+            { name: 'false', says: false },
+            { name: 'anything but true', says: 'true' },
+        ])('lost names left out of the former ones: $name -> not said', ({ says }) => {
+            expect(readNodeProfile({ ...INFO, formerExcludesLost: says })!.ownNames).not.toHaveProperty('formerExcludesLost');
+        });
+        it('no list of addresses, or more names than are kept: says nothing of its names, and neither does the copy', async () => {
+            expect(readNodeProfile({ primaryAddress: 'beans.example.org' })!).not.toHaveProperty('ownNames');
+            const many = { addresses: Array.from({ length: 60 }, (_, i) => `n${i}.example`), formerAddresses: Array.from({ length: 5 }, (_, i) => `f${i}.example`) };
+            expect(readNodeProfile({ ...many, formerAddresses: many.formerAddresses.slice(1) })!.ownNames!.addresses).toHaveLength(60);
+            expect(readNodeProfile(many)!).not.toHaveProperty('ownNames');
+            vi.stubGlobal('fetch', async () => new Response(JSON.stringify(many), { status: 200 }));
+            try {
+                await fetchNodeProfile('https://many.example', fetch);
+                expect((await getCachedNodeProfile('https://many.example'))!.addresses).toHaveLength(32);
+                expect(await getCachedNodeProfile('https://many.example')).not.toHaveProperty('ownNames');
+            } finally {
+                vi.unstubAllGlobals();
+            }
+        });
+    });
+
     // #3354 review round 5: a community with no address of its own sends nothing across (utils/message-anyone.ts).
     it.each([
         { name: 'it publishes none', body: { addresses: [], primaryAddress: null }, noHome: true },

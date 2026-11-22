@@ -36,7 +36,7 @@ import { MessageRequestsRow } from '../../components/MessageRequestsRow';
 import { useRequestsUnseen } from '../../utils/requests-seen';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
-import { groupsListed, heldGroups, useHeldGroups } from '../../utils/held-groups';
+import { groupsListed, heldGroups, noticesBesideEvents, useHeldGroups } from '../../utils/held-groups';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { openNoticeIn } from '../../utils/push-notice-switch';
 import { CHAT_MESSAGES_ROUTE } from '../../utils/push-notice-check';
@@ -112,8 +112,8 @@ export default function ChatsScreen() {
     const yourGroupsLive = useYourGroups(identity?.publicKey);
     const yourGroups = yourGroupsLive.items;
     // A muted chat keeps its own grey count but does not add to the switch's total (WhatsApp's rule).
-    // The groups of every other community this phone holds (slice S6, utils/held-groups.ts): listed with them, each with its
-    // community's name and own count, in the same total.
+    // The groups and events of every other community this phone holds (slice S6, utils/held-groups.ts): listed with them, each
+    // with its community's name and own count, in the same total.
     const groupsHeld = useHeldGroups(identity?.publicKey);
     const groupsShown = React.useMemo(() => groupsListed(yourGroups ?? [], groupsHeld, yourGroupsLive.movedAt), [yourGroups, groupsHeld, yourGroupsLive.movedAt]);
     /** The pull (and Try again): every list drawn here, the held communities' too. */
@@ -184,7 +184,9 @@ export default function ChatsScreen() {
     const [heldChats, setHeldChats] = useState<HeldChat[]>([]);
     // Each held row's own unread count and its newest line's preview (slice S2b), by its key: read after the rows show.
     const [heldFilled, setHeldFilled] = useState<Map<string, HeldRowFill>>(() => new Map());
-    const otherNotices = useOtherCommunitiesNotices();
+    // Less the lines of the events that have rows of their own under Groups (slice S6): those open in place, with no switch.
+    const noticesElsewhere = useOtherCommunitiesNotices();
+    const otherNotices = React.useMemo(() => noticesBesideEvents(noticesElsewhere, groupsHeld), [noticesElsewhere, groupsHeld]);
     // Requests waiting in every other community this phone holds, global's door count among them (Marty, 19 Nov 2026,
     // decision 4 of DESIGN-no-switch-messaging-fable.md, S0; utils/requests-elsewhere.ts): in the row's count and dot, and a
     // card "In {community}" each. Null until read; never a push, a badge or the unread count.

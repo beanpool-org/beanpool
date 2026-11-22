@@ -23,6 +23,8 @@
  * 11b. components/GroupChatView.tsx (slice S6), the same rule: every in-place call hands it `at`, every other function of
  *     utils/db.ts it calls sits behind `at`; its sends, edits, reports and leave are held in place until they settle
  *     (whileChatInPlace(at, …)), and it holds the chat in place by that `at` before any read.
+ * 11c. components/EventChatView.tsx (slice S6, events), the same rule: every in-place call hands it `at`, its send and report
+ *     are held in place until they settle, and it holds the chat in place by that `at` before any read.
  * 12. app/chat/key-code.tsx hands its `at` to each of the three pin calls, and holds the chat in place by that `at` while it
  *     shows (enterChatInPlace, leaveChatInPlace in its cleanup), before its first read (#3305 review).
  */
@@ -34,6 +36,7 @@ import ts from 'typescript';
 const DB_TS = path.join(__dirname, '..', 'db.ts');
 const CHAT_TSX = path.join(__dirname, '..', '..', 'app', 'chat', '[id].tsx');
 const GROUP_TSX = path.join(__dirname, '..', '..', 'components', 'GroupChatView.tsx');
+const EVENT_TSX = path.join(__dirname, '..', '..', 'components', 'EventChatView.tsx');
 const REVIEW_TSX = path.join(__dirname, '..', '..', 'components', 'ReviewModal.tsx');
 const KEY_CODE_TSX = path.join(__dirname, '..', '..', 'app', 'chat', 'key-code.tsx');
 
@@ -56,6 +59,8 @@ const IN_PLACE = [
     'nodeChatAnswer', 'nodeChatIsUnlocked', 'editRefusal', 'getGroupChat', 'fetchGroupDetails', 'postGroupChatMessage',
     'editThreadMessage', 'removeGroupChatMessage', 'reportGroupChatLine', 'getDecryptedGroupPhoto', 'getDecryptedGroupVoice',
     'leaveGroupApi', 'markThreadReadOnNode', 'noteGroupLocked',
+    // Slice S6, events in place: the chat's read, its line and where it goes, the host's removal, and the report.
+    'getEventChat', 'postEventChatMessage', 'readableChatAddress', 'removeEventChatMessage', 'reportEvent',
     // Slice S6c, deals in place: what a deal is read by, and every step on one (its money steps, a standing deal's, its rating).
     'getDealsBetween', 'syncDealsBetween', 'dealStep', 'standingDealStep', 'completeMarketplaceTransaction', 'cancelMarketplaceTransaction',
     'stopStandingDeal', 'lowerStandingPeriod', 'answerStandingAsk', 'withdrawStandingAsk', 'submitRating',
@@ -319,6 +324,32 @@ describe('slice S2: every in-place read and write takes its community by name', 
         const hold = body.search(/useFocusEffect\(useCallback\(\(\) => \{\s*if \(!at\) return;\s*enterChatInPlace\(at\);\s*return \(\) => \{ void leaveChatInPlace\(at\); \};\s*\}, \[at\]\)\);/);
         expect(hold).toBeGreaterThan(0);
         for (const later of ['useEffect(', 'useChatPoll(load', 'loadDetails()']) expect(hold, later).toBeLessThan(body.indexOf(later));
+    });
+
+    it('the event screen hands `at` to every in-place call, calls no other, and holds its line and report (rule 11c)', () => {
+        const source = fs.readFileSync(EVENT_TSX, 'utf8');
+        const takesAt = takesAtOf(dbSource);
+        expect(screenHolesIn(source, takesAt, 'EventChatView')).toEqual([]);
+        // Not vacuous: every function of utils/db.ts it calls is an in-place one (or a hold), and each is called.
+        for (const name of ['getEventChat', 'postEventChatMessage', 'removeEventChatMessage', 'reportEvent', 'markConversationRead', 'markThreadReadOnNode', 'muteChatApi']) {
+            expect(source.split(`${name}(`).length - 1, name).toBe(1);
+            expect(takesAt.has(name), name).toBe(true);
+        }
+        // A dropped `at` is seen here too (mutations, on the real screen).
+        for (const [from, to] of [
+            ['getEventChat(eventId, undefined, undefined, at)', 'getEventChat(eventId)'], ['postEventChatMessage(eventId, text, undefined, at)', 'postEventChatMessage(eventId, text)'],
+            ['removeEventChatMessage(eventId, item.id, at)', 'removeEventChatMessage(eventId, item.id)'], ['muteChatApi(eventId, duration, at)', 'muteChatApi(eventId, duration)'],
+            ['reportEvent(eventId, reason, at)', 'reportEvent(eventId, reason)'], ['markThreadReadOnNode(eventId, identity.publicKey, at)', 'markThreadReadOnNode(eventId, identity.publicKey)'],
+        ]) {
+            expect(source, from).toContain(from);
+            expect(screenHolesIn(source.replace(from, to), takesAt, 'EventChatView').length, from).toBe(1);
+        }
+        for (const held of ['postEventChatMessage(', 'reportEvent(']) expect(source, held).toContain(`whileChatInPlace(at, () => ${held}`);
+        // Held before any read: the hold is the component's first effect, and the poll comes after it.
+        const body = source.slice(source.indexOf('export function EventChatView('));
+        const hold = body.search(/useFocusEffect\(useCallback\(\(\) => \{\s*if \(!at\) return;\s*enterChatInPlace\(at\);\s*return \(\) => \{ void leaveChatInPlace\(at\); \};\s*\}, \[at\]\)\);/);
+        expect(hold).toBeGreaterThan(0);
+        for (const later of ['getEventChat(', 'useChatPoll(load']) expect(hold, later).toBeLessThan(body.indexOf(later));
     });
 
     it('the key code screen hands its `at` to each pin call (rule 12)', () => {

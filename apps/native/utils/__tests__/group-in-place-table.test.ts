@@ -464,13 +464,11 @@ describe('a group in place: every action goes to its own community, signed for i
         expect(db.heldCopyFiles()).not.toContain(A_FILE);
     });
 
-    it('a mute in place of an id A holds as neither a direct chat nor a group\'s (an event\'s, an enterprise\'s, unknown): refused, nothing asked or remembered', async () => {
-        const event = randomUUID();
+    it('a mute in place of an id A holds as neither a direct chat, a group\'s nor an event\'s (an enterprise\'s, unknown): refused, nothing asked or remembered', async () => {
         const enterprise = randomUUID();
-        groupRow(A_FILE, event, 'event_thread');
         groupRow(A_FILE, enterprise, 'enterprise_thread');
         db.enterChatInPlace(A);
-        for (const id of [event, enterprise, randomUUID()]) {
+        for (const id of [enterprise, randomUUID()]) {
             asked = [];
             const thrown = await db.muteChatApi(id, '8h', A).then(() => null, (e) => e);
             expect(db.isNoCopyInPlace(thrown)).toBe(true);
@@ -495,7 +493,7 @@ describe('what opens in place (the route), and the list that names a group', () 
         ['a group A\'s copy keeps', (): string => g, 'in-place', 'group'],
         ['the same id in capitals (a link, a push)', (): string => g.toUpperCase(), 'in-place', 'group'],
         ['an id A\'s copy doesn\'t hold', (): string => randomUUID(), 'move', undefined],
-        ['an event\'s chat A\'s copy keeps', (): string => { const id = randomUUID(); groupRow(A_FILE, id, 'event_thread'); return id; }, 'move', undefined],
+        ['an event\'s chat A\'s copy keeps (S6, events)', (): string => { const id = randomUUID(); groupRow(A_FILE, id, 'event_thread'); return id; }, 'in-place', 'event'],
         ['an enterprise\'s thread A\'s copy keeps', (): string => { const id = randomUUID(); groupRow(A_FILE, id, 'enterprise_thread'); return id; }, 'move', undefined],
     ] as const)('%s: %s, %s', async (_name, id, open, kind) => {
         const route: any = await chatInPlaceRoute(me.publicKey, id(), A);
@@ -535,10 +533,10 @@ describe('what opens in place (the route), and the list that names a group', () 
         expect(((await chatInPlaceRoute(me.publicKey, g, A)) as any).open).toBe('move');
     });
 
-    it('Talk\'s rows: A\'s group with its own community and count, nothing for the community in use, a guest\'s look or an event', async () => {
+    it('Talk\'s rows: A\'s group and event, each with its own community and count, nothing for the community in use or a guest\'s look', async () => {
         servers[B].left = false;
         await heldGroups.refresh(me.publicKey);
-        expect(heldGroups.getState().map((r) => [r.community, r.conversationId, r.unreadCount, r.key])).toEqual([[A, g, 2, `held-group:${A_FILE}:${g}`]]);
+        expect(heldGroups.getState().map((r) => [r.community, r.conversationId, r.unreadCount, r.key])).toEqual([[A, g, 2, `held-group:${A_FILE}:${g}`], [A, 'event-1', 1, `held-group:${A_FILE}:event-1`]]);
         expect(asked.filter((r) => r.url.endsWith('/api/your-groups')).map((r) => r.url)).toEqual([`${A}/api/your-groups`]);
         // Reading it in place clears its own row.
         heldGroups.at(A).markRead(g);
@@ -551,7 +549,7 @@ describe('what opens in place (the route), and the list that names a group', () 
         for (const mark of [A, 'HTTPS://Riverside.example/some/path']) {
             h.store.delete('beanpool_guest_nodes');
             await heldGroups.refresh(me.publicKey);
-            expect(heldGroups.getState().length, 'a member again').toBe(1);
+            expect(heldGroups.getState().length, 'a member again').toBe(2);
             h.store.set('beanpool_guest_nodes', JSON.stringify([mark]));
             await heldGroups.refresh(me.publicKey);
             expect(heldGroups.getState(), `a guest's mark spelled ${mark}`).toEqual([]);
@@ -571,7 +569,7 @@ describe('what opens in place (the route), and the list that names a group', () 
         await Promise.all([heldGroups.refresh(me.publicKey), heldGroups.refresh(me.publicKey)]);
         (globalThis as any).fetch = realFetch;
         expect(n).toBe(2);
-        expect(heldGroups.getState().map((r) => r.conversationId)).toEqual([g]);
+        expect(heldGroups.getState().map((r) => r.conversationId)).toEqual([g, 'event-1']);
         // Mutation: each ask works the communities out for itself -> the second makes A's list again, empty, and the first's is dropped.
     });
 
@@ -580,19 +578,21 @@ describe('what opens in place (the route), and the list that names a group', () 
         const realFetch = (globalThis as any).fetch;
         (globalThis as any).fetch = async () => { throw new Error('no signal'); };
         heldGroups.forget(A, g);
-        expect(heldGroups.getState()).toEqual([]);
+        // Only its own row: the event's there stays.
+        const shown = () => heldGroups.getState().map((r) => r.conversationId);
+        expect(shown()).toEqual(['event-1']);
         await heldGroups.refresh(me.publicKey);
         await settle();
-        expect(heldGroups.getState(), 'still gone, the ask having failed').toEqual([]);
+        expect(shown(), 'still gone, the ask having failed').toEqual(['event-1']);
         (globalThis as any).fetch = realFetch;
         // An answer from before the leave still lists it: no row. One without it: forgotten. Listed again after that: let back in.
         await heldGroups.refresh(me.publicKey);
-        expect(heldGroups.getState()).toEqual([]);
+        expect(shown()).toEqual(['event-1']);
         servers[A].left = true;
         await heldGroups.refresh(me.publicKey);
         servers[A].left = false;
         await heldGroups.refresh(me.publicKey);
-        expect(heldGroups.getState().map((r) => r.conversationId), 'let back in since').toEqual([g]);
+        expect(shown(), 'let back in since').toEqual([g, 'event-1']);
     });
 
     it('a list wanted for one account is never asked with another\'s key', async () => {
@@ -621,11 +621,11 @@ describe('what opens in place (the route), and the list that names a group', () 
 
     it('a community that doesn\'t answer keeps its rows; another account sees none of them', async () => {
         await heldGroups.refresh(me.publicKey);
-        expect(heldGroups.getState().length).toBe(1);
+        expect(heldGroups.getState().length).toBe(2);
         const realFetch = (globalThis as any).fetch;
         (globalThis as any).fetch = async () => { throw new Error('no signal'); };
         await heldGroups.refresh(me.publicKey);
-        expect(heldGroups.getState().length).toBe(1);
+        expect(heldGroups.getState().length).toBe(2);
         (globalThis as any).fetch = realFetch;
         const next = person();
         h.me = { ...next };
@@ -1190,7 +1190,7 @@ const SENDS: Send[] = [
     { fn: 'editMessage', name: 'the DM screen: an edit', run: (c) => db.editMessage(g, mine.id, WORDS, c), inPlace: true, readable: A_READABLE_ROW },
     { fn: 'sendImageMessage', name: 'the DM screen: a photo (only ever sealed)', run: () => db.sendImageMessage(g, 'data:image/jpeg;base64,AAAA', WORDS), inPlace: false, readable: [] },
     { fn: 'sendVoiceMessage', name: 'the DM screen: a voice message (only ever sealed)', run: () => db.sendVoiceMessage(g, M4A), inPlace: false, readable: [] },
-    { fn: 'postEventChatMessage', name: 'an event\'s chat', run: () => db.postEventChatMessage(g, WORDS, randomUUID()), inPlace: false, readable: NOT_A_DM },
+    { fn: 'postEventChatMessage', name: 'an event\'s chat', run: (c) => db.postEventChatMessage(g, WORDS, randomUUID(), c), inPlace: true, readable: NOT_A_DM },
     { fn: 'postEnterpriseChatMessage', name: 'an enterprise\'s discussion', run: () => db.postEnterpriseChatMessage(g, WORDS, randomUUID()), inPlace: false, readable: NOT_A_DM },
     { fn: 'postEnterpriseThreadMessage', name: 'an enterprise\'s page', run: () => db.postEnterpriseThreadMessage(g, WORDS, randomUUID()), inPlace: false, readable: NOT_A_DM },
 ];
@@ -1238,8 +1238,8 @@ describe('every path that can send words into a group-like chat asks the lock ma
         const thrown: any = await send.run(c).then(() => null, (e) => e);
         await settle();
         if (c) await db.leaveChatInPlace(A);
-        // In place: only a group's own screen sends, and only a group that copy's row says is one (onlyGroupInPlace, onlyDmInPlace).
-        const opens = c ? (['postGroupChatMessage', 'editThreadMessage'].includes(send.fn) && label === 'group_thread' ? [label] : []) : send.readable;
+        // In place: only a group's own screen sends, and only a group that copy's row says is one; an event's, the same (onlyThreadInPlace, onlyDmInPlace).
+        const opens = c ? (label === (send.fn === 'postEventChatMessage' ? 'event_thread' : ['postGroupChatMessage', 'editThreadMessage'].includes(send.fn) ? 'group_thread' : null) ? [label] : []) : send.readable;
         const goes = st.goes && (opens as readonly Label[]).includes(label);
         expect(wordsOut(), String(thrown?.message)).toEqual({ ...NOTHING, [A]: goes ? [WORDS] : [] });
         // A DM known there is a DM in its own screen, the mark or not (it lifts no DM guard): sealed to its pin, never readable.
@@ -1255,8 +1255,8 @@ describe('every path that can send words into a group-like chat asks the lock ma
         expect([marked(A_FILE), marked(B_FILE)], 'the marks are as they were').toEqual([st.mark === A_FILE, st.mark === B_FILE]);
     });
 
-    it('the table has every path x every label x its stands (150 rows), and it is every path the phone has (the source)', () => {
-        expect(rows.length).toBe(11 * 5 * 2 + 4 * 5 * 2);
+    it('the table has every path x every label x its stands (160 rows), and it is every path the phone has (the source)', () => {
+        expect(rows.length).toBe(11 * 5 * 2 + 5 * 5 * 2);
         const native = path.join(__dirname, '..', '..');
         const found: string[] = [];
         const walk = (dir: string) => {
@@ -1818,14 +1818,15 @@ describe('a readable line goes only when this phone positively knows the chat wa
         expect(wordsOut()).toEqual(readable(where));
     });
 
-    const CHAT_ANSWERS: Array<[string, () => Promise<unknown>]> = [
-        ['an event\'s', () => db.getEventChat(g)], ['an enterprise\'s discussion', () => db.getEnterpriseChat(g)], ['an enterprise\'s page', () => db.getEnterpriseThread(g)],
+    // An event's is marked in its file too, so a restart knows it (S6, events: event-in-place-table).
+    const CHAT_ANSWERS: Array<[string, () => Promise<unknown>, boolean]> = [
+        ['an event\'s', () => db.getEventChat(g), true], ['an enterprise\'s discussion', () => db.getEnterpriseChat(g), false], ['an enterprise\'s page', () => db.getEnterpriseThread(g), false],
     ];
-    it.each(CHAT_ANSWERS)('the id answered locked as %s chat: nothing readable', async (_n, read) => {
+    it.each(CHAT_ANSWERS)('the id answered locked as %s chat: nothing readable', async (_n, read, onDisk) => {
         await stand('in use', false);
         fetchMock.mockImplementationOnce(async () => answer(200, { messages: [], encryption: { current: 1 } }));
         await read();
-        expect([await sendAll('in use').then(() => wordsOut()), marked(A_FILE)]).toEqual([NOTHING, false]);
+        expect([await sendAll('in use').then(() => wordsOut()), marked(A_FILE)]).toEqual([NOTHING, onDisk]);
     });
 
     it.each([

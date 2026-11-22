@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { onNoticeCounts, readNoticeCounts } from './notice-counts';
+import { noticeCountFor, onNoticeCounts, readNoticeAlerts, readNoticeCounts } from './notice-counts';
 import { getSavedNodes } from './nodes';
 import { sameCommunity } from './push-pins';
 import { communityName } from './community-name';
@@ -28,6 +28,8 @@ export interface OtherCommunityNotice {
     name: string;
     /** Unread messages there (its number on the sheet and in the badge). */
     count: number;
+    /** How many of them a push told the member of (notice-counts.ts readNoticeAlerts): never an event's chat's lines. Left out: any of them. */
+    alerts?: number;
 }
 
 /**
@@ -41,8 +43,9 @@ export function useOtherCommunitiesNotices(): OtherCommunityNotice[] {
         let alive = true;
         const read = async () => {
             try {
-                const [counts, saved] = await Promise.all([
+                const [counts, alerts, saved] = await Promise.all([
                     readNoticeCounts(AsyncStorage),
+                    readNoticeAlerts(AsyncStorage),
                     getSavedNodes().catch(() => []),
                 ]);
                 if (!alive) return;
@@ -58,6 +61,7 @@ export function useOtherCommunitiesNotices(): OtherCommunityNotice[] {
                         url: hit?.url ?? url,
                         name: (typeof hitName === 'string' && hitName.trim() ? hitName.trim() : communityName(hit ?? { url })),
                         count,
+                        alerts: noticeCountFor(alerts, url),
                     };
                 });
                 setNotices(result);

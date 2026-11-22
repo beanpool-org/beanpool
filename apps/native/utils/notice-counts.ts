@@ -273,6 +273,41 @@ export async function readNoticeRequests(storage: Pick<Storage, 'getItem'>): Pro
     }
 }
 
+/**
+ * How many of each community's lines a push told the member of, by its address, as far as the phone knows: the pushes since
+ * it last answered, or what it last said a push would tell (`alerts`). Never an event's chat's, nor a muted chat's. On the
+ * same terms as {@link readNoticeCounts}, none at 0. For Chat's "· Switch" lines (held-groups.ts noticesBesideEvents).
+ */
+export async function readNoticeAlerts(storage: Pick<Storage, 'getItem'>): Promise<Record<string, number>> {
+    const numbers = await readNoticeCounts(storage);
+    try {
+        const tallies = parse(await storage.getItem(NOTICE_COUNTS_STORE_KEY));
+        const out: Record<string, number> = {};
+        for (const c of Object.keys(numbers)) {
+            const told = Math.max(tallies[c]?.n ?? 0, tallies[c]?.alerts ?? tallies[c]?.server ?? 0);
+            if (told > 0) out[c] = told;
+        }
+        return out;
+    } catch {
+        return numbers;
+    }
+}
+
+/**
+ * `lines` of `community`'s were read there in place (slice S6: an event's chat, opened with no switch): its number falls by
+ * them now, as its next answer will say. Only what its server counted, never the pushes' own tally: an event's chat pushes
+ * nothing. Nothing for the community in use, or one with no number. Never throws.
+ */
+export async function noteReadInPlace(storage: Storage, community: string, lines: number): Promise<void> {
+    await update(storage, (tallies, active) => {
+        const at = communityAddress(community);
+        const tally = at && at !== active ? tallies[at] : undefined;
+        if (!tally?.server || !(lines > 0)) return false;
+        tally.server = Math.max(0, tally.server - lines);
+        return true;
+    });
+}
+
 /** Every number {@link readNoticeCounts} gives, added up: the other communities' part of the app-icon badge. */
 export async function noticeCountsSum(storage: Pick<Storage, 'getItem'>): Promise<number> {
     return Object.values(await readNoticeCounts(storage)).reduce((sum, n) => sum + n, 0);

@@ -555,6 +555,11 @@ describe('an owner or admin', () => {
             expect(shown).toHaveLength(3);
             expect(shown.map((f) => f.querySelector('img')?.getAttribute('src'))).toEqual(ADDR);
             expect(toggles().map((b) => b.textContent)).toEqual(['Remove photo', 'Remove photo', 'Remove photo']);
+            // A screen reader hears which picture each button is for (review of #3353, N6).
+            expect(toggles().map((b) => b.getAttribute('aria-label'))).toEqual(['Remove photo 1', 'Remove photo 2', 'Remove photo 3']);
+            fireEvent.click(toggles()[1]);
+            expect(toggles()[1].getAttribute('aria-label')).toBe('Keep photo 2');
+            fireEvent.click(toggles()[1]);
             expect(screen.getByTestId('learn-form-page-photos').textContent).toContain('A photo you remove is taken off this page for everyone when you save.');
             expect(screen.queryByLabelText('Add photo')).toBeNull();
         });
@@ -618,6 +623,22 @@ describe('an owner or admin', () => {
             fireEvent.click(screen.getByTestId('learn-post-edit'));
             await wait();
             expect(screen.getAllByTestId('learn-form-page-photo').map((f) => f.querySelector('img')?.getAttribute('src'))).toEqual(node.posts[0].photos);
+        });
+
+        it('Save again after "photos changed", the form still open: the list is the one the form opened on, never one built from the re-read page (review of #3353, N1)', async () => {
+            await openEdit();
+            node.refuse = { status: 409, error: 'This page’s photos changed. Open it again.', code: 'photos_changed' };
+            // Another admin took picture 1 off meanwhile: the node now holds the old pictures 2 and 3, at places 0 and 1, new versions.
+            node.posts = [{ ...pictured(), photos: [ADDR[1].replace('v=1', 'v=5').replace('/1?', '/0?'), ADDR[2].replace('v=1', 'v=5').replace('/2?', '/1?')] }];
+            fireEvent.click(toggles()[1]);
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            // The form still shows the pictures it opened on, the same one marked off.
+            expect(screen.getAllByTestId('learn-form-page-photo').map((f) => `${f.getAttribute('data-kept')}:${f.querySelector('img')?.getAttribute('src')}`))
+                .toEqual([`true:${ADDR[0]}`, `false:${ADDR[1]}`, `true:${ADDR[2]}`]);
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            expect(writes().map((w) => w.body.photos)).toEqual([[ADDR[0], ADDR[2]], [ADDR[0], ADDR[2]]]);
         });
 
         it('a page with no picture shows no list; Suggest a fix shows none either', async () => {

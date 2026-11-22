@@ -13,7 +13,13 @@
  *        `fromForumPostId`: their own forum answer, turned (forum slice F9, engine/forum-learn.ts): the answer is linked to the
  *        page (403 `not_your_answer`; 400 `not_an_answer`; 409 `answer_hidden`, `learn_waiting`, `already_learn`; 403
  *        `group_section`; 404 for one they may not see)
- *   POST /api/knowledge/posts/:id/edit               { title, body, topic, place?, sources?, lang? } → { post }
+ *   POST /api/knowledge/posts/:id/edit               { title, body, topic, place?, sources?, lang?, photos? } → { post }
+ *        `photos` (DESIGN-learn-web-pictures-fable.md §9 slice 3): the page's pictures it keeps, each as the page gave it
+ *        (`/api/marketplace/posts/<id>/photos/<n>?v=…`, its key after it or not); the rest come off for everyone, their credit
+ *        rows with them. Left out, or null: the pictures stay as they are (engine/knowledge.ts keptPagePhotos). 400 `bad_photos`
+ *        for a list that isn't one of strings; 400 `new_photo` for anything that isn't one of this page's pictures (an Edit
+ *        never adds one); 409 `photos_changed` when one names a picture or version the page no longer has (another owner or
+ *        admin changed them after the form opened), nothing removed
  *   POST /api/knowledge/posts/:id/checked            "Still right" → { post }
  *   POST /api/knowledge/posts/:id/outdated/clear     → { post }
  *   POST /api/knowledge/posts/:id/take-down          { reasonCategory? } → { ok: true }   (Settings' own removal)

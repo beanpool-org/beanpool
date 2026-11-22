@@ -178,7 +178,9 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
                         return (
                             <figure key={`${i}-${src}`} data-testid="learn-form-page-photo" data-kept={out ? 'false' : 'true'} className="m-0 flex flex-col gap-1">
                                 {shown && <img src={shown} alt={t('Photo {n}', { n: i + 1 })} className={`w-full aspect-[4/3] object-cover rounded-xl ${out ? 'opacity-40' : ''}`} />}
-                                <button type="button" data-testid="learn-form-photo-toggle" disabled={sending} onClick={() => toggleTakenOff(i)} className={SMALL}>
+                                {/* Its label names the picture, so a screen reader doesn't hear three alike (review of #3353, N6). */}
+                                <button type="button" data-testid="learn-form-photo-toggle" disabled={sending} onClick={() => toggleTakenOff(i)} className={SMALL}
+                                    aria-label={out ? t('Keep photo {n}', { n: i + 1 }) : t('Remove photo {n}', { n: i + 1 })}>
                                     {out ? t('Keep this photo') : t('Remove photo')}
                                 </button>
                             </figure>

@@ -102,8 +102,11 @@ describe('the screens use it (Damo\'s route: a warm start\'s link lands on a new
         // Review on 1980395f: a spent or expired invite stayed held and reopened the invite step on every launch for 30 days.
         // Review of #3361: one handler, called wherever the refusal is heard, so none says the words and leaves the code held.
         const at = welcome.indexOf('const inviteRefused = useCallback(');
-        expect(welcome.slice(at, at + 400)).toMatch(/if \(DEAD_INVITE_REASONS\.has\(reason\)\) void forgetHeldInvite\(AsyncStorage, code\);/);
+        // And (review of #3361, pre-existing) the same branch sets the dead code aside, so the step's ‹ drops it from hand
+        // (goBack reads that set; it decides nothing itself).
+        expect(welcome.slice(at, at + 400)).toMatch(/if \(DEAD_INVITE_REASONS\.has\(reason\)\) \{\s*void forgetHeldInvite\(AsyncStorage, code\);[^}]*deadCodesRef\.current\.add\(dead\);\s*\}/);
         expect(welcome.match(/DEAD_INVITE_REASONS\.has\(/g)).toHaveLength(1);
+        expect(welcome.match(/deadCodesRef\.current\.has\(/g)).toHaveLength(1);
         expect(welcome.match(/ADDRESS_REASONS\.has\(/g)).toHaveLength(1);
         // The check as the step opens.
         expect(welcome).toMatch(/if \(refused\) inviteRefused\(codeHere, check\.reason\);/);

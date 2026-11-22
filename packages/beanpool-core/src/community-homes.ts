@@ -21,6 +21,9 @@
  *    that differs: UNCERTAIN. None holds it: not own.
  * 4. Two communities on the device claiming one name: UNCERTAIN, whoever answered.
  *
+ * A name an info lists only as one C had before counts in 2 and 3 only where that info says it leaves the lost ones out
+ * (`formerExcludesLost`). A server from before that says nothing and lists a lost name among them: UNCERTAIN.
+ *
  * UNCERTAIN opens nothing: no direct chat and no chat across (message-path.ts `switch`). Compared as homes (address-list.ts
  * addressOf): the host, and the port when not 443.
  */
@@ -31,8 +34,10 @@ import { audienceOf } from './request-signing.js';
 export interface SaidAddresses {
     addresses?: unknown;
     primaryAddress?: unknown;
-    /** Names it had before: still its own (its server still answers as them), never published as where it lives, never a lost one. */
+    /** Names it had before: still its own (its server still answers as them), never published as where it lives. */
     formerAddresses?: unknown;
+    /** True: `formerAddresses` leaves out every name it lost. Not said (an older server): one of them may be another community's now. */
+    formerExcludesLost?: unknown;
 }
 
 /** What the device knows of one community's names ({@link nameStanding}). */
@@ -61,23 +66,31 @@ export function saysNames(said: SaidAddresses | null | undefined): said is SaidA
     return Array.isArray(said?.addresses);
 }
 
+/** The homes an info names: every one it claims, and the ones its word alone makes its own (all but a former name it doesn't say is not a lost one). */
+interface SaidHomes { claimed: Set<string>; own: Set<string> }
+
 /**
  * The homes `said` names as its own: where it lives, every name it goes by, every one it had before and still answers as. A
  * name said with no port is on the port the app reaches that host at, as the app names its own home (outside-mail.ts myHome),
  * else 443, or the one its signed list spells for it (`listed`: the list gives only the port, the name is in what it says).
  */
-function homesSaid(reached: string, said: SaidAddresses, listed: readonly string[]): Set<string> {
+function homesSaid(reached: string, said: SaidAddresses, listed: readonly string[]): SaidHomes {
     const at = addressOf(reached);
-    const named = homesOf([...listOf(said.addresses), said.primaryAddress, ...listOf(said.formerAddresses)]);
-    const hosts = new Set(named.map((home) => audienceOf(home)));
-    return new Set([
-        ...named.map((home) => (at && audienceOf(home) === audienceOf(at) ? at : home)),
-        ...homesOf(listed).filter((home) => hosts.has(audienceOf(home))),
-    ]);
+    const spelled = (names: readonly unknown[]): Set<string> => {
+        const named = homesOf(names);
+        const hosts = new Set(named.map((home) => audienceOf(home)));
+        return new Set([
+            ...named.map((home) => (at && audienceOf(home) === audienceOf(at) ? at : home)),
+            ...homesOf(listed).filter((home) => hosts.has(audienceOf(home))),
+        ]);
+    };
+    const now = [...listOf(said.addresses), said.primaryAddress];
+    const claimed = spelled([...now, ...listOf(said.formerAddresses)]);
+    return { claimed, own: said.formerExcludesLost === true ? claimed : spelled(now) };
 }
 
 /** The homes each copy the device keeps holds (null: not kept, or it says nothing of its names). */
-function keptHomes({ reached, kept }: KnownNames): { info: Set<string> | null; list: Set<string> | null; record: Set<string> | null } {
+function keptHomes({ reached, kept }: KnownNames): { info: SaidHomes | null; list: Set<string> | null; record: Set<string> | null } {
     return {
         info: saysNames(kept.info) ? homesSaid(reached, kept.info, kept.list ?? []) : null,
         list: kept.list ? new Set(homesOf(kept.list)) : null,
@@ -88,7 +101,9 @@ function keptHomes({ reached, kept }: KnownNames): { info: Set<string> | null; l
 /** Whether any copy the device keeps of a community holds `address` as a name of it. */
 export function keptClaims(names: KnownNames, address: string | null | undefined): boolean {
     const home = homeOf(address);
-    return home !== null && Object.values(keptHomes(names)).some((copy) => copy?.has(home));
+    if (home === null) return false;
+    const { info, list, record } = keptHomes(names);
+    return [info?.claimed, list, record].some((copy) => copy?.has(home));
 }
 
 /** Whether `address` (a URL, a host, a home) is one of the community's own names: the precedence rule above, for one community. */
@@ -98,13 +113,14 @@ export function nameStanding(names: KnownNames, address: string | null | undefin
     if (home === addressOf(names.reached)) return 'own';
     const answeredElse = homesOf(names.refused ?? []).includes(home);
     if (saysNames(names.answer)) {
-        if (!homesSaid(names.reached, names.answer, names.kept.list ?? []).has(home)) return 'not';
-        return answeredElse ? 'uncertain' : 'own';
+        const said = homesSaid(names.reached, names.answer, names.kept.list ?? []);
+        if (!said.claimed.has(home)) return 'not';
+        return said.own.has(home) && !answeredElse ? 'own' : 'uncertain';
     }
     if (!keptClaims(names, home)) return 'not';
     if (names.answer === undefined || answeredElse) return 'uncertain';
     const { info, list, record } = keptHomes(names);
-    return list?.has(home) && record?.has(home) && (info === null || info.has(home)) ? 'own' : 'uncertain';
+    return list?.has(home) && record?.has(home) && (info === null || info.own.has(home)) ? 'own' : 'uncertain';
 }
 
 /** Whose name an address is, among the communities the device is in. */

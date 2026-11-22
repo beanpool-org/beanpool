@@ -421,6 +421,8 @@ export interface CommunityInfo {
     primaryAddress?: string | null;
     /** The BeanPool names it had before, still accepted: the web app opened at one says it has moved. */
     formerAddresses?: string[];
+    /** True: `formerAddresses` leaves out every name it lost (core community-homes.ts). Absent: a node from before it said so. */
+    formerExcludesLost?: boolean;
     /**
      * The node's default language (design M5: an operator setting, global's English), one of core's LANGS. It applies to
      * a browser with no choice of its own and a language BeanPool doesn't write (lib/language.ts). Absent: English.

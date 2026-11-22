@@ -230,7 +230,14 @@ async function main(): Promise<void> {
         const headers = await core.buildBoundRequestHeaders({ method: 'GET', url, body: '', publicKeyHex: who.pk, sign: who.sign });
         return call(node, 'GET', core.signedPathOf(url), headers);
     }
-    const info = async (node: Node) => (await call(node, 'GET', '/api/community/info')).body;
+    /** Every info, in every state a section makes, says it leaves the lost names out: an app trusts a former name on that alone. */
+    let infos = 0, saying = 0;
+    const info = async (node: Node) => {
+        const body = (await call(node, 'GET', '/api/community/info')).body;
+        infos++;
+        if (body?.formerExcludesLost === true) saying++;
+        return body;
+    };
     const tokens = new Map<Node, Record<string, string>>(); // each node's owner token, made once it is seeded
     const report = async (node: Node) => {
         await node.send('resetLimits');
@@ -377,6 +384,7 @@ async function main(): Promise<void> {
             i = await info(F);
             assert(same(i.formerAddresses, ['oldname.beanpool.org']) && same(i.addresses, []) && i.primaryAddress === null,
                 `F: its current name lost: in neither list, and it has no address of its own now (${JSON.stringify({ a: i.addresses, p: i.primaryAddress, f: i.formerAddresses })})`);
+            assert(infos > 10 && saying === infos, `every info read here, with names lost and without, says formerExcludesLost: true (${saying} of ${infos})`);
         });
     } finally {
         stopAll();

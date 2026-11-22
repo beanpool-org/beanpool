@@ -40,7 +40,7 @@ When you are paying for just one deal in the chat, it is in the bar above the me
 ## Starting a chat
 
 - From a profile: open their profile and tap **Message**. You can also add them as a friend there.
-- From **Chat**: tap the pencil button, then find the person by name. On the worldwide community, New Message lists the people you've dealt with and your friends. To find anyone else, type at least 2 letters of their name. To write to someone who belongs to another community, see "People in other communities".
+- From **Chat**: tap the pencil button, then find the person by name. On the phone, 2 letters or more also find people in the other communities you have on it, each with their community's name; the chat opens without switching. On the worldwide community, New Message lists the people you've dealt with and your friends. To find anyone else, type at least 2 letters of their name. To write to someone who belongs to another community, see "People in other communities".
 - From the members list: **Chat**, then **People**, and tap 💬 next to a member's name in **Community** or **Friends**.
 - From a post: tap **Message** and the person's name.
 

@@ -112,12 +112,12 @@ export async function messagePathOnPhone(me: string, links: readonly MessageLink
     const keys = links.map((l) => l.key);
     const blocked = keys.length ? await blockedForMessage(me, keys) : false;
     if (blocked === null) return { open: 'nothing' };
-    let names = await Promise.all([...(inFront ? [inFront] : []), ...others].map(keptNames));
+    let names = await keptNames([...(inFront ? [inFront] : []), ...others]);
     // Each chat's community as this rule names it: the phone's own row, however the chat's reader spells it.
     const placed = (c: KnownChat): KnownChat => (c.community === null ? c : { ...c, community: names.find((n) => keptAsOne(n.community, c.community!))?.community ?? c.community });
     const chats = keys.length && !blocked ? (await knownChatsWith(me, keys, { inFront, member: setTo !== null })).map(placed) : [];
     const { outsideMessagesOn } = await import('./node-profile');
-    let weighed = links;
+    let weighed: MessageLink[] = [...links];
     const path = (): MessagePath => messagePathFor({
         links: weighed, chats, setTo, look, held: others, blocked,
         whose: whoseName(names),
@@ -127,7 +127,9 @@ export async function messagePathOnPhone(me: string, links: readonly MessageLink
     const certain = path();
     if (certain.open === 'existing' || certain.open === 'blocked' || certain.open === 'nothing') return certain;
     names = await askedNow(names, [...links.map((l) => l.community), ...chats.map((c) => (c.kind === 'across' ? c.home : null))]);
-    weighed = await Promise.all(links.map(async (l) => (await doubted(names, l.community, l.key, inFront) ? { ...l, doubted: true } : l)));
+    // One after another: each held read closes the handles Chat doesn't need (held-chats.ts).
+    weighed = [];
+    for (const l of links) weighed.push(await doubted(names, l.community, l.key, inFront) ? { ...l, doubted: true } : l);
     return path();
 }
 

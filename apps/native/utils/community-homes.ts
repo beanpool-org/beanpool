@@ -38,8 +38,8 @@ export function keptAsOne(a: string, b: string): boolean {
     return home !== null && [a, ...(record ? recordAddresses(record) : [])].some((x) => addressOf(x) === home);
 }
 
-/** What this phone keeps of `community`'s names, nothing asked. */
-export async function keptNames(community: string): Promise<PhoneNames> {
+/** What this phone keeps of one community's names, nothing asked. */
+async function keptNamesOf(community: string): Promise<PhoneNames> {
     const record = communityRecordOf(community);
     const list = record?.list?.list;
     const profile = await keptProfileOf(community);
@@ -55,12 +55,19 @@ export async function keptNames(community: string): Promise<PhoneNames> {
     };
 }
 
+/** What this phone keeps of each community's names, nothing asked. */
+export async function keptNames(communities: readonly string[]): Promise<PhoneNames[]> {
+    const out: PhoneNames[] = [];
+    for (const community of communities) out.push(await keptNamesOf(community));
+    return out;
+}
+
 /** `community`, and every other one this phone saved, as {@link keptNames}. */
 export async function keptNamesWith(community: string): Promise<PhoneNames[]> {
     const saved = await import('./nodes').then((m) => m.getSavedNodes()).catch(() => []);
-    const others: string[] = [];
-    for (const { url } of saved) if (url && ![community, ...others].some((c) => keptAsOne(c, url))) others.push(url);
-    return Promise.all([community, ...others].map(keptNames));
+    const all = [community];
+    for (const { url } of saved) if (url && !all.some((c) => keptAsOne(c, url))) all.push(url);
+    return keptNames(all);
 }
 
 /**
@@ -68,9 +75,11 @@ export async function keptNamesWith(community: string): Promise<PhoneNames[]> {
  * which `always` says so): each once, side by side, within the deadline (outside-chat-live.ts answerNow).
  */
 export async function askedNow(names: readonly PhoneNames[], addresses: ReadonlyArray<string | null>, always: (n: PhoneNames) => boolean = () => false): Promise<PhoneNames[]> {
+    const asked = names.filter((n) => always(n) || addresses.some((a) => nameStanding(n, a) === 'uncertain'));
+    if (asked.length === 0) return [...names];
+    const { answerNow } = await import('./outside-chat-live');
     return Promise.all(names.map(async (n) => {
-        if (!always(n) && !addresses.some((a) => nameStanding(n, a) === 'uncertain')) return n;
-        const { answerNow } = await import('./outside-chat-live');
+        if (!asked.includes(n)) return n;
         const answer = await answerNow(n.reached).catch(() => null);
         return { ...n, answer, profile: answer ?? n.profile };
     }));

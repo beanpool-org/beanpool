@@ -44,8 +44,12 @@ vi.mock('../lib/outside-mail', async (importOriginal) => {
     };
 });
 
-// What the community says of its own addresses (its info).
-const said = vi.hoisted(() => ({ info: {} as Record<string, unknown> }));
+// What the community says of its own addresses (its info): as this page read it, and as it answers now (left out: the same; null: no answer).
+const said = vi.hoisted(() => ({ info: {} as Record<string, unknown>, now: undefined as Record<string, unknown> | null | undefined }));
+vi.mock('../lib/api', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/api')>()),
+    getCommunityInfo: async () => { if (said.now === null) throw new Error('no answer'); return said.now ?? said.info; },
+}));
 vi.mock('../lib/visitor-lobby-gate', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../lib/visitor-lobby-gate')>()),
     communityInfoOnce: async () => said.info,
@@ -63,6 +67,7 @@ beforeEach(async () => {
     here.found = null;
     here.refuse = null;
     said.info = {};
+    said.now = undefined;
     calls.setFindMe = [];
     calls.findByName = [];
     here.ctx = {
@@ -126,6 +131,20 @@ describe('find by name: the look-up', () => {
             await find(home, 'wren tallowmere');
             expect(await screen.findByText('Wren Tallowmere is in this community: write to them here.')).toBeTruthy();
             expect(screen.queryByTestId('first-message')).toBeNull();
+        });
+    }
+
+    // #3354 review, round 6: a name this page read as its own that it answers now it isn't (lost), and one it doesn't answer for:
+    // the card's own box, as ever. Mutation (PR body): what the page read decides -> no box opens.
+    for (const [why, now] of [['it answers without it now', { addresses: ['b.example'], primaryAddress: 'b.example' }], ['it does not answer', null]] as const) {
+        it(`a card at a name this page read as this community's own, and ${why}: on to the box`, async () => {
+            said.info = { addresses: ['b.example', 'oldb.example'], primaryAddress: 'b.example' };
+            said.now = now;
+            here.found = await signAddressCard({ key: WREN.key, home: 'oldb.example', name: 'Wren Tallowmere' }, ed25519Signer(hexToBytes(WREN.seed)));
+            render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);
+            await find('oldb.example', 'wren tallowmere');
+            expect(await screen.findByTestId('first-message')).toBeTruthy();
+            expect(screen.queryByText('Wren Tallowmere is in this community: write to them here.')).toBeNull();
         });
     }
 

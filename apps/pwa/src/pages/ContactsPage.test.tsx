@@ -237,13 +237,42 @@ describe('Contacts on the web', () => {
             links: [{ key: dee, community: 'https://faraway.example', callsign: 'dee', how: 'profile', at: '2026-11-12T01:00:00.000Z' }],
         }));
         const onMessage = vi.fn();
-        const onMessageAcross = vi.fn();
+        const onMessageAcross = vi.fn(async () => null);
         render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={onMessage} onMessageAcross={onMessageAcross} />);
         expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /Open faraway\.example/ })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Message' }));
         expect(onMessageAcross).toHaveBeenCalledWith([{ key: dee, community: 'https://faraway.example' }], 'Dée Walker');
         expect(onMessage).not.toHaveBeenCalled();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Message' })).toBeEnabled());
+        expect(screen.queryByRole('link', { name: /Open faraway\.example/ })).toBeNull();
+    });
+
+    // #3354 review, round 6: whose the address is can't be said for certain, so nothing opens; the row then has the link it had
+    // before this slice, beside Message. And no second Message starts while one is under way (round 4's finding 3).
+    it('a Message that could not place the address: the row links to it; every Message waits while one is under way', async () => {
+        const [dee, ana] = ['cd'.repeat(32), 'ce'.repeat(32)];
+        for (const [name, key, community] of [['Dée Walker', dee, 'https://old.faraway.example'], ['Ana Li', ana, 'https://hillside.example']] as const) {
+            await changeContacts(me, (l) => putContact(l, {
+                id: newContactId(), name, phones: [], emails: [], note: '', invite: null,
+                links: [{ key, community, callsign: 'x', how: 'profile', at: '2026-11-12T01:00:00.000Z' }],
+            }));
+        }
+        let answer: (address: string | null) => void = () => {};
+        const onMessageAcross = vi.fn(() => new Promise<string | null>((resolve) => { answer = resolve; }));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} onMessageAcross={onMessageAcross} />);
+        expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
+        const buttons = () => screen.getAllByRole('button', { name: 'Message' });
+        fireEvent.click(buttons()[1]);
+        await waitFor(() => buttons().forEach((b) => expect(b).toBeDisabled()));
+        fireEvent.click(buttons()[0]);
+        expect(onMessageAcross).toHaveBeenCalledTimes(1);
+        await act(async () => { answer('https://old.faraway.example'); });
+        buttons().forEach((b) => expect(b).toBeEnabled());
+        const link = screen.getByRole('link', { name: 'Open old.faraway.example ›' });
+        expect(link).toHaveAttribute('href', 'https://old.faraway.example');
+        expect(within(screen.getAllByTestId('contact-row')[1]).getByRole('link')).toBe(link);
+        expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(1);
     });
 
     // #3354 review, round 3: the block is asked by every key the contact's links name (as the phone asks), so Message hands
@@ -258,7 +287,7 @@ describe('Contacts on the web', () => {
                 { key: deeThere, community: 'https://hillside.example', callsign: 'dee', how: 'profile', at: '2026-11-12T01:00:00.000Z' },
             ],
         }));
-        const onMessageAcross = vi.fn();
+        const onMessageAcross = vi.fn(async () => null);
         render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} onMessageAcross={onMessageAcross} />);
         expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Message' }));

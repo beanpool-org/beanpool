@@ -33,7 +33,7 @@ const COMMUNITIES: KnownNames[] = [
 type Input = Parameters<typeof messagePathFor>[0];
 const base = { look: null, whose: whoseName(COMMUNITIES), takesAcross: () => true };
 const phone = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): Input => ({ ...base, links, chats, setTo: HERE, held: [HELD_A, HELD_B], blocked });
-/** Its own name for a name two claim, as the web has it: it holds one community, so an answer that came too late. */
+/** The web holds one community; `webNoAnswer`: one that doesn't answer, so only what the page read is there. */
 const WEB: KnownNames[] = [{ ...COMMUNITIES[0], answer: { ...COMMUNITIES[0].answer, addresses: ['riverside.example', 'oldriver.example', 'river.example'] }, refused: [] }];
 const web = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): Input => ({ ...base, links, chats, setTo: HERE, held: [], whose: whoseName(WEB), blocked });
 const webNoAnswer = (links: MessageLink[]): Input => ({ ...web(links), whose: whoseName([{ community: HERE, reached: HERE, answer: null, kept: { info: COMMUNITIES[0].answer } }]) });

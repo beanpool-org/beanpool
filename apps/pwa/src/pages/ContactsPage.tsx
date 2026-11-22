@@ -293,9 +293,12 @@ function ListView({ list, where, keptAt, header, onBack, onOpen, onAdd, onImport
             const message = async () => {
                 if (!onMessageAcross || messaging) return;
                 setMessaging(true);
-                const address = await onMessageAcross(links, c.name).catch(() => null);
-                setMessaging(false);
-                if (address) setElsewhere((was) => ({ ...was, [c.id]: address }));
+                try {
+                    const address = await onMessageAcross(links, c.name);
+                    if (address) setElsewhere((was) => ({ ...was, [c.id]: address }));
+                } finally {
+                    setMessaging(false);
+                }
             };
             return (
                 <>

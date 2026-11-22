@@ -1,7 +1,7 @@
 ---
 slug: mute
 title: Muting a chat
-summary: Silence a chat — one person's, a group's, an event's or an enterprise's — for 8 hours, a week, or for good.
+summary: Silence a chat — one person's, a group's or an enterprise's — for 8 hours, a week, or for good.
 related: notifications, blocking, groups, mentions, messages
 ---
 

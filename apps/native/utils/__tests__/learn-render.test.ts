@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
     nodeCalls: [] as string[],
     listeners: {} as Record<string, Array<() => void>>,
     opened: [] as string[],
+    // The page's look (§9 slice 4 of DESIGN-learn-web-pictures-fable.md lays the source rows out in both).
+    theme: 'light' as 'light' | 'dark',
 }));
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), navigate: vi.fn(), canGoBack: vi.fn(() => true) }));
 
@@ -38,6 +40,9 @@ vi.mock('react-native', async () => {
         if (testID) attrs['data-testid'] = testID;
         const s = flat(typeof props.style === 'function' ? props.style({ pressed: false }) : props.style);
         if (typeof s.minHeight === 'number') attrs['data-min-height'] = String(s.minHeight);
+        // What Yoga lays out (yoga-dom-layout.ts): each host's own style, and a Text's cut (numberOfLines).
+        attrs['data-style'] = JSON.stringify(s);
+        if (props.numberOfLines) attrs['data-lines'] = String(props.numberOfLines);
         return el(tag, attrs, children);
     };
     return {
@@ -58,8 +63,9 @@ vi.mock('react-native', async () => {
     };
 });
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors } = await import('../../constants/colors');
-    return { useTheme: () => ({ theme: 'light', colors: lightColors }), useStyles: (make: any) => make({ theme: 'light', colors: lightColors }) };
+    const { lightColors, darkColors } = await import('../../constants/colors');
+    const look = () => ({ theme: h.theme, colors: h.theme === 'dark' ? darkColors : lightColors });
+    return { useTheme: () => look(), useStyles: (make: any) => make(look()) };
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: h.identity }) }));
 vi.mock('../use-learn-mode', () => ({ useLearnMode: () => h.mode }));
@@ -92,6 +98,7 @@ import LearnScreen from '../../app/learn';
 import { KnowledgeDetail, KnowledgeMissing, hostOf, openableSource } from '../../components/learn/KnowledgeDetail';
 import { MarketLearnLine } from '../../components/learn/MarketLearnLine';
 import { useKnowledgePage } from '../../components/learn/useKnowledgePage';
+import { layOut } from './yoga-dom-layout';
 
 let root: Root;
 let host: HTMLElement;
@@ -99,7 +106,7 @@ beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    Object.assign(h, { mode: 'live', params: {}, pages: [], pagesFails: false, identity: { publicKey: 'me'.padEnd(64, '0') }, nodeSearch: null, nodeCalls: [], listeners: {}, opened: [] });
+    Object.assign(h, { mode: 'live', params: {}, pages: [], pagesFails: false, identity: { publicKey: 'me'.padEnd(64, '0') }, nodeSearch: null, nodeCalls: [], listeners: {}, opened: [], theme: 'light' });
     vi.clearAllMocks();
 });
 afterEach(() => {
@@ -437,6 +444,72 @@ describe('a page', () => {
         expect(openableSource('https://example.org')).toBe(true);
         expect(openableSource(null)).toBe(false);
         expect(openableSource('not a url')).toBe(false);
+    });
+
+    // Pictures from Wikimedia Commons (DESIGN-learn-web-pictures-fable.md §6.3, §9 slice 4): the node writes a credit row for each
+    // credited picture after the page's own sources, "📷 n · maker · licence" on the picture's own Commons page.
+    const COMMONS = 'https://commons.wikimedia.org/wiki/File:Tip_entrance.jpg';
+    const credited = (sources: Array<{ url: string; label: string; photo?: number }>) => page({ id: 'credited', photos: ['/p/1.jpg', '/p/2.jpg'] }, { sources });
+
+    it('a typed source and a picture\'s credit that share an address both draw, each opening that address', async () => {
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await show(createElement(KnowledgeDetail, { page: credited([
+                { url: COMMONS, label: 'The tip entrance, on Commons' },
+                { url: COMMONS, label: '📷 1 · Jane Doe · CC BY-SA 4.0', photo: 1 },
+            ]) as any }));
+            const links = all('knowledge-source');
+            expect(links.map((l) => l.textContent)).toEqual([
+                'The tip entrance, on Commonscommons.wikimedia.org↗', '📷 1 · Jane Doe · CC BY-SA 4.0commons.wikimedia.org↗',
+            ]);
+            // A redraw with the rows the other way round keeps both (React drops or repeats a row whose key is another's).
+            await show(createElement(KnowledgeDetail, { page: credited([
+                { url: COMMONS, label: '📷 1 · Jane Doe · CC BY-SA 4.0', photo: 1 },
+                { url: COMMONS, label: 'The tip entrance, on Commons' },
+            ]) as any }));
+            expect(all('knowledge-source').map((l) => l.textContent)).toEqual([
+                '📷 1 · Jane Doe · CC BY-SA 4.0commons.wikimedia.org↗', 'The tip entrance, on Commonscommons.wikimedia.org↗',
+            ]);
+            click(all('knowledge-source')[1]);
+            expect(h.opened).toEqual([COMMONS]);
+            expect(errors.mock.calls.map((c) => String(c[0])).filter((m) => /same key/.test(m))).toEqual([]);
+        } finally {
+            errors.mockRestore();
+        }
+    });
+
+    describe.each(['light', 'dark'] as const)('at 320 dp and 1.3x text (%s): a picture\'s credit row wraps, nothing is cut, each row is 44 dp or taller', (theme) => {
+        it('lays out the sources with Yoga at the floor: 320 dp less the page\'s 16 a side', async () => {
+            h.theme = theme;
+            // A long maker's name, cut by the node to the label's 80 characters (core knowledgeCreditLabel).
+            const long = `📷 2 · ${'Margarethe Wilhelmina van der Berg-Oosterhuis'} · CC BY-SA 4.0`;
+            await show(createElement(KnowledgeDetail, { page: credited([
+                { url: 'https://www.council.example.org/tip', label: 'Council tip page' },
+                { url: COMMONS, label: '📷 1 · Jane Doe · CC BY 4.0', photo: 1 },
+                { url: 'https://commons.wikimedia.org/wiki/File:Glass_bins.jpg', label: long, photo: 2 },
+            ]) as any }));
+            const rows = all('knowledge-source');
+            expect(rows).toHaveLength(3);
+            const list = rows[0].parentElement!;
+            const layout = layOut(list, { width: 320 - 16 * 2, height: 2000 }, { fontScale: 1.3 });
+            const LINE = 15 * 1.25 * 1.3; // the label's font size, a line a font size and a quarter, at 1.3x (yoga-dom-layout.ts)
+            for (const row of rows) {
+                const b = layout.box(row);
+                expect(b.height, row.textContent!).toBeGreaterThanOrEqual(44);
+                expect(b.left + b.width, row.textContent!).toBeLessThanOrEqual(288.5);
+                const label = row.querySelector('span')!;
+                // Never cut: no line limit on a label (a credit is at most 80 characters, so it wraps to a few lines).
+                expect(label.getAttribute('data-lines'), row.textContent!).toBeNull();
+                // The ↗ stays inside the row, beside the words.
+                const out = row.lastElementChild!;
+                expect(layout.box(out).left + layout.box(out).width, row.textContent!).toBeLessThanOrEqual(b.width + 0.5);
+            }
+            // The long credit wraps to every line it needs: more than the two lines a cut would leave.
+            const longLabel = rows[2].querySelector('span')!;
+            expect(longLabel.textContent).toBe(long);
+            expect(layout.height(longLabel)).toBeGreaterThan(2 * LINE + 1);
+            expect(layout.height(rows[2])).toBeGreaterThan(layout.height(rows[1]));
+        });
     });
 
     it('a page with no source, no place and no photo draws none of those', async () => {

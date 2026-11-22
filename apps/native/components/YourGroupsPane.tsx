@@ -58,8 +58,8 @@ export function FindGroupsButton({ onPress }: { onPress: () => void }) {
 }
 
 /**
- * Rows only (no scroll container), for embedding in a parent list's header. A group of another community this phone holds
- * (slice S6, utils/held-groups.ts) says its community and opens in place there, with no switch.
+ * Rows only (no scroll container), for embedding in a parent list's header. A group or an event of another community this
+ * phone holds (slice S6, utils/held-groups.ts) says its community and opens in place there, with no switch.
  */
 export function YourGroupsRows({ items, myPubkey, showUnread, flush }: { items: ReadonlyArray<YourChat | HeldGroup>; myPubkey?: string | null; showUnread?: boolean; flush?: boolean }) {
     return (

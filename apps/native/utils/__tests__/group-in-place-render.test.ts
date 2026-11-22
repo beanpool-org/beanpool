@@ -205,7 +205,7 @@ describe('Talk → Groups: a group of another community this phone holds', () =>
 
     it('a tap opens it in place, in its own community, and reads its own row alone; this community\'s own opens as before', async () => {
         const read = vi.fn();
-        const at = vi.spyOn(heldGroups, 'at').mockReturnValue({ markRead: read, noteSent: () => { }, setMute: () => { } });
+        const at = vi.spyOn(heldGroups, 'at').mockReturnValue({ markRead: read, readThere: () => { }, noteSent: () => { }, setMute: () => { } });
         await render(createElement(YourGroupsRows, { items: groupsListed([OWN], [HELD]), myPubkey: ME, showUnread: true }));
         const [held, own] = Array.from(host.querySelectorAll('button'));
         await act(async () => { held.click(); });

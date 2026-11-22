@@ -169,6 +169,8 @@ export default function ChatRoute() {
     if (id && community && !placedNow) return null;
     // A group of that community (slice S6): the group's chat, its id as the node makes it.
     if (id && placedNow?.open === 'in-place' && placedNow.kind === 'group') return <GroupChatView kind="group" id={screenIdOf(String(id))} initialName={name} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
+    // An event of that community (slice S6): the event's chat, with that community's own gates.
+    if (id && placedNow?.open === 'in-place' && placedNow.kind === 'event') return <EventChatView eventId={screenIdOf(String(id))} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
     // One screen per chat and community (slice S6c): no deal, or anything else, of one is ever shown under another's name.
     if (id && placedNow?.open === 'in-place') return <ChatScreen key={placedNow.community + ' ' + id} id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
     if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;

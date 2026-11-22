@@ -82,6 +82,7 @@ import { clearDB, closeDB, seedDmPinsHere, seedDmPinsBeforeLeaving } from '../db
 import { FORGET_DEVICE_MS, forgetThisPhoneForMail } from '../outside-mail';
 import { resetSyncFingerprints } from '../../services/pillar-sync';
 import { wipeToolDataOnThisPhone } from '../../tools/store';
+import { accountStays } from '../account-leaving';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { boundSignatureValid } from './server-signature-check';
 import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -592,5 +593,34 @@ describe('each community\'s cached copy', () => {
         vi.mocked(FileSystem.readDirectoryAsync).mockRejectedValue(new Error('EACCES'));
         await real.removeCommunityCaches([MULLUM], { everyCopy: true });
         expect(vi.mocked(FileSystem.deleteAsync).mock.calls).toHaveLength(10);
+    });
+});
+
+describe('an account is leaving the phone from the clear until its key has gone (account-leaving.ts; #3358 N1)', () => {
+    const DOORS: Array<[string, () => Promise<void>]> = [
+        ['Sign Out', () => signOutOfThisPhone(kim, { namesCopiesSaved: true })],
+        ['the self-delete purge', () => signOutOfThisPhone(kim, { namesCopiesSaved: true, purge: true })],
+        ['"Delete this account from this phone"', () => deleteAccountFromThisPhone(kim)],
+    ];
+
+    it.each(DOORS)('%s: as the tables, the copies and the key go, and not after; what was asked before it is nobody\'s', async (_door, leave) => {
+        await kimsPhone();
+        nodes();
+        const askedBefore = accountStays();
+        const leaving: Record<string, boolean> = {};
+        vi.mocked(clearDB).mockImplementationOnce(async () => { leaving.tables = !accountStays()(); });
+        vi.mocked(removeCommunityCaches).mockImplementationOnce(async () => { leaving.copies = !accountStays()(); });
+        vi.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => { if (key === IDENTITY_KEY) leaving.key ??= !accountStays()(); mem.secure.delete(key); });
+        try { await leave(); } finally { vi.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => { mem.secure.delete(key); }); }
+        expect(leaving).toEqual({ tables: true, copies: true, key: true });
+        expect([askedBefore(), accountStays()(), await loadIdentity()]).toEqual([false, true, null]);
+    });
+
+    it.each(DOORS)('%s that fails at the clear: the account stays, and is not leaving', async (_door, leave) => {
+        await kimsPhone();
+        nodes();
+        vi.mocked(clearDB).mockRejectedValueOnce(new Error('the copy could not be made'));
+        await expect(leave()).rejects.toThrow('the copy could not be made');
+        expect([accountStays()(), (await loadIdentity())?.publicKey]).toEqual([true, kim.publicKey]);
     });
 });

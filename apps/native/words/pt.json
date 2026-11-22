@@ -1676,7 +1676,7 @@
   "Not confirmed\u0004chat line": "Não confirmado",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "O servidor desta comunidade é antigo e pode ler esta conversa de grupo. Ela será protegida quando o servidor for atualizado.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "Criptografado de ponta a ponta: apenas membros deste grupo podem ler. O servidor vê quem escreveu, quando, menções, respostas e reações.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "Este servidor agora informa que este bate-papo não está bloqueado. Este celular guardou suas chaves, então ainda protege todas as mensagens e não envia nada que não possa proteger.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Este nó agora informa que este bate-papo não está bloqueado. Este celular já o viu bloqueado, então ainda protege todas as mensagens e não envia nada que não possa proteger.",
   "Only members of this group can open its chat": "Apenas membros deste grupo podem abrir esta conversa",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "Este celular reconhece esta conversa como mensagem direta, não como grupo. Nada foi enviado.",
   "This message's key isn't on this phone, so it can't be edited here.": "A chave desta mensagem não está neste celular, por isso não pode ser editada aqui.",

@@ -5,10 +5,10 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { fetchYourGroups } from '../utils/db';
-import { createYourGroupsStore } from '../utils/your-groups-store';
+import { createYourGroupsStore, TALK_GROUPS } from '../utils/your-groups-store';
 
 // Read at each ask, not when this file loads: a screen that only reads the list (EventDetail's chat count) imports it too.
-export const yourGroupsStore = createYourGroupsStore(() => fetchYourGroups());
+export const yourGroupsStore = createYourGroupsStore(() => fetchYourGroups(), undefined, TALK_GROUPS);
 
 let ownerKey: string | null = null;
 
@@ -22,5 +22,5 @@ export function useYourGroups(myPubkey?: string | null) {
     useEffect(() => {
         if (myPubkey) yourGroupsStore.refresh();
     }, [myPubkey]);
-    return { ...state, refresh: yourGroupsStore.refresh };
+    return { ...state, refresh: yourGroupsStore.refresh, movedAt: yourGroupsStore.movedAt };
 }

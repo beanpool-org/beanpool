@@ -388,7 +388,7 @@ describe('group chats: a key store that can\'t be read never counts as "never he
         const remembered = (JSON.parse(store.asyncStore.get(DM_SEEN()) ?? '[]') as string[]).includes(g);
         const knownDm = await isKnownDmConversation(g);
         const heldAfter = await isHeldGroupChat(g);
-        const route = chatRouteView({ held: heldAfter, knownDm, isEventChat: false, threadKind: null });
+        const route = chatRouteView({ held: heldAfter, seenLocked: false, knownDm, isEventChat: false, threadKind: null });
         const after = await tryIt(() => insertMessage(g, who.me.publicKey, 'words once it reads'));
         await waitFor(() => writes(from).length > 0, 300);
         console.log(`store failing, node says dm: photo ${a}; send ${b}; remembered as a DM ${remembered}; held after ${heldAfter}; route ${route}; then ${after}; writes ${JSON.stringify(writes(from))}`);

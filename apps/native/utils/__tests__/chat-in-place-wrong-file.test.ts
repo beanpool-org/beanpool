@@ -981,7 +981,12 @@ const IN_PLACE_WRITES: Array<[string, (x: { id: string; line: string }) => Promi
 ];
 
 describe('a link naming another community with an id its copy holds as no DM: nothing of it is asked or written in place (#3305 review F1)', () => {
-    const cases = NOT_A_DM_IN_A.flatMap((k) => IN_PLACE_WRITES.map(([w, run]) => [k.name, w, k, run] as const));
+    // Slice S6: a group of A's is muted in place, by A's own server (group-in-place-table.test.ts has those rows); a mute of
+    // every other id here, and every other call for a group's, stays refused.
+    const groupsOfA = ['a group\'s chat A\'s copy keeps (read there when the phone was set to A)', 'a group whose keys A\'s copy holds, its row there typed a DM'];
+    const all = NOT_A_DM_IN_A.flatMap((k) => IN_PLACE_WRITES.map(([w, run]) => [k.name, w, k, run] as const));
+    const cases = all.filter(([k, w]) => !(groupsOfA.includes(k) && w === 'mute (muteChatApi)'));
+    it('only a group\'s mute left this table (slice S6)', () => { expect(all.length - cases.length).toBe(2); });
     it.each(cases)('%s x %s: refused or nothing, nothing asked, nothing of A\'s or B\'s memory or files changed', async (_k, _w, kind, run) => {
         const x = kind.make();
         // The chat screen holds A as it would (so nothing below is refused for a chat left), its copy open on a DM's read.

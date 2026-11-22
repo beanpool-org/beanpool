@@ -108,7 +108,7 @@ vi.mock('../group-chat-lines', async (orig) => ({
 vi.mock('../group-chat-keys', async (orig) => ({
     ...(await orig<any>()),
     // The group this phone has seen locked (no DM check stands in its way); the DM was never a group here.
-    groupKeyring: vi.fn((_url: string, _identity: unknown, groupId: string) => ({ groupId, seenLocked: async () => groupId !== 'conv-1' })),
+    groupKeyring: vi.fn((_url: string, _identity: unknown, groupId: string) => ({ groupId, holdsKeys: async () => groupId !== 'conv-1', seenLocked: async () => groupId !== 'conv-1' })),
 }));
 
 import { sendVoiceMessage, postGroupChatVoice, _resetDmPeerPinsForTests } from '../db';

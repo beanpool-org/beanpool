@@ -649,9 +649,20 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                 ) : (
                     <LearnForm use={editing.use}
                         initial={{ title: opened.title, body: opened.description, topic: opened.category, place: opened.knowledge.place ?? '', sources: ownKnowledgeSources(opened.knowledge.sources), freeTags: opened.freeTags ?? [] }}
+                        pagePhotos={fix ? [] : (opened.photos ?? []).filter((p): p is string => typeof p === 'string')}
                         onSend={async (input) => {
                             if (fix) { await suggestLearnFix(opened, input); setFixSent(true); return; }
-                            const answer = await editLearnPage(opened, input);
+                            let answer: { post?: LearnPost } | undefined;
+                            try {
+                                answer = await editLearnPage(opened, input);
+                            } catch (e) {
+                                // Another owner or admin changed the page's photos after this form opened: the page behind the form is
+                                // read again, so opening Edit again ("Open it again.") starts from the photos it has now.
+                                if ((e as { code?: unknown } | null)?.code === 'photos_changed') {
+                                    getLearnPost(id).then((p) => { if (p) setState({ id, post: p }); }, () => {});
+                                }
+                                throw e;
+                            }
                             if (answer?.post?.knowledge) showAnswer(answer.post); else setTries((n) => n + 1);
                             setEditing(null);
                         }} />

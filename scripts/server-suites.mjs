@@ -676,6 +676,9 @@ export const SUITES = [
     // Learn web pictures slice 2: the Commons door. The licence table pinned to Commons' real answers, the address, the fetch
     // through a stand-in on 127.0.0.1, nothing showing early, which credit ends on which picture, the writes that must not hurt it.
     'test-commons-pictures',
+    // Learn web pictures slice 3: an owner's or admin's Edit takes one picture off a page. The design's table: which pictures and
+    // credits remain, who may, a new picture refused, two admins at once, a page not showing, the standby, a member's page, a 1.4.7 phone.
+    'test-knowledge-remove-photo',
     'test-names-copy',
     'test-contact-copies',
     'test-community-welcome',

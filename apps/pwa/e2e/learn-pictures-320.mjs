@@ -7,6 +7,8 @@
  *   photo); Edit first opening on the one kept.
  *   Slice 2 of DESIGN-learn-web-pictures-fable.md (§6.2): the second picture is from Wikimedia Commons, with its credit (a long
  *   maker's name, to wrap), the day read, Commons' note and Open its page; the first, uploaded, says whose it must be.
+ *   Slice 3 (§9, "Take one picture off a page"): an admin's Edit of a page with three pictures, each with Remove photo, and the
+ *   same with the first removed (dimmed, Keep this photo).
  *
  * The real LearnPage with the real stylesheet (e2e/learn-harness.tsx); every /api call is answered here and nothing leaves the
  * machine. Checks, read from the live layout: no sideways scroll; every button at least 44 px tall and inside the screen;
@@ -53,9 +55,25 @@ const DRAFT = {
     }],
 };
 const LIVE = { features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, knowledge: true } };
+/**
+ * Slice 3 (§9, "Take one picture off a page"): a page showing three pictures, at the node's own addresses (served below as
+ * pictures), and the node's credit row for the third, as an admin's Edit opens it.
+ */
+const PAGE_PHOTOS = [0, 1, 2].map((n) => `/api/marketplace/posts/lookout/photos/${n}?v=1&k=key${n}`);
+const PAGE_PICTURES = [picture(640, 480, '#4a7c59', '#f2e8cf'), picture(480, 640, '#386fa4', '#f6bd60'), picture(640, 480, '#8c5e58', '#e9d8a6')];
+const PAGE = {
+    id: 'lookout', type: 'knowledge', category: 'good-to-know', title: 'The lookout over the bay', description: 'Park at the top gate. The track is steep after rain.',
+    authorPublicKey: 'member-damo', authorCallsign: 'Damo', createdAt: at(3), status: 'active', active: true, photos: PAGE_PHOTOS, freeTags: [],
+    knowledge: {
+        sources: [{ url: 'https://parks.example/headland', label: 'Parks: the headland' },
+            { url: 'https://commons.wikimedia.org/wiki/File:Lookout.jpg', label: '📷 3 · Bartholomew Featherstonehaugh-Ramaswamy · CC BY-SA 4.0', photo: 3 }],
+        place: 'The headland', lang: null, checkedAt: at(3), outdatedAt: null, outdatedNote: null, helped: 0, gathered: true,
+    },
+};
 
 function answer(method, pathname, search) {
     if (pathname === '/api/node-admin/me') return { role: 'admin' };
+    if (pathname === '/api/marketplace/posts' && new URLSearchParams(search).get('id') === 'lookout') return [PAGE];
     if (pathname === '/api/knowledge/front') return { total: 0, pinned: [], topics: [] };
     if (pathname === '/api/knowledge/drafts/mine') return { waiting: [], answered: [] };
     if (pathname === '/api/knowledge/drafts') return TO_CHECK;
@@ -78,6 +96,12 @@ const STATES = [
         // The photo picker's own ✕ (components/PostPhotoPicker.tsx, the Market's form too) is 31 px tall: older than this change and
         // not touched by it, named in its PR. Every other button here is held to 44 px.
         known: ['"✕" is 31.2 px tall, under 44'] },
+    // Slice 3: an admin's Edit of a page lists its pictures, each with Remove photo; one removed is dimmed, with Keep this photo.
+    { name: 'edit-page-pictures', hash: '#page-lookout', ready: '[data-testid="learn-post"]',
+        then: [['[data-testid="learn-post-edit"]', '[data-testid="learn-form-page-photos"]']], full: true, pagePictures: 3 },
+    { name: 'edit-page-one-removed', hash: '#page-lookout', ready: '[data-testid="learn-post"]',
+        then: [['[data-testid="learn-post-edit"]', '[data-testid="learn-form-page-photos"]'],
+            ['[data-testid="learn-form-photo-toggle"]', '[data-testid="learn-form-page-photo"][data-kept="false"]']], full: true, pagePictures: 3 },
 ];
 
 try {
@@ -90,6 +114,11 @@ try {
                 const url = new URL(route.request().url());
                 const method = route.request().method();
                 asked.push(`${method} ${url.pathname}${url.search}`);
+                const served = url.pathname.match(/^\/api\/marketplace\/posts\/lookout\/photos\/(\d)$/);
+                if (served) {
+                    const svg = Buffer.from(PAGE_PICTURES[Number(served[1])].split(',')[1], 'base64');
+                    return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }).catch(() => {});
+                }
                 const body = answer(method, url.pathname, url.search);
                 if (body === undefined) return route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"Not Found"}' });
                 return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) }).catch(() => {});
@@ -100,9 +129,9 @@ try {
             tab.setDefaultTimeout(30_000);
             const errors = [];
             tab.on('pageerror', (e) => errors.push(String(e)));
-            await tab.goto(`${base}#check`, { waitUntil: 'load' });
+            await tab.goto(`${base}${st.hash ?? '#check'}`, { waitUntil: 'load' });
             await tab.addStyleTag({ content: TEXT_SCALE_CSS(SCALE) });
-            await tab.waitForSelector('[data-testid="learn-check-list"]', { timeout: 60_000 });
+            await tab.waitForSelector(st.ready ?? '[data-testid="learn-check-list"]', { timeout: 60_000 });
             for (const [tap, shows] of st.then ?? []) { await tab.click(tap); await tab.waitForSelector(shows); }
             await tab.evaluate(() => document.fonts?.ready).catch(() => {});
             await tab.waitForTimeout(300);
@@ -129,6 +158,12 @@ try {
                     uploaded: document.querySelectorAll('[data-testid="learn-check-uploaded"]').length,
                 }));
                 if (lines.credit !== 1 || lines.note !== 1 || lines.page !== 1 || lines.uploaded !== 1) found.push(`the picture lines are not one each: ${JSON.stringify(lines)}`);
+            }
+            if (st.pagePictures !== undefined) {
+                const drawn = await tab.evaluate(() => [...document.querySelectorAll('[data-testid="learn-form-page-photo"] img')]
+                    .filter((img) => img.complete && img.naturalWidth > 0).length);
+                const toggles = await tab.locator('[data-testid="learn-form-photo-toggle"]').count();
+                if (drawn !== st.pagePictures || toggles !== st.pagePictures) found.push(`Edit draws ${drawn} picture(s) and ${toggles} toggle(s), not ${st.pagePictures} each`);
             }
             if (st.keptInForm !== undefined) {
                 const inForm = await tab.locator('[data-testid="learn-form"] img[alt^="photo"]').count();

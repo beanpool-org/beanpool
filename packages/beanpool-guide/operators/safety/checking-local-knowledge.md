@@ -40,6 +40,8 @@ Each member has at most 3 suggestions waiting and sends at most 5 in a day, and 
 
 On any page, owners and admins have **Edit** (it changes at once), **Still right** (it is confirmed as it is, and **Checked** moves to this month), **Mark as out of date** with a note, and **Clear the mark**. A page's writer can mark their own page out of date too. Other members can't: they tap **Something changed? Suggest a fix**, which waits in **To check** like a suggestion.
 
+In the web app, **Edit** shows each of the page's pictures with **Remove photo**. A photo you remove is taken off the page for everyone when you save, with its credit line if it has one, and the other credit lines are numbered again to match. You can't add a picture there. If another owner or admin changed the page's photos after you opened it, **Save** says "This page's photos changed. Open it again." and nothing is removed. Until the phone app's next update, its **Edit** leaves the pictures as they are.
+
 **Not checked for a year**, under the waiting list, holds the pages nobody has confirmed for more than a year, for you to look at. Nothing expires by itself.
 
 ## Taking a page down
@@ -50,7 +52,7 @@ Members report a page from the page itself, and the report lands with the others
 
 ## A complaint about copied writing
 
-If someone says a page copies their writing or their photo, take it down at once, as above, then talk to its writer. A page should be in its writer's own words, with links to where it can be checked, never text or pictures copied from elsewhere.
+If someone says a page copies their writing, take it down at once, as above, then talk to its writer. If the complaint is about one picture, take that picture off instead: open the page, tap **Edit**, then **Remove photo** under that picture, and **Save**. It comes off for everyone at once, with its credit line, and the page can stay. A page should be in its writer's own words, with links to where it can be checked, never text or pictures copied from elsewhere.
 
 ## Your assistant can draft it
 

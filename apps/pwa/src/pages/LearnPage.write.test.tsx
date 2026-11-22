@@ -59,6 +59,13 @@ function stubNode() {
             if (path === '/api/knowledge/posts') return { post: { ...PAGE, id: 'mine' } };
             if (/\/api\/knowledge\/drafts\/[^/]+\/(withdraw|no)$/.test(path)) return { ok: true };
             if (/\/api\/knowledge\/drafts\/[^/]+\/approve$/.test(path)) return { post: PAGE };
+            // An owner's or admin's Edit: the page as the node now holds it, with the pictures the Edit kept (slice 3).
+            const edited = path.match(/^\/api\/knowledge\/posts\/([^/]+)\/edit$/);
+            if (edited) {
+                const page = node.posts.find((p) => p.id === decodeURIComponent(edited[1])) ?? PAGE;
+                const kept = (body as { photos?: string[] }).photos;
+                return { post: { ...page, photos: kept ? kept.map((u) => u.replace(/v=1/, 'v=2')) : page.photos } };
+            }
         }
         if (path === '/api/knowledge/front') return learnFrontOf(node.posts);
         if (path.startsWith('/api/knowledge/front?q=')) return learnSearchOf(node.posts, new URLSearchParams(path.split('?')[1]).get('q')!);
@@ -525,6 +532,110 @@ describe('an owner or admin', () => {
                 expect(JSON.stringify(body)).not.toContain('📷');
             });
         }
+    });
+
+    // Take one picture off a page (DESIGN-learn-web-pictures-fable.md §9 slice 3): Edit lists the page's pictures, each with Remove
+    // photo; Save sends the ones kept, each as the page gave it, and only when one was taken off; leaving changes nothing.
+    describe('taking a picture off a page', () => {
+        const ADDR = [0, 1, 2].map((n) => `/api/marketplace/posts/tip/photos/${n}?v=1&k=key${n}`);
+        const pictured = () => ({ ...PAGE, photos: [...ADDR] }) as LearnPost;
+        const openEdit = async () => {
+            node.posts = [pictured()];
+            node.role = 'owner';
+            await openLearn({ target: { kind: 'page', id: 'tip' } });
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-post-edit'));
+            await wait();
+        };
+        const toggles = () => screen.getAllByTestId('learn-form-photo-toggle');
+
+        it('Edit shows each picture with Remove photo and says what removing does', async () => {
+            await openEdit();
+            const shown = screen.getAllByTestId('learn-form-page-photo');
+            expect(shown).toHaveLength(3);
+            expect(shown.map((f) => f.querySelector('img')?.getAttribute('src'))).toEqual(ADDR);
+            expect(toggles().map((b) => b.textContent)).toEqual(['Remove photo', 'Remove photo', 'Remove photo']);
+            expect(screen.getByTestId('learn-form-page-photos').textContent).toContain('A photo you remove is taken off this page for everyone when you save.');
+            expect(screen.queryByLabelText('Add photo')).toBeNull();
+        });
+
+        it('Remove the second, Save: sends the other two, each as the page gave it, and the page shows them', async () => {
+            await openEdit();
+            fireEvent.click(toggles()[1]);
+            expect(screen.getAllByTestId('learn-form-page-photo').map((f) => f.getAttribute('data-kept'))).toEqual(['true', 'false', 'true']);
+            expect(toggles()[1].textContent).toBe('Keep this photo');
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            expect(writes()).toHaveLength(1);
+            expect(writes()[0].path).toBe('/api/knowledge/posts/tip/edit');
+            expect(writes()[0].body.photos).toEqual([ADDR[0], ADDR[2]]);
+            expect(screen.queryByTestId('learn-form')).toBeNull();
+            expect(screen.getByTestId('learn-post-photos').querySelectorAll('img')).toHaveLength(2);
+        });
+
+        it('Keep this photo puts it back; an Edit that takes nothing off sends no picture list', async () => {
+            await openEdit();
+            fireEvent.click(toggles()[0]);
+            fireEvent.click(toggles()[0]);
+            fireEvent.change(screen.getByTestId('learn-form-title'), { target: { value: 'How recycling works now' } });
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            expect(writes()).toHaveLength(1);
+            expect(writes()[0].body).not.toHaveProperty('photos');
+            expect(writes()[0].body.title).toBe('How recycling works now');
+        });
+
+        it('every picture removed: sends an empty list', async () => {
+            await openEdit();
+            for (const b of toggles()) fireEvent.click(b);
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            expect(writes()[0].body.photos).toEqual([]);
+        });
+
+        it('leaving without saving changes nothing', async () => {
+            await openEdit();
+            fireEvent.click(toggles()[2]);
+            fireEvent.click(screen.getAllByRole('button', { name: /back/i })[0]);
+            await wait();
+            expect(writes()).toHaveLength(0);
+            expect(screen.getByTestId('learn-post-photos').querySelectorAll('img')).toHaveLength(3);
+        });
+
+        it('"This page\'s photos changed. Open it again.": shown under Save, and the page behind the form is read again', async () => {
+            await openEdit();
+            const readsBefore = asked().filter((p) => p.startsWith('/api/marketplace/posts?')).length;
+            node.refuse = { status: 409, error: 'This page’s photos changed. Open it again.', code: 'photos_changed' };
+            node.posts = [{ ...pictured(), photos: [ADDR[0].replace('v=1', 'v=5'), ADDR[2].replace('v=1', 'v=5').replace('/2?', '/1?')] }];
+            fireEvent.click(toggles()[1]);
+            fireEvent.click(screen.getByTestId('learn-form-send'));
+            await wait();
+            expect(screen.getByTestId('learn-form-refusal').textContent).toBe('This page’s photos changed. Open it again.');
+            expect(asked().filter((p) => p.startsWith('/api/marketplace/posts?')).length).toBe(readsBefore + 1);
+            node.refuse = null;
+            fireEvent.click(screen.getAllByRole('button', { name: /back/i })[0]);
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-post-edit'));
+            await wait();
+            expect(screen.getAllByTestId('learn-form-page-photo').map((f) => f.querySelector('img')?.getAttribute('src'))).toEqual(node.posts[0].photos);
+        });
+
+        it('a page with no picture shows no list; Suggest a fix shows none either', async () => {
+            node.role = 'owner';
+            await openLearn({ target: { kind: 'page', id: 'tip' } });
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-post-edit'));
+            await wait();
+            expect(screen.queryByTestId('learn-form-page-photos')).toBeNull();
+            cleanup();
+            node.posts = [pictured()];
+            node.role = null;
+            await openLearn({ target: { kind: 'page', id: 'tip' } });
+            await wait();
+            fireEvent.click(screen.getByTestId('learn-post-fix'));
+            await wait();
+            expect(screen.queryByTestId('learn-form-page-photos')).toBeNull();
+        });
     });
 
     it('"Not this one" needs a reason from the list; the few words go with it, and the writer is told', async () => {

@@ -187,18 +187,28 @@ export function storedSourcesJson(own: readonly KnowledgeSource[], credits: read
     return all.length > 0 ? JSON.stringify(all) : null;
 }
 
+/** The licences of the open set that ask for no credit, by the name the node keeps (agent/commons-pictures.ts COMMONS_OPEN_LICENCES). */
+const ASKS_NO_CREDIT: ReadonlySet<string> = new Set(['CC0', 'Public domain']);
+
+/** Whether a picture's licence asks that its maker be named, by the licence's name as the node keeps it: any but the ones that ask for none. */
+export const licenceAsksCredit = (licence: string): boolean => !ASKS_NO_CREDIT.has(licence);
+
 /**
  * Credits by the bytes of the picture each is for, from a draft's or a page's pictures in their order (`own`, each as its bytes'
  * key) and its credits by picture number (1 first). Two pictures with the same bytes are the same picture (an assistant's upload
- * of the very copy it named on Commons, say), so whichever copy is kept carries the credit: the first credited one in order
- * (review of #3351, B2: matching the first copy by position dropped it). Approve (engine/knowledge-drafts.ts) and an Edit that
- * takes a picture off (keptPagePhotos) both move credits by it, never by a bare number.
+ * of the very copy it named on Commons, say), so whichever copy is kept carries the credit (review of #3351, B2: matching the
+ * first copy by position dropped it). Two different files on Commons can be byte for byte the same copy under different licences:
+ * the credit kept is one whose licence asks for it, so a CC0 or public domain file named first never drops a CC BY maker's name
+ * (the same review, R1); among those that ask, or where none does, the first in order. Approve (engine/knowledge-drafts.ts) and
+ * an Edit that takes a picture off (keptPagePhotos) both move credits by it, never by a bare number.
  */
 export function creditsByBytes<K>(own: readonly K[], credits: ReadonlyMap<number, KnowledgePhotoCredit>): Map<K, KnowledgePhotoCredit> {
     const out = new Map<K, KnowledgePhotoCredit>();
     own.forEach((p, i) => {
         const credit = credits.get(i + 1);
-        if (credit && !out.has(p)) out.set(p, credit);
+        if (!credit) return;
+        const had = out.get(p);
+        if (!had || (!licenceAsksCredit(had.licence) && licenceAsksCredit(credit.licence))) out.set(p, credit);
     });
     return out;
 }

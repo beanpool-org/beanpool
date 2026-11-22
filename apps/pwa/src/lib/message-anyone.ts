@@ -15,9 +15,9 @@
  * Nothing it opens or makes is a chat the member can't write in now (#3354 review round 4, the rule's own invariant), and no
  * message goes to no one: a chat across counts, and one is made, only while this community takes messages from other
  * communities, has an address of its own to send from (core saysNoHome), this account is a member here (its server takes a
- * line across from members alone, and nothing from one it removed), and the person is for certain not in this community, by
- * any of its names. Where that can't be said for certain nothing opens: `elsewhere`, the link to that address the contact had
- * before this slice.
+ * line across from members alone, none from one it suspended, and nothing from one it removed), and the person is for certain
+ * not in this community, by any of its names. Where that can't be said for certain nothing opens: `elsewhere`, the link to that
+ * address the contact had before this slice.
  */
 import { FIND_WORDS, acrossChatListed, messagePathFor, nodeHomeOf, saysNames, saysNoHome, t, whoseName, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
 import { checkMembership, nodeAddress, type CommunityInfo, type Conversation, type ConversationsAnswer } from './api';
@@ -46,15 +46,16 @@ async function blockedForMessage(keys: readonly string[]): Promise<boolean> {
 }
 
 /**
- * Whether the account is a member here, asked now: not one whose every request this community refuses (the account closed or
- * retired here, or its key replaced: 403). Not known (no answer, or none in time): taken as one, as App does.
+ * Whether the account is a member here whose line across this community takes, asked now: not one whose every request it
+ * refuses (the account closed or retired here, or its key replaced: 403), nor one it says is suspended (`standing`: it answers
+ * in the direct chats it has). Not known (no answer, or none in time): taken as one, as App does.
  */
 async function memberHere(me: string): Promise<boolean> {
-    const answer = await inTime(() => checkMembership(me).catch((e) => {
-        if (standingFromRefusal(e) || (e as { code?: unknown } | null)?.code === 'key_invalidated') return { isMember: false };
+    const answer = await inTime(() => checkMembership(me).catch((e): Awaited<ReturnType<typeof checkMembership>> => {
+        if (standingFromRefusal(e) || (e as { code?: unknown } | null)?.code === 'key_invalidated') return { isMember: false, callsign: null };
         throw e;
     }));
-    return answer?.isMember !== false;
+    return answer?.isMember !== false && answer?.standing !== 'suspended';
 }
 
 /**
@@ -109,9 +110,9 @@ export type AcrossOpened = { chatId: string } | { here: string } | { refused: 'n
 /**
  * A chat across made from a contact's link, as an address card makes one (outside-mail.ts openChatFromCard). Refused with no
  * account here, where this community doesn't take messages from other communities (or its info can't be read yet) or has no
- * address of its own to send from, for an account that is no member here, or for someone the account blocked; nothing is made
- * then. Nor when the link's address is one of this community's own names (asked now): the chat here is theirs, and its server
- * refuses every line across to one of them. Nor when that can't be said for certain.
+ * address of its own to send from, for an account that is no member here or is suspended, or for someone the account blocked;
+ * nothing is made then. Nor when the link's address is one of this community's own names (asked now): the chat here is theirs,
+ * and its server refuses every line across to one of them. Nor when that can't be said for certain.
  */
 export async function openAcrossOnWeb(target: { key: string; home: string; name: string | null }): Promise<AcrossOpened> {
     const ctx = await outsideContext().catch(() => null);

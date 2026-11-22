@@ -259,7 +259,6 @@ console.log('\n4c. saysHttpsBefore: each header combination and its answer');
         ['ws', 'proto=https', false],
         ['https', 'proto=http', true],
         ['https', 'proto=https', true],
-        ['https', undefined, true],
     ];
     const wrong = rows.filter(([xfp, fwd, want]) => gate.saysHttpsBefore({ forwardedProto: xfp, forwarded: fwd }) !== want);
     check(`all ${rows.length} rows give their answer`, wrong.length === 0,

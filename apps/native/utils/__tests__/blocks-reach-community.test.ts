@@ -2318,6 +2318,8 @@ describe('a block reaches every community this phone holds (slice S7a)', () => {
             const from = net.sent.length;
             await acrossRound(app, HELD);
             expect(heard(HELD, from)).toEqual(['unblock H']);
+            // That community alone, signed by the account that unblocked.
+            expect(net.sent.slice(from).map((s) => s.url.slice(0, s.url.indexOf('/api/')))).toEqual([HELD]);
             expect(net.sent.slice(from).every((s) => s.signedBy === ana.publicKey)).toBe(true);
             expect(listOf(HELD, ana.publicKey)).toEqual([]);
             // Nothing is owed there now, and the next round sends nothing.

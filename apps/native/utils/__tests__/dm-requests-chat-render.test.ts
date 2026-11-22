@@ -1038,8 +1038,9 @@ describe('a chat named with another community: only a DM its copy holds opens in
         standIn({
             getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true,
             heldChatIsDm: (...args: unknown[]) => { asked.push(args); return Promise.resolve(true); },
-            // Slice S6: asked only when it is no DM there; here no id is a group's there either.
+            // Slice S6: asked only when it is no DM there; here no id is a group's or an event's there either.
             heldChatIsGroup: () => Promise.resolve(false),
+            heldChatIsEvent: () => Promise.resolve(false),
             ...over,
         });
         await open();

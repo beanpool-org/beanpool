@@ -535,8 +535,8 @@ export class GroupKeyring {
     /**
      * The verify memo for this group's lines (core GroupLineVerifyMemo): in memory, each new verdict written behind. The one
      * write that may be lost: a verdict the file doesn't have is worked out again from the line itself. None is written once
-     * this ring is put away, or its account has begun to leave the phone: as every other change ({@link commit}), it never
-     * reaches a file that may be another's by now (max review of #3358, the class of U1).
+     * this ring is put away ({@link commit} refuses every other change then), nor once its account has begun to leave the
+     * phone since the ring was made: it never reaches a file that may be another's by now (max review of #3358, the class of U1).
      */
     get memo(): GroupLineVerifyMemo {
         return {

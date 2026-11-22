@@ -135,9 +135,10 @@ export function EventChatView({ eventId, inPlace }: Props) {
             if (!identity?.publicKey) return;
             if (!at) markConversationRead(eventId, identity.publicKey, at).catch(() => { });
             // In place: marked on that community's own server, once for each newest line; offline, the next poll tries again.
+            // Only its answer takes this chat's lines off that community's number (held-groups.ts readThere).
             else if (latest && readUpTo.current !== latest) {
                 readUpTo.current = latest;
-                markThreadReadOnNode(eventId, identity.publicKey, at).then(() => row.markRead(eventId)).catch(() => { readUpTo.current = null; });
+                markThreadReadOnNode(eventId, identity.publicKey, at).then(() => heldGroups.at(at).readThere(eventId)).catch(() => { readUpTo.current = null; });
             }
         } catch (e: any) {
             // Going, and the host hasn't let them in: said as that, never as "only the host and people going".

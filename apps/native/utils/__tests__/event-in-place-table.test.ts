@@ -773,18 +773,69 @@ describe('each event\'s row: its own community and unread count, on Talk → Gro
         expect(rowsNow()).toEqual([['event', A, ev, 2], ['group', A, 'g1', 1]]);
     });
 
-    it('one read in place: its row\'s count goes, and that community\'s number falls by it, at once; a group\'s read there moves no number', async () => {
+    /** Chat's "· Switch" line for A as it would draw now: A's stored number, what a push told of, and the rows as they stand. */
+    const lineForA = async () => noticesBesideEvents([{ ...URL_A, count: (await readNoticeCounts(AsyncStorage))[A] ?? 0, alerts: (await readNoticeAlerts(AsyncStorage))[A] ?? 0 }], heldGroups.getState()).map((n) => n.count);
+
+    it('one read in place: its row\'s count goes as it opens; that community\'s number falls by it only once its server took the read, and only once; a group\'s read there moves no number', async () => {
         keep();
         await noteServerUnread(AsyncStorage, A, 5, 3);
         servers[A].listed = [eventRow(2), { ...eventRow(1), kind: 'group', id: 'g1', conversationId: 'g1', name: 'Garden Crew' }];
         await heldGroups.refresh(me.publicKey);
         heldGroups.at(A).markRead('g1');
+        heldGroups.at(A).readThere('g1');
         await settle();
         expect(await readNoticeCounts(AsyncStorage)).toEqual({ [A]: 5 });
+        // The tap, then the screen's first lines: the row says read, A's number waits for A.
         heldGroups.at(A).markRead(ev);
         heldGroups.at(A).markRead(ev);
         await settle();
+        expect([rowsNow().map((r) => r[3]), await readNoticeCounts(AsyncStorage)]).toEqual([[0, 0], { [A]: 5 }]);
+        // A took the read: the two lines its row showed leave A's number, once however often it answers.
+        heldGroups.at(A).readThere(ev);
+        heldGroups.at(A).readThere(ev);
+        await settle();
         expect([rowsNow().map((r) => r[3]), await readNoticeCounts(AsyncStorage), await readNoticeAlerts(AsyncStorage)]).toEqual([[0, 0], { [A]: 3 }, { [A]: 3 }]);
+    });
+
+    it('tapped, and nothing read (backed out of, or the read or its mark refused): the list asked again brings the row\'s count back, and the "· Switch" line is as it was (review of #3364)', async () => {
+        keep();
+        // 2 lines on the event's row, 3 in a muted chat there that no push told of.
+        await noteServerUnread(AsyncStorage, A, 5, 0);
+        await heldGroups.refresh(me.publicKey);
+        expect([rowsNow().map((r) => r[3]), await lineForA()]).toEqual([[2], [3]]);
+        heldGroups.at(A).markRead(ev);
+        await settle();
+        expect([rowsNow().map((r) => r[3]), await readNoticeCounts(AsyncStorage)]).toEqual([[0], { [A]: 5 }]);
+        await heldGroups.refresh(me.publicKey);
+        expect([servers[A].reads, rowsNow().map((r) => r[3]), await readNoticeCounts(AsyncStorage), await lineForA()]).toEqual([0, [2], { [A]: 5 }, [3]]);
+        // Opened again, and read there this time: the two lines go from A's number, once; the line still says the other 3.
+        heldGroups.at(A).markRead(ev);
+        heldGroups.at(A).readThere(ev);
+        await settle();
+        expect([await readNoticeCounts(AsyncStorage), await lineForA()]).toEqual([{ [A]: 3 }, [3]]);
+    });
+
+    it('tapped and backed out of, then read elsewhere: once A\'s list says it is read, a later read here takes nothing more off A\'s number', async () => {
+        keep();
+        await noteServerUnread(AsyncStorage, A, 5, 0);
+        await heldGroups.refresh(me.publicKey);
+        heldGroups.at(A).markRead(ev);
+        // Read in the web app: A's list says none, and A's next round counts the 3 left.
+        servers[A].listed = [eventRow(0)];
+        await heldGroups.refresh(me.publicKey);
+        await noteServerUnread(AsyncStorage, A, 3, 0);
+        heldGroups.at(A).markRead(ev);
+        heldGroups.at(A).readThere(ev);
+        await settle();
+        expect([await readNoticeCounts(AsyncStorage), await lineForA()]).toEqual([{ [A]: 3 }, [3]]);
+    });
+
+    it('the event screen in place takes the lines off only from its mark-read\'s answer (the wiring)', () => {
+        const screen = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'EventChatView.tsx'), 'utf8');
+        expect(screen).toContain('markThreadReadOnNode(eventId, identity.publicKey, at).then(() => heldGroups.at(at).readThere(eventId))');
+        expect(screen.split('readThere(').length).toBe(2);
+        const pane = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'YourGroupsPane.tsx'), 'utf8');
+        expect(pane).not.toContain('readThere(');
     });
 
     it.each([

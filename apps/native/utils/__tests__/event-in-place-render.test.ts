@@ -158,7 +158,7 @@ const open = (inPlace: { community: string; name: string } | null = { community:
 const inUseUntouched = () => expect([inUse.markRead.mock.calls, inUse.setMute.mock.calls, inUse.noteSent.mock.calls]).toEqual([[], [], []]);
 /** What that community's own list keeps of the row, for the calls the screen makes of it. */
 const itsRow = () => {
-    const row = { markRead: vi.fn(), noteSent: vi.fn(), setMute: vi.fn() };
+    const row = { markRead: vi.fn(), readThere: vi.fn(), noteSent: vi.fn(), setMute: vi.fn() };
     return { row, at: vi.spyOn(heldGroups, 'at').mockReturnValue(row) };
 };
 
@@ -263,14 +263,18 @@ describe('an event\'s chat in place (EventChatView inPlace)', () => {
         // The same newest line at the next poll: nothing more; a new one: marked again. Refused: the next poll tries again.
         await act(async () => { await poll.again!(); });
         expect(of('markThreadReadOnNode').length).toBe(1);
+        // Its lines leave that community's number on the mark's answer alone (review of #3364): never on a refusal.
+        expect(row.readThere.mock.calls).toEqual([[EV]]);
         calls.answer.set('getEventChat', { ...CHAT, messages: [...CHAT.messages, line('m3', DANA, 'nine sharp')] });
         calls.refuse.set('markThreadReadOnNode', 'no signal');
         await act(async () => { await poll.again!(); });
         await settle();
+        expect(row.readThere.mock.calls).toEqual([[EV]]);
         calls.refuse.clear();
         await act(async () => { await poll.again!(); });
         await settle();
         expect(of('markThreadReadOnNode').length).toBe(3);
+        expect(row.readThere.mock.calls).toEqual([[EV], [EV]]);
         inUseUntouched();
         expect(of('leaveChatInPlace')).toEqual([]);
         await act(async () => { root.render(null); });

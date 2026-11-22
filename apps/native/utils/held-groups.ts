@@ -42,6 +42,8 @@ interface Place { file: string; url: string; name: string; store: YourGroupsStor
 let owner: string | null = null;
 let places: Place[] = [];
 let rows: HeldGroup[] = [];
+/** `file:conversationId` → an event's lines its row showed as it was opened here, not yet read on that community's server. */
+const owed = new Map<string, number>();
 const listeners = new Set<() => void>();
 /** Which communities there are, worked out one at a time: two asks at once would make each other's stores again. */
 let listing: Promise<unknown> = Promise.resolve();
@@ -67,6 +69,12 @@ function placeOf(me: string, file: string, url: string, name: string): Place {
             // Not answered: the rows it had stay (the store keeps its items on a failure).
             if (!items) throw new Error('not answered');
             for (const id of left) if (!items.some((i) => i.conversationId === id)) left.delete(id);
+            // Lines kept for a read that community now counts as read (read elsewhere) or no longer lists: none to take off.
+            for (const key of owed.keys()) {
+                if (!key.startsWith(`${file}:`)) continue;
+                const item = items.find((i) => `${file}:${i.conversationId}` === key);
+                if (!item || !(item.unreadCount > 0)) owed.delete(key);
+            }
             return { items, totalUnread: 0 };
         } finally {
             clearTimeout(timer);
@@ -77,13 +85,23 @@ function placeOf(me: string, file: string, url: string, name: string): Place {
 }
 
 function drop(gone: Place[]): void {
-    for (const place of gone) place.stop();
+    for (const place of gone) {
+        place.stop();
+        for (const key of owed.keys()) if (key.startsWith(`${place.file}:`)) owed.delete(key);
+    }
     places = places.filter((p) => !gone.includes(p));
 }
 
 /** What a group's chat in place tells its own row: never the row of the same id in the community in use, or in another. */
 export interface HeldGroupRow {
+    /** Opened (tapped, or its lines shown): the row's count goes now. That community's number keeps them until {@link readThere}. */
     markRead(conversationId: string): void;
+    /**
+     * That community's server took the read (its mark-read answered): the row stays read, and an event's lines the row showed
+     * when it was opened leave that community's number, once. Never on the tap alone: a read backed out of or refused leaves
+     * the number as its server counts it, so the "· Switch" line never takes those lines off twice (review of #3364).
+     */
+    readThere(conversationId: string): void;
     noteSent(conversationId: string): void;
     setMute: YourGroupsStore['setMute'];
 }
@@ -107,8 +125,15 @@ export const heldGroups = {
             markRead: (id) => {
                 const row = list()?.getState().items?.find((i) => i.conversationId === id);
                 list()?.markRead(id);
-                // An event's lines leave that community's number too, now: the "· Switch" line never counts what was read here.
+                // What its row showed, kept for the server's answer: the newest count its list gave, never added to itself.
                 const lines = row?.kind === 'event' ? row.unreadCount : 0;
+                if (lines > 0) owed.set(`${file}:${id}`, lines);
+            },
+            readThere: (id) => {
+                list()?.markRead(id);
+                const lines = owed.get(`${file}:${id}`) ?? 0;
+                owed.delete(`${file}:${id}`);
+                // The "· Switch" line never counts what was read here.
                 if (lines > 0) void import('./notice-counts').then((m) => m.noteReadInPlace(AsyncStorage, community, lines)).catch(() => {});
             },
             noteSent: (id) => list()?.noteSent(id),

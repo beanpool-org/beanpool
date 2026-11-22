@@ -31,6 +31,7 @@ import { Stack, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { t } from '@beanpool/core';
 import { useIdentity } from './IdentityContext';
+import { DeviceCheck } from '../components/DeviceCheck';
 import { anchorUrl, signedPost } from '../utils/node-post';
 import { SsoSignInError, fetchSsoNonce } from '../utils/sso-signin';
 import type { BeanPoolIdentity } from '../utils/identity';
@@ -150,7 +151,18 @@ type NodeChain =
     | { stage: 'ready'; url: string; nonce: string; providers: string[] }
     | { stage: 'failed'; reason: string; detail: string };
 
+/**
+ * On the probe branch this route is the device check (components/DeviceCheck.tsx), in every build: Settings' "Device check
+ * (temporary)" row and `beanpool://apple-probe`. The Sign in with Apple probe below stays as it was, in a development build
+ * only, behind a tap at its foot (it asks the node for a nonce as it opens; the device check asks a node nothing).
+ */
 export default function AppleProbeScreen() {
+    const [signInProbe, setSignInProbe] = useState(false);
+    if (__DEV__ && signInProbe) return <SignInWithAppleProbe />;
+    return <DeviceCheck onSignInProbe={__DEV__ ? () => setSignInProbe(true) : undefined} />;
+}
+
+function SignInWithAppleProbe() {
     const [available, setAvailable] = useState<boolean | null>(null);
     const [credentialUser, setCredentialUser] = useState<string | null>(null);
     const [tokenSub, setTokenSub] = useState<string | null>(null);

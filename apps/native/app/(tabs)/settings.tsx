@@ -2432,6 +2432,15 @@ export default function SettingsScreen() {
                 <Text style={styles.versionText}>
                     {t('BEANPOOL OS {version} (Build {build})', { version: appConfig.expo.version, build: Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : String(appConfig.expo.android.versionCode) })}
                 </Text>
+
+                {/* Temporary, the TestFlight probe branch only (components/DeviceCheck.tsx). Never merged. */}
+                <View style={[styles.menuGroup, { marginTop: 24 }]}>
+                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => router.push('/apple-probe')} accessibilityRole="button" testID="settings-device-check">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔎</Text></View>
+                        <Text style={[styles.menuText, { flex: 1 }]}>{t('Device check (temporary)')}</Text>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+                </View>
                 </>
             )}
 

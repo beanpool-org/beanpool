@@ -16,6 +16,10 @@
  * - **Links** (slice F9, components/forum/ForumLinks.tsx): the chips under the opening words, exactly as the node answered this
  *   reader. The ⋯ holds Link (the writer adds; the writer, an owner or an admin takes one off) and, for the writer, Make this
  *   a Need: the Market's Need form filled with the title and words (`onMakeNeed`), linked to the topic once posted.
+ * - **Where no reply goes** (review of #3339): the topic's own read says whether this member may reply now (`canReply`: the
+ *   topic open, its section not archived, theirs to write in). Where not, there is no reply box, no Reply and no offer to hear
+ *   of replies, and one line says why: closed (a closed topic, an archived section), or only the group's convenors and
+ *   members write here.
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -43,6 +47,7 @@ export const TOPIC_WORDS = {
     hidden: word('Hidden while moderators look'),
     edited: word('edited'),
     closed: word('This topic is closed, so it takes no new replies.'),
+    readsOnly: word('Only this group’s convenors and members write here. You can read it.'),
     writeReply: word('Write a reply…'),
     send: word('Send'),
     replyingTo: word('Replying to {name}: {words}'),
@@ -162,7 +167,15 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
     const replies = page?.posts.filter((p) => p.number > 1) ?? [];
     const section = front?.sections.find((s) => s.id === topic?.sectionId);
     const open = !!topic && !topic.closed;
-    const writer = !!topic && topic.writer.publicKey === me;
+    // Whether this member may reply here now: open, and the node's own word in the topic's read (its section not archived,
+    // theirs to write in: a group's observers, owners and moderators read only; review of #3339), as the phone's
+    // app/forum/[id].tsx. The reply box, Reply, the line that says why there is none and the offer to hear of replies all
+    // follow it. Archived is the topic read's word alone, never the front's section list (review of #3345).
+    const archived = !!topic?.sectionArchived;
+    const canReply = open && !archived && topic?.canReply !== false;
+    // Why no reply goes: the topic is closed or its section archived (the closed line), or this member only reads here.
+    const readsOnly = open && !archived && !canReply;
+    const writer =!!topic && topic.writer.publicKey === me;
     // What the node showed this member of the topic's links (a placeholder has no id, so nothing of it can be taken off).
     const shownLinks: LinkPick[] = (topic?.links ?? []).flatMap((l) => (l.shown ? [{ kind: l.kind, id: l.id, title: l.title }] : []));
     /** Links (or takes off) one thing; the node's answer is the topic as it now reads for this member, chips and all. */
@@ -265,11 +278,11 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
                             const next = topic.follow === 'following' ? null : 'following';
                             void act(async () => {
                                 await saveFollow(topic.id, next);
-                                // Followed: the member's own act, the moment for "Hear when someone replies here." Never on a
-                                // closed topic: it takes no replies (the node refuses them, forum.ts), so none can be heard.
-                                // The forum's own canReply flag (sweep-8) is not on main yet: this reads the topic's closed state.
+                                // Followed: the member's own act, the moment for "Hear when someone replies here." Never where
+                                // no reply can go (a closed topic, an archived section, a section this member only reads): the
+                                // node refuses them (forum.ts), so none can be heard.
                                 // The topic is kept only once its line is drawn: a refused offer leaves none behind.
-                                if (next && open) {
+                                if (next && canReply) {
                                     const on = topic.id;
                                     void notify.offer({ kind: 'follow', align: 'end' }).then((ok) => { if (ok) setFollowedOn(on); });
                                 }
@@ -324,8 +337,11 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
 
             {error && <p role="alert" className="m-0 text-sm" style={{ color: 'var(--bp-ink-danger)' }}>{error}</p>}
 
-            {topic && !open && <p data-testid="forum-closed" className="m-0 text-sm italic" style={{ color: 'var(--text-muted)' }}>{t(TOPIC_WORDS.closed)}</p>}
-            {topic && open && (
+            {/* With no reply box (a closed topic, an archived section, one this member only reads), the line that says why. */}
+            {topic && !canReply && (readsOnly
+                ? <p data-testid="forum-reads-only" className="m-0 text-sm italic" style={{ color: 'var(--text-muted)' }}>{t(TOPIC_WORDS.readsOnly)}</p>
+                : <p data-testid="forum-closed" className="m-0 text-sm italic" style={{ color: 'var(--text-muted)' }}>{t(TOPIC_WORDS.closed)}</p>)}
+            {topic && canReply && (
                 // In the flow at the topic's end, after the last post: a reply follows what it answers, and nothing sits over a post.
                 <div data-testid="forum-reply" className="flex flex-col gap-2 pt-3" style={{ borderTop: '1px solid var(--border-primary)' }}>
                     {quote && (
@@ -425,7 +441,7 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
             ];
         }
         const items: MenuItem[] = [];
-        if (open && !post.removed && post.words) items.push([t(TOPIC_WORDS.reply), () => { setQuote(post); setMenu(null); box.current?.focus(); }]);
+        if (canReply && !post.removed && post.words) items.push([t(TOPIC_WORDS.reply), () => { setQuote(post); setMenu(null); box.current?.focus(); }]);
         if (post.words) items.push([t(TOPIC_WORDS.copy), () => { void navigator.clipboard?.writeText(post.words).catch(() => {}); setMenu(null); }]);
         if (!mine && !post.removed) items.push([t(TOPIC_WORDS.report), () => { setReporting(post); setMenu(null); }]);
         if (!mine) items.push([t(TOPIC_WORDS.block, { name: name(post) }), () => setMenu({ ...m, confirm: 'block' }), true]);

@@ -24,6 +24,7 @@ import {
 import { type BeanPoolIdentity } from '../lib/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { blankedWithAccount } from '../lib/chat-tombstone';
+import { chatLineWords } from '../lib/chat-line-words';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
@@ -717,7 +718,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 await loadThread();
             }
         } catch (e: any) {
-            setThreadError(e?.message || t('Could not post message'));
+            // Not sent: the words stay in the box. Why can be this browser's own sentence (lib/group-hold.ts readableLineTo).
+            setThreadError(e?.message ? chatLineWords(e.message) : t('Could not post message'));
         } finally {
             setThreadPosting(false);
         }

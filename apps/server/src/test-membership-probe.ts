@@ -22,6 +22,9 @@
  *      floor from /api/community/health): here, 401 signature_required
  *   6. a probe signed for another community's host is refused (request binding): a hostile community can't replay a
  *      member's own probe here
+ *   7. `standing` says what POST /api/mail/send accepts (review of #3359): every way an account can stand here, its probe and
+ *      its send side by side. A suspended member is still a member (the apps' not-recognised screen reads `isMember`), and no
+ *      member for writing: `standing` is 'suspended' exactly where the send refuses a member, until the suspension is lifted
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.NODE_PROFILE;
@@ -34,8 +37,10 @@ process.env.BEANPOOL_ADDRESSES = OWN_NAME;
 import crypto from 'node:crypto';
 import { buildBoundRequestHeaders, ed25519Signer } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { adminSetUserStatus, initStateEngine, seedGenesisMember } from './state-engine.js';
+import { db } from './db/db.js';
 import { registerVisitor } from './engine/members.js';
+import { issueRekeyCode } from './engine/member-wizards.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSignatureSwitchClockForTests } from './engine/member-signature.js';
@@ -73,6 +78,14 @@ async function probe(key: string, signer?: Id, opts: { forHost?: string; method?
         Object.assign(headers, await buildBoundRequestHeaders({ method: opts.method ?? 'GET', url, body: '', publicKeyHex: signer.pk, sign: ed25519Signer(signer.seed) }));
     }
     return answer(await localFetch(`${BASE}${path}`, { method: opts.method ?? 'GET', headers }));
+}
+
+/** POST /api/mail/send signed by `signer` with no items: 403 where it is refused for who it is, else whatever the items earn (400). */
+async function send(signer: Id): Promise<Answer> {
+    const body = JSON.stringify({ items: [] });
+    const path = '/api/mail/send';
+    const headers = await buildBoundRequestHeaders({ method: 'POST', url: `https://${OWN_NAME}${path}`, body, publicKeyHex: signer.pk, sign: ed25519Signer(signer.seed) });
+    return answer(await localFetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body }));
 }
 
 /** The probe signed as an app before request binding signs it: `GET\nPATH\nTS\nNONCE\n`, no community named. */
@@ -150,6 +163,38 @@ async function checks(where: string, alice: Id, bob: Id, nobody: Id, vic: Id, na
         `${where}: Alice's own probe, signed for another community, is refused here and answers nothing (got ${elsewhere.status} ${elsewhere.body?.code ?? ''})`);
 }
 
+/** 7. What the probe says of the account, and what the send across does with it, for every way it can stand here. */
+async function standings(where: string): Promise<void> {
+    console.log(`\n── ${where} 7. standing: what the send across accepts ──`);
+    resetGatewayRateLimit();
+    const setStatus = (status: string) => (id: Id) => { db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, id.pk); };
+    const rows: Array<{ name: string; row: 'member' | 'visitor' | 'none'; set?: (id: Id) => void; says: string; sends: string }> = [
+        { name: 'a member', row: 'member', says: '200 member', sends: 'taken' },
+        { name: 'paused by an admin', row: 'member', set: (id) => adminSetUserStatus(id.pk, 'disabled'), says: '200 suspended', sends: '403 not_a_member' },
+        { name: "'suspended' (a report's, from before it was a pause)", row: 'member', set: setStatus('suspended'), says: '200 suspended', sends: '403 not_a_member' },
+        { name: 'paused, then lifted', row: 'member', set: (id) => { adminSetUserStatus(id.pk, 'disabled'); adminSetUserStatus(id.pk, 'active'); }, says: '200 member', sends: 'taken' },
+        { name: "a visitor's row", row: 'visitor', says: '200 not a member', sends: '403 not_a_member' },
+        { name: "a visitor's row, paused", row: 'visitor', set: setStatus('disabled'), says: '200 not a member', sends: '403 not_a_member' },
+        { name: 'a key with no row', row: 'none', says: '200 not a member', sends: '403 not_a_member' },
+        { name: 'closed', row: 'member', set: (id) => adminSetUserStatus(id.pk, 'pruned'), says: '403 account_closed', sends: '403 account_closed' },
+        { name: 'its key being replaced (a re-key code given out)', row: 'member', set: (id) => { issueRekeyCode(id.pk, 'owner:password'); }, says: '403 key_invalidated', sends: '403 key_invalidated' },
+    ];
+    for (const [i, { name, row, set, says, sends }] of rows.entries()) {
+        const id = keypair();
+        if (row === 'member') seedGenesisMember(id.pk, `${where}-stands-${i}`);
+        if (row === 'visitor') registerVisitor(id.pk, `${where}-visits-${i}`);
+        set?.(id);
+        const p = await probe(id.pk, id);
+        const s = await send(id);
+        const said = p.status !== 200 ? `${p.status} ${p.body?.code}` : `200 ${p.body?.isMember === true ? p.body?.standing : 'standing' in (p.body ?? {}) ? 'a standing with no membership' : 'not a member'}`;
+        // Past who sends it: refused only for having nothing in it.
+        const sent = s.status === 400 && s.body?.code === 'bad_items' ? 'taken' : `${s.status} ${s.body?.code}`;
+        assert(said === says && sent === sends && (p.body?.standing === 'member') === (sent === 'taken'),
+            `${where}: ${name}: the probe says ${said}, the send ${sent === 'taken' ? 'takes its sender' : `answers ${sent}`} (want ${says}; ${sends}; ${p.text.slice(0, 100)})`);
+        if (row === 'member' && said.startsWith('200')) assert(p.body?.isMember === true && p.body?.callsign === `${where}-stands-${i}`, `${where}: ${name}: still a member, with its name`);
+    }
+}
+
 async function main() {
     console.log('Running membership probe tests...');
 
@@ -167,6 +212,7 @@ async function main() {
     registerVisitor(vic.pk, 'vic');
 
     await checks('local', alice, bob, nobody, vic, { alice: 'alice', bob: 'bob' });
+    await standings('local');
 
     // ── 5. an old app (local) ──
     console.log('\n── local 5. an old app\'s probe, in the format that names no community ──');
@@ -188,6 +234,7 @@ async function main() {
     seedGenesisMember(g.bob.pk, 'gbob');
     registerVisitor(g.vic.pk, 'gvic');
     await checks('global', g.alice, g.bob, g.nobody, g.vic, { alice: 'galice', bob: 'gbob' });
+    await standings('global');
     delete process.env.NODE_PROFILE;
 
     console.log(`\n${passed}/${run} checks passed.`);

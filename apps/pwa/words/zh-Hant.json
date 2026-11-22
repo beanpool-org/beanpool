@@ -3961,7 +3961,7 @@
   "This month: {trades} · +{in} in · −{out} out": "本月：{trades} · 收入 +{in} · 支出 −{out}",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "這個伺服器回傳的是一個已鎖定群組的聊天，而不是私訊，所以沒有開啟任何內容。",
   "This node is serving an older key than one this app already holds.": "此節點提供的金鑰版本早於此應用程式已持有的金鑰。",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "這個伺服器現在說這個聊天沒有被鎖定。這個瀏覽器保存著它的金鑰，所以仍會鎖定每一則訊息，並且不會傳送任何無法鎖定的內容。",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "這個伺服器現在說這個聊天沒有被鎖定。這個瀏覽器曾看到它被鎖定，所以仍會鎖定每一則訊息，並且不會傳送任何無法鎖定的內容。",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "此節點指出有非成員名單上的人持有此聊天的金鑰。未發送任何內容。",
   "This project's deadline has passed: it takes no more pledges.": "這個專案的截止日期已過：不再接受認捐。",
   "This request is no longer open. You can ask again.": "這個申請已不再有效。你可以再次申請。",

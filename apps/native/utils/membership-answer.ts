@@ -4,8 +4,11 @@
  * Reconnect on the not-recognised screen (utils/reconnect.ts) and the global community's standing (utils/global-entry.ts).
  *
  * Only a definite answer counts (DESIGN-global-entry-fable.md §B.2, §C.3):
- * - 200 `isMember: true` is a member; 200 `isMember: false` a stranger (`recovering` when the node reports a recovery
- *   under way for the key, an UNSIGNED claim that only ever prompts, never moves the member: _layout.tsx NAT-20).
+ * - 200 `isMember: true` is a member, marked `suspended` where the community says its account is (`standing: 'suspended'`):
+ *   still a member everywhere the phone asks (it keeps its Beans, deals and chats), and no member for writing: Message
+ *   (message-anyone.ts) starts no chat there and sends nothing across from there. 200 `isMember: false` is a stranger
+ *   (`recovering` when the node reports a recovery under way for the key, an UNSIGNED claim that only ever prompts, never
+ *   moves the member: _layout.tsx NAT-20).
  * - 403 `account_closed` (the signature gate's answer for a key whose account there was closed, removed or deleted by its
  *   owner) is a definite answer too: closed.
  * - 403 `account_retired` (the same gate's answer for a key an owner retired as an empty duplicate: server
@@ -21,7 +24,8 @@
 import { ACCOUNT_RETIRED_CODE } from '@beanpool/core';
 
 export type MembershipAnswer =
-    | { kind: 'member' }
+    /** `suspended`: its account there is suspended or paused, present only then. */
+    | { kind: 'member'; suspended?: true }
     | { kind: 'stranger'; recovering: boolean }
     /** `retired`: an owner retired it as an empty duplicate (403 `account_retired`), present only then. */
     | { kind: 'closed'; retired?: true };
@@ -34,7 +38,7 @@ export function readMembershipAnswer(status: number, body: unknown): MembershipA
     const b = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
     if (status === 200) {
         if (!b || typeof b.isMember !== 'boolean') return null;
-        if (b.isMember) return { kind: 'member' };
+        if (b.isMember) return b.standing === 'suspended' ? { kind: 'member', suspended: true } : { kind: 'member' };
         return { kind: 'stranger', recovering: b.isRecovering === true };
     }
     if (status === 403 && b && typeof b.code === 'string') {

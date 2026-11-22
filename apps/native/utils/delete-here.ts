@@ -265,14 +265,31 @@ export function lastCommunityLine(plan: Extract<DeletePlan, { kind: 'last' }>, h
 }
 
 /**
+ * Where each copy BeanPool's key vault keeps of the key has its own Remove after Delete Anyway, from whichever community has
+ * the member then (review of #3369 at bde83114): Account Protection's "Where your account can be brought back from"
+ * (app/ways-back.tsx). Its list asks the vault whatever that community's rule, and gives a sign-in's copy, a half for a
+ * saved community's admins and a stray half each a Remove (components/WaysBackList.tsx, utils/ways-back-state.ts
+ * `strayVaultHalves`). After Delete Anyway the community that held the other half has purged it, so the vault's half is
+ * stray. Never:
+ * - Account Protection's own Remove: CommunityAdminsRow's, for the copy of the community the phone is on now only.
+ * - Account Protection's Disconnect: the vault's copies only where that community's rule is the vault's. One that keeps
+ *   copies itself lists its own there, and one that keeps none offers none (app/(tabs)/settings.tsx fetchProtectionStatus).
+ * Each step is the screen's own word: the header's Settings, Settings' Account Protection row, the row that opens the list
+ * (WAYS_BACK_LINES.title) and the button on each copy (WAYS_BACK_LINES.remove). vault-copy-remove-paths.test.ts holds them
+ * to it, in English and in every catalog.
+ */
+export const VAULT_COPIES_REMOVE_PATH = 'Settings → Account Protection → Where your account can be brought back from → Remove';
+
+/**
  * After {@link vaultCopyStaysLine}'s words for a sign-in's copy, or for a copy the phone doesn't know of: the vault removed
- * nothing ({@link removeVaultCopies} asks for every copy at once), so a half kept for a community's admins stays too, and
- * Account Protection's Disconnect (one sign-in's copy) never takes it; its Remove does. The phone keeps one value per account
- * (utils/vault.ts `noteVaultCopy`): a sign-in's copy known says nothing of a half beside it, so the half is named with "If".
+ * nothing ({@link removeVaultCopies} asks for every copy at once), so a half kept for a community's admins stays too, and is
+ * removed on the same screen as the sign-in's copy ({@link VAULT_COPIES_REMOVE_PATH}), which the sentence before names. The
+ * phone keeps one value per account (utils/vault.ts `noteVaultCopy`): a sign-in's copy known says nothing of a half beside
+ * it, so the half is named with "If".
  */
 const ADMINS_HALF_STAYS_TOO =
     "If the vault also keeps half of a locked copy of your key for your community's admins, that half stays too. It is " +
-    'removed the same way, at Settings → Account Protection → Remove.';
+    'removed on the same screen.';
 
 /**
  * The community deleted the account at the member's last one, but BeanPool's key vault did not remove its copy, so
@@ -287,7 +304,7 @@ export function vaultCopyStaysLine(hereName: string, outcome: Extract<DeleteOutc
             `key, the half for your community's admins: it couldn't be removed (${outcome.reason}). Only your key can remove ` +
             'it, and your key is still on this phone, so you can try again.\n\n' +
             'Delete Anyway takes your key off this phone and leaves that half at the vault. To remove it later, you would ' +
-            'need your key back and a community that has you, to reach Settings → Account Protection → Remove.';
+            `need your key back and a community that has you, to reach ${VAULT_COPIES_REMOVE_PATH}.`;
     }
     const copy = outcome.copyKnown
         ? "BeanPool's key vault still keeps a locked copy of your key, from a sign-in you linked"
@@ -296,7 +313,7 @@ export function vaultCopyStaysLine(hereName: string, outcome: Extract<DeleteOutc
         'key can remove it, and your key is still on this phone, so you can try again.\n\n' +
         'Delete Anyway takes your key off this phone and leaves that copy at the vault, locked to your sign-in. To ' +
         'remove it later, you would need your key back (with your 12 words or that sign-in) and a community that has ' +
-        `you, to reach Settings → Account Protection → Disconnect. ${ADMINS_HALF_STAYS_TOO}`;
+        `you, to reach ${VAULT_COPIES_REMOVE_PATH}. ${ADMINS_HALF_STAYS_TOO}`;
 }
 
 const keyAnd = (hasWords: boolean) => (hasWords ? "This phone's key and 12 words" : "This phone's key");

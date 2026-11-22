@@ -57,7 +57,12 @@ const SOME_COPY = { sealed: 'not opened here' } as unknown as SealedShare;
 /** After a sign-in's copy, known or not: the half kept for the community's admins stays too (delete-here.ts vaultCopyStaysLine). */
 const ADMINS_HALF_TOO =
     "If the vault also keeps half of a locked copy of your key for your community's admins, that half stays too. It is " +
-    'removed the same way, at Settings → Account Protection → Remove.';
+    'removed on the same screen.';
+/**
+ * The screen where every copy the vault keeps has its own Remove, from any community (review of #3369 at bde83114):
+ * vault-copy-remove-paths.test.ts holds each step to the screen's own word.
+ */
+const REMOVE_PATH = 'Settings → Account Protection → Where your account can be brought back from → Remove';
 
 interface Net {
     vault: FakeVault;
@@ -251,7 +256,7 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
             'remove it, and your key is still on this phone, so you can try again.\n\n' +
             'Delete Anyway takes your key off this phone and leaves that copy at the vault, locked to your sign-in. To ' +
             'remove it later, you would need your key back (with your 12 words or that sign-in) and a community that has ' +
-            'you, to reach Settings → Account Protection → Disconnect. ' + ADMINS_HALF_TOO);
+            `you, to reach ${REMOVE_PATH}. ` + ADMINS_HALF_TOO);
         expect(vaultCopyStaysLine('Mullum', stays(false))).toMatch(
             /^Your account at Mullum was deleted, but BeanPool's key vault may keep a locked copy of your key, if you linked Google, Apple or Facebook: it couldn't be removed/);
     });
@@ -280,7 +285,8 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
             expect(outcome).toMatchObject({ kind: 'vault-copy-stays', copyKnown, communityOnly: false });
             const line = vaultCopyStaysLine('Riverside', outcome as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>);
             expect(line).toMatch(copyKnown ? /still keeps a locked copy of your key, from a sign-in you linked/ : /may keep a locked copy of your key, if you linked Google, Apple or Facebook/);
-            expect(line).toMatch(/→ Disconnect\./);
+            expect(line).toContain(`to reach ${REMOVE_PATH}. `);
+            expect(line).not.toMatch(/Disconnect/);
             expect(line.endsWith(` ${ADMINS_HALF_TOO}`)).toBe(true);
 
             // Delete Anyway: every copy stays at the vault, the admins' half among them, as the line said.
@@ -308,7 +314,7 @@ describe("Delete account at Kim's last community, in a build with BeanPool's key
             "half for your community's admins: it couldn't be removed (it didn't answer: check your connection). Only your " +
             'key can remove it, and your key is still on this phone, so you can try again.\n\n' +
             'Delete Anyway takes your key off this phone and leaves that half at the vault. To remove it later, you would ' +
-            'need your key back and a community that has you, to reach Settings → Account Protection → Remove.');
+            `need your key back and a community that has you, to reach ${REMOVE_PATH}.`);
         expect(line).not.toMatch(/sign-in/);
         // A sign-in's copy known ('1'): the sign-in's words, as before.
         mem.async.set(vaultCopyKnownStoreKey(kim.publicKey), '1');

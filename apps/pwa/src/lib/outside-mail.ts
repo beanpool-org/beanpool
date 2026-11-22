@@ -107,7 +107,9 @@ export interface OutsideMailContext {
      * community's facts, a block first): their first line across, with no chat here, opens one, door open or not. One per
      * round, read at its first ask. Null: not known this round (a read it needs failed, and may pass later; never a
      * refusal), so a first line the door would drop waits at my server, unconfirmed, for a later round (#3366 review F2),
-     * within its bound (WAIT_ROUNDS_MAX, WAIT_MS, WAITING_MAX: #3366 review N1). Left out: nobody is.
+     * within its bound (WAIT_ROUNDS_MAX, WAIT_MS, WAITING_MAX: #3366 review N1). Each of its reads has its own time limit,
+     * well inside the round's (lib/let-in.ts LET_IN_TIME; #3366 review N2): one that doesn't answer is a read that failed,
+     * so it never ends the round at that line. Left out: nobody is.
      */
     letIn?: (key: string) => Promise<boolean | null>;
     signal?: AbortSignal;

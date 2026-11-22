@@ -18,8 +18,13 @@
  *      behind them -> that line written in the same round, at most 25 waiting, the oldest dropped as before; a line waits
  *      3 rounds a minute or more apart, or 30 minutes, whichever first, then is dropped as before; a read that mends
  *      within that lets the friend's line in
+ *   7  each read's own time limit (#3366 review N2): each read x {never answers, answers just inside its 8 s, just past
+ *      it} -> not known this round at 8 s (its request aborted), let in, not known; a round's reads together end by 20 s,
+ *      well inside the round's 45 s; the api's own reads hand each request its signal; and through the round, with its
+ *      deadline: one stranger's first line, each read never answering in turn, then a line in a chat already open behind
+ *      it -> that line written in the same round, the stranger's wait kept, and dropped at its bound as before
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX, ed25519Signer, relayConversationId, relayPayloadHash, sealOutsideLine, signRelayEnvelope, type RelayItem } from '@beanpool/core';
@@ -59,10 +64,11 @@ vi.mock('./identity', () => ({ loadIdentity: vi.fn(async () => null) }));
 vi.mock('./blocklist', () => ({ getBlocklistStatus: () => ({ loaded: true, error: null }), isUserBlocked: () => false, loadBlocklist: async () => [], unblockedInThisPage: () => false }));
 
 import { clearOutsideChats, outsideChatStore } from './outside-chat-store';
-import { setDoor, syncOutsideMail, type OutsideMailContext } from './outside-mail';
+import { OUTSIDE_ROUND_MS, setDoor, syncOutsideMail, type OutsideMailContext } from './outside-mail';
 import { setNodeApiUrl } from './api';
 import { resetAccountEpochForTest } from './account-epoch';
-import { letInOnWeb, type WebLetInReads } from './let-in';
+import { hearNodeVersionForTests } from './node-version-gate';
+import { LET_IN_TIME, letInOnWeb, type LetInTime, type WebLetInReads } from './let-in';
 
 const seedKey = () => { const seed = ed25519.utils.randomSecretKey(); return { seed: bytesToHex(seed), key: bytesToHex(ed25519.getPublicKey(seed)) }; };
 const BEN = seedKey(), SOL = seedKey(), NEW = seedKey(), CY = seedKey();
@@ -90,30 +96,43 @@ type ReadName = 'conversations' | 'lines' | 'friends' | 'deals' | 'payments' | '
 /** What a read throws instead of answering: no answer at all, or the node's refusal with its status. */
 const noAnswer = () => new TypeError('Failed to fetch');
 const status = (n: number) => Object.assign(new Error(`HTTP ${n}`), { status: n });
+/** A read that answers only this many ms after it is asked, or never (whatever its signal says): #3366 review N2. */
+type Slow = Partial<Record<ReadName | 'contacts', number | 'never'>>;
 let reads: Record<string, number>;
 let membersAsked: string[][];
-function readsOf(f: Facts, broken: Partial<Record<ReadName, () => unknown>> = {}): WebLetInReads {
-    const count = (k: ReadName | 'contacts') => {
+/** The signal each request was asked with, its last ask's. */
+let signals: Partial<Record<ReadName, AbortSignal | undefined>>;
+function readsOf(f: Facts, broken: Partial<Record<ReadName, () => unknown>> = {}, slow: Slow = {}): WebLetInReads {
+    const count = (k: ReadName | 'contacts', signal?: AbortSignal) => {
         reads[k] = (reads[k] ?? 0) + 1;
+        if (k !== 'contacts') signals[k] = signal;
         const thrown = k !== 'contacts' && broken[k];
         if (thrown) throw thrown();
     };
+    const later = (k: ReadName | 'contacts') => {
+        const wait = slow[k];
+        if (wait === undefined) return undefined;
+        return new Promise<void>((resolve) => { if (wait !== 'never') setTimeout(resolve, wait); });
+    };
     return {
-        conversations: async () => {
-            count('conversations');
+        conversations: async (_me, signal) => {
+            count('conversations', signal);
+            await later('conversations');
             return { conversations: f.conversations ?? [], totalUnread: 0, ...(f.requests ? { requests: { count: f.requests.length, conversations: f.requests } } : {}) } as any;
         },
-        lines: async (id) => { count('lines'); return { messages: f.lines?.[id] ?? [] }; },
-        friends: async () => { count('friends'); return (f.friends ?? []) as any; },
-        deals: async () => { count('deals'); return f.deals ?? []; },
-        payments: async () => { count('payments'); return f.payments ?? []; },
+        lines: async (id, signal) => { count('lines', signal); await later('lines'); return { messages: f.lines?.[id] ?? [] }; },
+        friends: async (_me, signal) => { count('friends', signal); await later('friends'); return (f.friends ?? []) as any; },
+        deals: async (_me, signal) => { count('deals', signal); await later('deals'); return f.deals ?? []; },
+        payments: async (_me, signal) => { count('payments', signal); await later('payments'); return f.payments ?? []; },
         contacts: async () => {
             count('contacts');
+            await later('contacts');
             return { contacts: (f.contacts ?? []).map((l) => ({ links: [typeof l === 'string' ? { key: l, community: A } : l] })) };
         },
-        members: async (keys) => {
+        members: async (keys, signal) => {
             membersAsked.push([...keys]);
-            count('members');
+            count('members', signal);
+            await later('members');
             return keys.filter((k) => (f.members ?? []).includes(k)).map((publicKey) => ({ publicKey }));
         },
         community: () => B,
@@ -165,7 +184,7 @@ const COLUMNS: Column[] = [
     { name: 'the chat list refused (a 403)', want: () => false, broken: { conversations: () => status(403) } },
 ];
 
-beforeEach(() => { reads = {}; membersAsked = []; });
+beforeEach(() => { reads = {}; membersAsked = []; signals = {}; });
 
 describe('let in once on the web: the core table\'s facts as the web reads them x what else holds', () => {
     for (const source of SOURCES) {
@@ -323,6 +342,122 @@ describe('a read that failed is told apart from not let in (#3366 review F2)', (
     });
 });
 
+/**
+ * #3366 review N2: a read that never answers. Each has its own time limit (LET_IN_TIME: 8 s a read, 20 s for a round's
+ * together), and one past it is a read that failed: not known this round, its request aborted. Played on fake timers.
+ */
+describe('7  each read\'s own time limit, well inside the round\'s (#3366 review N2)', () => {
+    const { readMs, roundMs } = LET_IN_TIME;
+    const ME_ID = { publicKey: ME, privateKey: BEN.seed };
+    /** For each read, facts that let them in only through it. */
+    const THROUGH: Record<ReadName | 'contacts', Facts> = {
+        conversations: { conversations: [dm('c1', { request: { state: 'accepted', from: THEM, at: '', acceptedByYou: true } })] },
+        friends: { friends: [{ publicKey: THEM }] },
+        deals: { deals: [{ buyerPublicKey: ME, sellerPublicKey: THEM, status: 'completed', postAuthorPublicKey: THEM }] },
+        payments: { payments: [{ from: ME, to: THEM }] },
+        lines: { conversations: [dm('c1')], lines: { c1: [line(ME)] } },
+        contacts: { contacts: [THEM] },
+        members: { contacts: [{ key: THEM, community: B }], members: [THEM] },
+    };
+    const watch = <T,>(p: Promise<T>) => {
+        const w: { done: boolean; value?: T; at?: number } = { done: false };
+        void p.then((v) => { Object.assign(w, { done: true, value: v, at: Date.now() }); });
+        return w;
+    };
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('8 s a read, 20 s for a round\'s together: two whole reads in turn fit, and all of them under half the round\'s 45 s', () => {
+        expect(LET_IN_TIME).toEqual({ readMs: 8_000, roundMs: 20_000 });
+        expect(2 * readMs).toBeLessThanOrEqual(roundMs);
+        expect(roundMs).toBeLessThanOrEqual(OUTSIDE_ROUND_MS / 2);
+    });
+
+    for (const [read, facts] of Object.entries(THROUGH) as Array<[ReadName | 'contacts', Facts]>) {
+        it(`only ${read} lets them in, and it never answers: still asking at ${readMs - 1} ms; not known this round at ${readMs} ms${read === 'contacts' ? '' : ', its request aborted'}`, async () => {
+            const answer = watch(letInOnWeb(ME_ID, async () => false, readsOf(facts, {}, { [read]: 'never' }))(THEM));
+            await vi.advanceTimersByTimeAsync(readMs - 1);
+            expect(answer.done).toBe(false);
+            expect(reads[read]).toBe(1);
+            if (read !== 'contacts') expect(signals[read]?.aborted).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(answer).toMatchObject({ done: true, value: null });
+            if (read !== 'contacts') expect(signals[read]?.aborted).toBe(true);
+        });
+
+        it(`only ${read} lets them in, and it answers just inside its limit (${readMs - 1} ms): it still counts, let in`, async () => {
+            const answer = watch(letInOnWeb(ME_ID, async () => false, readsOf(facts, {}, { [read]: readMs - 1 }))(THEM));
+            await vi.advanceTimersByTimeAsync(readMs - 1);
+            expect(answer).toMatchObject({ done: true, value: true });
+            if (read !== 'contacts') expect(signals[read]?.aborted).toBe(false);
+        });
+
+        it(`only ${read} lets them in, and it answers just past its limit (${readMs + 1} ms): not known this round`, async () => {
+            const answer = watch(letInOnWeb(ME_ID, async () => false, readsOf(facts, {}, { [read]: readMs + 1 }))(THEM));
+            await vi.advanceTimersByTimeAsync(readMs + 1);
+            expect(answer).toMatchObject({ done: true, value: null });
+        });
+    }
+
+    it('a read past its limit is asked once a round, not again for each line; another fact still lets someone in', async () => {
+        const letIn = letInOnWeb(ME_ID, async () => false, readsOf({ friends: [{ publicKey: OTHER }] }, {}, { payments: 'never' }));
+        const first = watch(letIn(THEM));
+        await vi.advanceTimersByTimeAsync(readMs);
+        expect(first.value).toBeNull();
+        expect(await letIn(THEM)).toBeNull();
+        expect(await letIn(OTHER)).toBe(true);
+        expect(reads.payments).toBe(1);
+    });
+
+    it('a round\'s reads end by 20 s together: each person\'s own read in turn has its 8 s, the next what is left, then none is asked', async () => {
+        // Four people, each a contact linked here and nothing cheaper: each needs this community's members read, which never answers.
+        const people = [THEM, OTHER, NEW.key, seedKey().key];
+        const letIn = letInOnWeb(ME_ID, async () => false, readsOf({ contacts: people.map((key) => ({ key, community: B })), members: people }, {}, { members: 'never' }));
+        const t0 = Date.now();
+        const ended: Array<number | null | undefined> = [];
+        for (const k of people) {
+            const answer = watch(letIn(k));
+            await vi.runAllTimersAsync();
+            expect(answer).toMatchObject({ done: true, value: null });
+            ended.push(answer.at! - t0);
+        }
+        expect(ended).toEqual([readMs, 2 * readMs, roundMs, roundMs]);
+        expect(membersAsked).toEqual(people.slice(0, 3).map((k) => [k]));
+    });
+
+    for (const stalls of ['the chat list, friends, deals and payments', 'a chat\'s lines'] as const) {
+        it(`the api's own reads hand each request its signal: ${stalls} never answering, each request is aborted at ${readMs} ms, not known this round`, async () => {
+            setNodeApiUrl(B);
+            hearNodeVersionForTests(B);
+            const asked: Array<{ path: string; signal?: AbortSignal | null }> = [];
+            const roundReads = stalls !== 'a chat\'s lines';
+            vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+                const path = new URL(String(url)).pathname;
+                asked.push({ path, signal: init?.signal });
+                const ok = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+                if (!roundReads && path.startsWith('/api/messages/conversations/')) return ok({ conversations: [dm('c1')], totalUnread: 0 });
+                if (!roundReads && !path.startsWith('/api/messages/')) return ok([]);
+                return new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+            }));
+            try {
+                const answer = watch(letInOnWeb(ME_ID, async () => false)(THEM));
+                await vi.advanceTimersByTimeAsync(readMs - 1);
+                expect(answer.done).toBe(false);
+                const stalled = asked.filter((a) => roundReads || a.path === '/api/messages/c1');
+                expect(stalled.map((a) => a.path).sort()).toEqual(roundReads
+                    ? ['/api/friends/' + ME, '/api/ledger/transactions', '/api/marketplace/transactions', '/api/messages/conversations/' + ME].sort()
+                    : ['/api/messages/c1']);
+                expect(stalled.every((a) => a.signal instanceof AbortSignal && !a.signal.aborted)).toBe(true);
+                await vi.advanceTimersByTimeAsync(1);
+                expect(answer).toMatchObject({ done: true, value: null });
+                expect(stalled.every((a) => a.signal?.aborted)).toBe(true);
+            } finally {
+                vi.unstubAllGlobals();
+            }
+        });
+    }
+});
+
 describe('through the real round: the web\'s across gate takes let in', () => {
     let ctx: OutsideMailContext;
     let blocked: Set<string>;
@@ -338,11 +473,11 @@ describe('through the real round: the web\'s across gate takes let in', () => {
         blocked = new Set();
     });
 
-    function contextLettingIn(facts: Facts, broken: Partial<Record<ReadName, () => unknown>> = {}): OutsideMailContext {
+    function contextLettingIn(facts: Facts, broken: Partial<Record<ReadName, () => unknown>> = {}, slow: Slow = {}, time: LetInTime = LET_IN_TIME): OutsideMailContext {
         const isBlocked = async (k: string) => blocked.has(k);
         return {
             nodeUrl: B, identity: { publicKey: ME, privateKey: BEN.seed, callsign: 'Ben' }, store: outsideChatStore(B), isBlocked,
-            letIn: letInOnWeb({ publicKey: ME, privateKey: BEN.seed }, isBlocked, readsOf(facts, broken)),
+            letIn: letInOnWeb({ publicKey: ME, privateKey: BEN.seed }, isBlocked, readsOf(facts, broken, slow), time),
         };
     }
 
@@ -563,5 +698,106 @@ describe('through the real round: the web\'s across gate takes let in', () => {
         expect(receiptedTo(THEM)).toEqual([id]);
         expect(heldIds()).toEqual([]);
         expect(await waitsKept(c)).toEqual([]);
+    });
+
+    // #3366 review N2, its row: a let-in read that never answers. The round has its deadline (here DEADLINE_MS for its
+    // 45 s), and its wait for `letIn` ends there in an AbortError, as lib/outside-mail.ts boundedBySignal makes it: before
+    // the fix the round broke at the stranger's line at every deadline, nothing confirmed, no wait kept, the line in the
+    // open chat behind it never written. Each read now has its own limit (here QUICK, for LET_IN_TIME's 8 s and 20 s).
+    const QUICK: LetInTime = { readMs: 40, roundMs: 100 };
+    const DEADLINE_MS = 3_000;
+    const ranOut = () => Object.assign(new Error('This round ran out of time.'), { name: 'AbortError' });
+    async function roundWithin(facts: Facts, slow: Slow, now: number, time: LetInTime = QUICK) {
+        const c = contextLettingIn(facts, {}, slow, time);
+        await c.store.setMeta(ME, 'home', `b.example ${Date.now()} ${B}`);
+        await setDoor(c, false);
+        const deadline = new AbortController();
+        const timer = setTimeout(() => deadline.abort(), DEADLINE_MS);
+        const letIn = c.letIn!;
+        const bounded: OutsideMailContext = {
+            ...c,
+            signal: deadline.signal,
+            letIn: (k) => new Promise((resolve, reject) => {
+                if (deadline.signal.aborted) return reject(ranOut());
+                deadline.signal.addEventListener('abort', () => reject(ranOut()), { once: true });
+                letIn(k).then(resolve, reject);
+            }),
+        };
+        const started = Date.now();
+        try {
+            const out = await syncOutsideMail(bounded, now);
+            return { c, out, tookMs: Date.now() - started, deadlineHit: deadline.signal.aborted };
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    /** For each read, facts under which a stranger's (Cy's) first line is asked about through it; Sol is a friend. */
+    const REACHED: Record<ReadName | 'contacts', Facts> = {
+        conversations: FRIEND,
+        friends: FRIEND,
+        deals: FRIEND,
+        payments: FRIEND,
+        lines: { ...FRIEND, conversations: [dm('c2', { participants: [ME, OTHER] })] },
+        contacts: FRIEND,
+        members: { ...FRIEND, contacts: [{ key: OTHER, community: B }] },
+    };
+
+    it('one stranger\'s first line, the payments read never answers, then a line in a chat already open: written in the same round, the stranger\'s wait kept; at 30 minutes dropped as before', async () => {
+        await chatOpenWithThem();
+        const stranger = await heldLine(CY);
+        const theirs = await heldLine(SOL);
+        const t0 = Date.now();
+        const first = await roundWithin(FRIEND, { payments: 'never' }, t0);
+        expect(first.deadlineHit).toBe(false);
+        expect(await first.c.store.hasLine(ME, relayConversationId(ME, THEM), theirs)).toBe(true);
+        expect(receiptedTo(THEM)).toEqual([theirs]);
+        expect(first.out).toMatchObject({ written: 1, waiting: 1, dropped: 0, confirmed: 1 });
+        expect(heldIds()).toEqual([stranger]);
+        expect(await waitsKept(first.c)).toEqual([stranger]);
+        expect(signals.payments?.aborted).toBe(true);
+        // The review's table: +10, +20 minutes, the read still never answering: the stranger's line waits, kept.
+        for (const m of [10, 20]) {
+            const { out, deadlineHit } = await roundWithin(FRIEND, { payments: 'never' }, t0 + m * MIN);
+            expect(deadlineHit).toBe(false);
+            expect(out).toMatchObject({ waiting: 1, dropped: 0, confirmed: 0 });
+            expect(heldIds()).toEqual([stranger]);
+        }
+        // Its bound: dropped and confirmed, as the door's rule meets it, never receipted.
+        const last = await roundWithin(FRIEND, { payments: 'never' }, t0 + 30 * MIN);
+        expect(last.out).toMatchObject({ waiting: 0, dropped: 1, confirmed: 1 });
+        expect(heldIds()).toEqual([]);
+        expect(await waitsKept(last.c)).toEqual([]);
+        expect(await stateOf(last.c, OTHER)).toBeNull();
+        expect(receiptedTo(OTHER)).toEqual([]);
+    });
+
+    for (const [read, facts] of Object.entries(REACHED) as Array<[ReadName | 'contacts', Facts]>) {
+        it(`one stranger's first line, the ${read} read never answering, then a line in a chat already open: written in the same round, well before the deadline; the stranger's line waits, kept`, async () => {
+            await chatOpenWithThem();
+            const stranger = await heldLine(CY);
+            const theirs = await heldLine(SOL);
+            reads = {};
+            const { c, out, tookMs, deadlineHit } = await roundWithin(facts, { [read]: 'never' }, Date.now());
+            expect(reads[read]).toBe(1);
+            expect(deadlineHit).toBe(false);
+            expect(tookMs).toBeLessThan(DEADLINE_MS);
+            expect(await c.store.hasLine(ME, relayConversationId(ME, THEM), theirs)).toBe(true);
+            expect(receiptedTo(THEM)).toEqual([theirs]);
+            expect(out).toMatchObject({ written: 1, waiting: 1, dropped: 0, confirmed: 1 });
+            expect(heldIds()).toEqual([stranger]);
+            expect(await waitsKept(c)).toEqual([stranger]);
+            if (read !== 'contacts') expect(signals[read]?.aborted).toBe(true);
+        });
+    }
+
+    it('the payments read answering well inside its limit still counts: the line from someone the member paid opens its chat in that round', async () => {
+        await chatOpenWithThem();
+        const paid = await heldLine(CY);
+        const theirs = await heldLine(SOL);
+        const { c, out } = await roundWithin({ ...FRIEND, payments: [{ from: ME, to: OTHER }] }, { payments: 50 }, Date.now(), { readMs: 1_000, roundMs: 2_000 });
+        expect(out).toMatchObject({ written: 2, waiting: 0, confirmed: 2 });
+        expect(await stateOf(c, OTHER)).toBe('open');
+        expect(receiptedTo(OTHER)).toEqual([paid]);
+        expect(await c.store.hasLine(ME, relayConversationId(ME, THEM), theirs)).toBe(true);
     });
 });

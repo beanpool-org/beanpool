@@ -28,6 +28,12 @@
  * round", and the round leaves the line it would drop for a later round (lib/outside-mail.ts). A refusal (any other 4xx,
  * such as a visitor's friends) says the fact is not there for this account: it lets nobody in, as before.
  *
+ * Every read has its own time limit (#3366 review N2), {@link LET_IN_TIME}: 8 s each, and 20 s for all of a round's together,
+ * well inside the round's 45 s (lib/outside-mail.ts OUTSIDE_ROUND_MS). A read with no answer by then is aborted and counts
+ * as a read that failed, so the line it was for waits within its bound and the round goes on: it confirms what it judged,
+ * keeps its waits and reaches the lines behind it. A read that never answered would otherwise end the round at that line,
+ * before anything was confirmed, every round while it stayed slow.
+ *
  * The block first (S7, this community's own list): someone on the account's list here, or one the member unblocked in this
  * page (a doubt, as the phone's `once`), or a list that can't be read, is never let in.
  */
@@ -41,16 +47,20 @@ import { heldContactsList } from './contacts-store';
 import { memberKeysBatches, memberKeysPath } from './members-on-demand';
 import { outsideCommunityOf } from './outside-chat-store';
 
-/** The reads let in once makes on the web: the api's own, unless a test hands in its own. */
+/**
+ * The reads let in once makes on the web: the api's own, unless a test hands in its own. Each request is handed a `signal`,
+ * aborted at its time limit ({@link LET_IN_TIME}).
+ */
 export interface WebLetInReads {
-    conversations: typeof getConversations;
-    lines: (conversationId: string) => Promise<{ messages: ReadonlyArray<{ authorPubkey: string; nonce?: string | null; type?: string | null; metadata?: unknown }> }>;
-    friends: typeof getFriends;
-    deals: (me: string) => Promise<ReadonlyArray<{ buyerPublicKey: string; sellerPublicKey: string; status: string; postAuthorPublicKey?: string | null }>>;
-    payments: (me: string) => Promise<ReadonlyArray<{ from: string; to: string }>>;
+    conversations: (me: string, signal?: AbortSignal) => ReturnType<typeof getConversations>;
+    lines: (conversationId: string, signal?: AbortSignal) => Promise<{ messages: ReadonlyArray<{ authorPubkey: string; nonce?: string | null; type?: string | null; metadata?: unknown }> }>;
+    friends: (me: string, signal?: AbortSignal) => ReturnType<typeof getFriends>;
+    deals: (me: string, signal?: AbortSignal) => Promise<ReadonlyArray<{ buyerPublicKey: string; sellerPublicKey: string; status: string; postAuthorPublicKey?: string | null }>>;
+    payments: (me: string, signal?: AbortSignal) => Promise<ReadonlyArray<{ from: string; to: string }>>;
+    /** This browser's own copy (lib/contacts-store.ts): no request, yet bounded by the same time limit. */
     contacts: (me: { publicKey: string; privateKey: string }) => Promise<{ contacts: ReadonlyArray<{ links: ReadonlyArray<{ key: string; community: string }> }> } | null>;
     /** Which of `keys` this community lists as members now (the directory's keys form): those it names, the rest not. */
-    members: (keys: readonly string[]) => Promise<ReadonlyArray<{ publicKey: string }>>;
+    members: (keys: readonly string[], signal?: AbortSignal) => Promise<ReadonlyArray<{ publicKey: string }>>;
     /** The address of the community this web app talks to (lib/api nodeAddress): a contact link made here names it. */
     community: () => string;
 }
@@ -58,17 +68,27 @@ export interface WebLetInReads {
 /** Deals and payments read: the newest this many (the node's largest page). */
 export const LET_IN_PAGE = 200;
 
+/**
+ * How long let in once waits for its reads (#3366 review N2): `readMs` for each one, from when it is asked; `roundMs` for
+ * all of one round's together, from its first. A read still out at either is aborted and counts as a read that failed;
+ * one not yet asked once `roundMs` has passed isn't asked this round. A chat's lines and the members read are asked for
+ * each person, so slow ones would otherwise add up: `roundMs` keeps them all under half the round's 45 s
+ * (lib/outside-mail.ts OUTSIDE_ROUND_MS), with the round's page, its confirm and its waits kept behind them.
+ */
+export interface LetInTime { readMs: number; roundMs: number }
+export const LET_IN_TIME: LetInTime = { readMs: 8_000, roundMs: 20_000 };
+
 /** Each read named at its call, never at load: a page test that stands in for lib/api without these never meets them. */
 const API_READS: WebLetInReads = {
-    conversations: (me) => getConversations(me),
-    lines: (id) => getConversationMessages(id),
-    friends: (me) => getFriends(me),
-    deals: (me) => getMyMarketplaceTransactions(me, undefined, LET_IN_PAGE),
-    payments: (me) => getTransactions(me, LET_IN_PAGE),
+    conversations: (me, signal) => getConversations(me, signal),
+    lines: (id, signal) => getConversationMessages(id, undefined, signal),
+    friends: (me, signal) => getFriends(me, signal),
+    deals: (me, signal) => getMyMarketplaceTransactions(me, undefined, LET_IN_PAGE, undefined, signal),
+    payments: (me, signal) => getTransactions(me, LET_IN_PAGE, signal),
     contacts: (me) => heldContactsList(me),
-    members: async (keys) => {
+    members: async (keys, signal) => {
         const [batch] = memberKeysBatches(keys);
-        return batch ? getMemberCards(memberKeysPath(batch)) : [];
+        return batch ? getMemberCards(memberKeysPath(batch), signal) : [];
     },
     community: () => nodeAddress(),
 };
@@ -84,8 +104,22 @@ function mayPass(e: unknown): boolean {
     return typeof status !== 'number' || status >= 500 || [401, 408, 425, 429].includes(status);
 }
 
-function readOf<T>(read: () => Promise<T>): Promise<Read<T>> {
-    return Promise.resolve().then(read).catch((e): Read<T> => (mayPass(e) ? FAILED : null));
+/** A read of one round's, asked with its own signal: FAILED should it not answer within its time (it is aborted then). */
+type TimedRead = <T>(read: (signal: AbortSignal) => Promise<T>) => Promise<Read<T>>;
+
+/**
+ * `read`'s answer, or FAILED once `ms` has passed with none (its signal aborted then), whatever it still waits on; FAILED
+ * at once, never asked, with no time left.
+ */
+function readOf<T>(read: (signal: AbortSignal) => Promise<T>, ms: number): Promise<Read<T>> {
+    if (!(ms > 0)) return Promise.resolve(FAILED);
+    const stop = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<typeof FAILED>((resolve) => {
+        timer = setTimeout(() => { stop.abort(); resolve(FAILED); }, ms);
+    });
+    const asked = Promise.resolve().then(() => read(stop.signal)).catch((e): Read<T> => (mayPass(e) ? FAILED : null));
+    return Promise.race([asked, late]).finally(() => clearTimeout(timer));
 }
 
 /** A direct chat in the web's list, as core's rule reads one; its lines not read yet (`memberWrote` false until they are). */
@@ -120,12 +154,12 @@ function chatsOfList(me: string, list: readonly Conversation[]): { chats: Listed
  */
 interface RoundFacts { chats: ListedChat[]; known: LetInKnown & { byFacts: Set<string>; notCurrent: Set<string> }; facts: LetInFacts; unsure: boolean }
 
-async function readRound(me: string, reads: WebLetInReads): Promise<RoundFacts | typeof FAILED | null> {
+async function readRound(me: string, reads: WebLetInReads, timed: TimedRead): Promise<RoundFacts | typeof FAILED | null> {
     const [list, friends, deals, payments] = await Promise.all([
-        readOf(() => reads.conversations(me)),
-        readOf(() => reads.friends(me)),
-        readOf(() => reads.deals(me)),
-        readOf(() => reads.payments(me)),
+        timed((signal) => reads.conversations(me, signal)),
+        timed((signal) => reads.friends(me, signal)),
+        timed((signal) => reads.deals(me, signal)),
+        timed((signal) => reads.payments(me, signal)),
     ]);
     if (list === FAILED) return FAILED;
     if (!list || !Array.isArray(list.conversations)) return null;
@@ -159,23 +193,33 @@ function linkedKeysOf(list: Awaited<ReturnType<WebLetInReads['contacts']>>, me: 
  * For one round of mail across on the web (lib/outside-mail.ts `letIn`): whether a sender is let in, by core's rule over the
  * web's facts, and no block bars them (`blocked`: this community's list for the account, a block undone in this page among
  * it; throws when it can't be read, which counts as blocked). Read once, at the round's first ask: true, let in; false, not
- * (a read it needs refused among it); null, not known this round: a read the answer needs failed, and may pass later.
+ * (a read it needs refused among it); null, not known this round: a read the answer needs failed, and may pass later, or
+ * didn't answer within its time (`time`, {@link LET_IN_TIME}).
  */
 export function letInOnWeb(
     identity: { publicKey: string; privateKey: string },
     blocked: (key: string) => Promise<boolean>,
     reads: WebLetInReads = API_READS,
+    time: LetInTime = LET_IN_TIME,
 ): (key: string) => Promise<boolean | null> {
     const me = identity.publicKey;
     let round: Promise<RoundFacts | typeof FAILED | null> | null = null;
-    let contacts: Promise<LinkedKeys> | null = null;
+    let contacts: Promise<Read<LinkedKeys>> | null = null;
     const linesRead = new Map<string, Promise<Read<boolean>>>();
     const listedHere = new Map<string, Promise<Read<boolean>>>();
+    // All of this round's reads end by `time.roundMs` from the first (#3366 review N2): each is given its own time, or what
+    // is left of that, whichever is less. A clock moved back gives none more than its own; moved on, none is asked.
+    let ends: number | null = null;
+    const timed: TimedRead = (read) => {
+        const now = Date.now();
+        ends ??= now + time.roundMs;
+        return readOf(read, Math.min(time.readMs, ends - now));
+    };
     return async (key) => {
         if (!key || key === me) return false;
         if (await blocked(key).catch(() => true)) return false;
         // Anything else that goes wrong in the reading (an answer of another shape) lets nobody in: the strict side.
-        const read = await (round ??= readRound(me, reads).catch(() => null));
+        const read = await (round ??= readRound(me, reads, timed).catch(() => null));
         if (read === FAILED) return null;
         if (!read) return false;
         if (letInAmong([key], read.known).has(key)) return true;
@@ -186,7 +230,7 @@ export function letInOnWeb(
             if (c.chat.memberWrote || chatLetsInKey(c.chat, me) !== key) continue;
             let wrote = linesRead.get(c.id);
             if (!wrote) {
-                wrote = readOf(() => reads.lines(c.id))
+                wrote = timed((signal) => reads.lines(c.id, signal))
                     .then((r): Read<boolean> => (r === FAILED ? FAILED : (r?.messages ?? []).some((l) => isMembersOwnLine(l, me))))
                     .catch(() => false);
                 linesRead.set(c.id, wrote);
@@ -200,16 +244,19 @@ export function letInOnWeb(
         }
         if (letInAmong([key], read.known).has(key)) return true;
         if (!contactsCouldLetIn([key], read.known)) return false;
-        contacts ??= reads.contacts(identity)
-            .then((list) => linkedKeysOf(list, me, reads.community()))
+        // This browser's copy: none at all should it fail, as before; not known this round should it not answer in time.
+        contacts ??= timed(() => reads.contacts(identity).catch(() => null))
+            .then((list): Read<LinkedKeys> => (list === FAILED ? FAILED : linkedKeysOf(list, me, reads.community())))
             .catch(() => ({ here: new Set<string>(), elsewhere: new Set<string>() }));
-        const linked = await contacts;
+        const linkedRead = await contacts;
+        if (linkedRead === FAILED) unsure = true;
+        const linked = linkedRead === FAILED || !linkedRead ? { here: new Set<string>(), elsewhere: new Set<string>() } : linkedRead;
         let counted = linked.elsewhere.has(key);
         // A link made here counts only while this community lists the key as a member now (#3366 review F1).
         if (!counted && linked.here.has(key)) {
             let listed = listedHere.get(key);
             if (!listed) {
-                listed = readOf(() => reads.members([key]))
+                listed = timed((signal) => reads.members([key], signal))
                     .then((r): Read<boolean> => (r === FAILED ? FAILED : Array.isArray(r) && r.some((m) => m?.publicKey === key)))
                     .catch(() => false);
                 listedHere.set(key, listed);

@@ -1624,8 +1624,9 @@ export async function toggleMessageReactionApi(
     return request('POST', '/api/messages/react', { messageId, authorPubkey, emoji });
 }
 
-export async function getConversations(publicKey: string): Promise<ConversationsAnswer> {
-    return request('GET', `/api/messages/conversations/${encodeURIComponent(publicKey)}`);
+/** `signal`: the caller gives up on it (let in once's time limit, lib/let-in.ts); without one, nothing changes. */
+export async function getConversations(publicKey: string, signal?: AbortSignal): Promise<ConversationsAnswer> {
+    return request('GET', `/api/messages/conversations/${encodeURIComponent(publicKey)}`, undefined, signal);
 }
 
 /**
@@ -1704,11 +1705,11 @@ export async function muteChatApi(conversationId: string, duration: '8h' | '1w' 
     return request('POST', '/api/messages/mute', { conversationId, duration });
 }
 
-export async function getConversationMessages(conversationId: string, limit = 50): Promise<{
+export async function getConversationMessages(conversationId: string, limit = 50, signal?: AbortSignal): Promise<{
     conversation: Conversation;
     messages: ApiMessage[];
 }> {
-    return notedIfLocked(conversationId, await request<{ conversation: Conversation; messages: ApiMessage[] }>('GET', `/api/messages/${encodeURIComponent(conversationId)}?limit=${limit}`));
+    return notedIfLocked(conversationId, await request<{ conversation: Conversation; messages: ApiMessage[] }>('GET', `/api/messages/${encodeURIComponent(conversationId)}?limit=${limit}`, undefined, signal));
 }
 
 // ===================== LEDGER =====================
@@ -1798,11 +1799,11 @@ export async function sendTransfer(from: string, to: string, amount_c: number, m
     return request('POST', '/api/ledger/transfer', { from, to, amount_c, memo });
 }
 
-export async function getTransactions(publicKey?: string, limit = 50): Promise<Transaction[]> {
+export async function getTransactions(publicKey?: string, limit = 50, signal?: AbortSignal): Promise<Transaction[]> {
     const params = new URLSearchParams();
     if (publicKey) params.set('publicKey', publicKey);
     params.set('limit', String(limit));
-    return request('GET', `/api/ledger/transactions?${params}`);
+    return request('GET', `/api/ledger/transactions?${params}`, undefined, signal);
 }
 
 // ===================== MARKETPLACE =====================
@@ -2719,13 +2720,13 @@ export async function unpinMarketplacePost(
 
 /** Newest first; the node answers 50 when no `limit` is given, and at most 200 a page. */
 export async function getMyMarketplaceTransactions(
-    publicKey: string, status?: string, limit?: number, offset?: number
+    publicKey: string, status?: string, limit?: number, offset?: number, signal?: AbortSignal
 ): Promise<MarketplaceTransaction[]> {
     const params = new URLSearchParams({ publicKey });
     if (status) params.set('status', status);
     if (limit) params.set('limit', String(limit));
     if (offset) params.set('offset', String(offset));
-    return request('GET', `/api/marketplace/transactions?${params}`);
+    return request('GET', `/api/marketplace/transactions?${params}`, undefined, signal);
 }
 
 // ===================== RATINGS =====================
@@ -2824,8 +2825,8 @@ export interface FriendEntry {
     avatarUrl?: string | null;
 }
 
-export async function getFriends(publicKey: string): Promise<FriendEntry[]> {
-    return request('GET', `/api/friends/${publicKey}`);
+export async function getFriends(publicKey: string, signal?: AbortSignal): Promise<FriendEntry[]> {
+    return request('GET', `/api/friends/${publicKey}`, undefined, signal);
 }
 
 export async function addFriendApi(ownerPubkey: string, friendPubkey: string): Promise<{ success: boolean; friend: FriendEntry }> {

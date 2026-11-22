@@ -333,7 +333,7 @@ async function main() {
         const afterRefused = await rows();
         check(afterRefused.length === 3, `"unlocked" and the keys refused: no line reaches the node (${afterRefused.length} rows)`);
         check(plainPosts === 0, `nothing goes by the readable messages route (${plainPosts} posts)`);
-        check(/held its keys|Only members of this group/.test(told), `Ana is told why nothing was sent (${JSON.stringify(told)})`);
+        check(/has seen it locked|Only members of this group/.test(told), `Ana is told why nothing was sent (${JSON.stringify(told)})`);
         await shot(a.page, '3-ana-keys-refused');
         await a.page.getByRole('button', { name: /dismiss|close/i }).first().click({ timeout: 2_000 }).catch(() => {});
         await a.context.unroute(isKeys, refuseKeys);

@@ -23,13 +23,14 @@
  * remembers it for good (the sticky lock, director's decision b). A chat answer with no `encryption` is a node from
  * before locked chats (§14.3): readable words go to it only from a browser that has never seen the group locked, read
  * from its store; a store that can't be read refuses, and a chat answer that can't be read refuses too (a never-held
- * browser sends readable words only when the chat answer says unlocked).
+ * browser sends readable words only when the chat answer says unlocked). The plan is made as the line is begun; the words
+ * themselves are asked about again as they leave (lib/group-hold.ts readableLineTo).
  */
 import { isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, sealGroupLineEdit, toBase64, VOICE_MIME, type RemovedLineKind, type VoiceInput } from '@beanpool/core';
 import type { VoiceOpenResult } from './voice';
-import { detectMentions, groupMessageKey, sealLine, openLine, sealVoice, openVoice, type GroupEpochProgress } from './group-chat-crypto';
+import { detectMentions, groupMessageKey, isGroupEncryptedNonce, sealLine, openLine, sealVoice, openVoice, type GroupEpochProgress } from './group-chat-crypto';
 import {
-    groupKeyring, GroupKeysRequestError, GroupChatKeyError, GROUP_CHAT_NOT_MEMBER_TEXT,
+    groupKeyring, GroupKeysRequestError, GroupChatKeyError, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEY_STORE_UNREAD_TEXT,
     type GroupKeyring, type GroupKeysTransport, type GroupLockStore,
 } from './group-chat-keys';
 import {
@@ -52,6 +53,15 @@ export function chatIsLocked(answer: unknown): answer is { encryption: GroupChat
     return !!a && typeof a === 'object' && !!a.encryption && typeof a.encryption === 'object';
 }
 
+/**
+ * True if a chat's answer shows it is locked, or was: it carries `encryption`, or holds a line sealed as a group's (the
+ * phone's refuseByItsFile). Nothing readable goes to it then (lib/api.ts notes it for this page's life); it marks nothing.
+ */
+export function answerShowsLock(answer: unknown): boolean {
+    const lines = (answer as { messages?: unknown } | null)?.messages;
+    return chatIsLocked(answer) || (Array.isArray(lines) && lines.some((l) => isGroupEncryptedNonce((l as { nonce?: string } | null)?.nonce)));
+}
+
 /** The notice an old node's chat keeps (the web never calls such a chat locked). */
 export const GROUP_CHAT_OLD_NODE_NOTICE = "This community's node is older and can read this group's chat. It will be locked once the node is updated.";
 /** A locked chat's notice (design §8), in the app's own words. */
@@ -60,7 +70,7 @@ export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's
  * A chat this browser has seen locked, which the node now says isn't: what the browser does, not what it waits for
  * (confirmation of #1788, finding 4). Every line still goes sealed when the keys come; nothing goes readable.
  */
-export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.";
+export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.";
 /** A chat answer that didn't come: nothing readable goes on a guess. */
 export const GROUP_CHAT_UNREAD_TEXT = "This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment.";
 /** Beside "Unverified" for a line a locked chat holds unsealed (review of #1788, finding 3). */
@@ -74,11 +84,13 @@ function unansweredText(chatError: unknown): string {
 
 /**
  * The group chat's notice: the app's own words for what it decided, never the node's text. A chat answer that didn't
- * come (`chatError`) says so, never that the node is older or says unlocked (review of #1816, finding 7).
+ * come (`chatError`) says so, never that the node is older or says unlocked (review of #1816, finding 7). `lockUnread`:
+ * taken for locked only because this browser's record couldn't be read, so it never says it has seen it locked.
  */
-export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean; chatError?: unknown }): string {
+export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean; lockUnread?: boolean; chatError?: unknown }): string {
     if (state.nodeSaysLocked) return GROUP_CHAT_LOCKED_NOTICE;
     if (state.chatError !== undefined && state.chatError !== null) return unansweredText(state.chatError);
+    if (state.lockUnread) return GROUP_KEY_STORE_UNREAD_TEXT;
     return state.seenLocked ? GROUP_CHAT_LOCK_LOST_TEXT : GROUP_CHAT_OLD_NODE_NOTICE;
 }
 
@@ -97,8 +109,12 @@ export async function groupChatSendPlan(ring: GroupKeyring, chat: unknown, chatE
         return { kind: 'seal' };
     }
     if (!chat || typeof chat !== 'object') return { kind: 'refuse', sentence: GROUP_CHAT_UNREAD_TEXT };
-    // The node says unlocked. Held here (or the store can't say): sealed when the keys still come, else refused.
-    if (await ring.seenLocked()) return { kind: 'seal' };
+    // The node says unlocked. Held here (or the store can't say): sealed when the keys still come, else refused. A mark the
+    // store refused when the chat was seen locked is put again, so a page loaded afresh knows it too.
+    if (await ring.seenLocked()) {
+        await ring.keepMark();
+        return { kind: 'seal' };
+    }
     return { kind: 'readable' };
 }
 

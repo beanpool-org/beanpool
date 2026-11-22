@@ -3961,7 +3961,7 @@
   "This month: {trades} · +{in} in · −{out} out": "이번 달: {trades} · 들어온 것 +{in} · 나간 것 −{out}",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "이 노드는 다이렉트 메시지가 아니라 잠긴 그룹의 채팅으로 응답해서 아무것도 열리지 않았어요.",
   "This node is serving an older key than one this app already holds.": "이 노드가 이 앱이 이미 가지고 있는 키보다 이전 버전의 키를 제공하고 있어요.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "이 노드는 이제 이 채팅이 잠겨 있지 않다고 해요. 이 브라우저는 그 키를 가지고 있었으므로 모든 메시지를 계속 잠그고, 잠글 수 없는 것은 보내지 않아요.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "이 노드는 이제 이 채팅이 잠겨 있지 않다고 해요. 이 브라우저는 이 채팅이 잠긴 것을 본 적이 있으므로 모든 메시지를 계속 잠그고, 잠글 수 없는 것은 보내지 않아요.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "이 노드에 따르면 멤버 목록에 없는 누군가가 이 대화의 키를 가지고 있어요. 아무것도 전송되지 않았어요.",
   "This project's deadline has passed: it takes no more pledges.": "이 프로젝트의 마감일이 지났어요: 더 이상 약정을 받지 않아요.",
   "This request is no longer open. You can ask again.": "이 요청은 더 이상 열려 있지 않아요. 다시 신청할 수 있어요.",

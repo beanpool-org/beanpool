@@ -10,10 +10,16 @@
  * can't be read (review of #1816, finding 3: "A store error remembers nothing", as #1815 does on the phone). Group ids
  * are compared in lower case, as the phone does (finding 9). The phone does the same (apps/native/utils/db.ts,
  * isHeldGroupChat and sealForGroupConversation).
+ *
+ * How a line is sent is worked out as it is begun (sendRouteOf); whether words may go readable is asked as they leave
+ * ({@link readableLineTo}), by lib/api.ts itself, so no screen can send them without it.
  */
+import { accountEpochHolds } from './account-epoch';
 import { heldConversation, isKnownDmConversation } from './dm-guard';
 import { indexedDbGroupLockStore, lockedGroupsOf } from './group-chat-lock-store';
-import { groupsSeenLockedInMemory } from './group-chat-keys';
+import { GroupChatKeyError, groupKeysForgotten, groupsSeenLockedInMemory, wasAnsweredLocked } from './group-chat-keys';
+import { GROUP_CHAT_LOCK_LOST_TEXT } from './group-chat-lines';
+import { loadIdentity } from './identity';
 
 /** A group id as this app compares it: lower case (a UUID in capitals is the same group). */
 export const groupIdKey = (id: string): string => (typeof id === 'string' ? id.toLowerCase() : id);
@@ -22,7 +28,7 @@ export const groupIdKey = (id: string): string => (typeof id === 'string' ? id.t
 export const GROUP_HOLD_UNREAD_TEXT = "This browser couldn't check its record of locked group chats just now. Nothing was sent; try again in a moment.";
 /** Said when a chat opened by its id can't be checked against that record: nothing opens on a guess. */
 export const GROUP_HOLD_UNREAD_OPEN_TEXT = "This browser couldn't check its record of locked group chats just now, so this chat didn't open. Try again in a moment.";
-/** Said in an event's chat when its id is a group this browser holds locked: that chat sends readable, so nothing goes. */
+/** Said in an event's or an enterprise's chat when its id is a group this browser holds locked: those send readable, so nothing goes. */
 export const GROUP_HOLD_EVENT_TEXT = "This is a locked group chat, and this screen can't lock messages. Nothing was sent; open it from Messages.";
 /** Said when the node answers "start a DM" with the id of a group held locked here: nothing opens. */
 export const GROUP_HOLD_STARTED_DM_TEXT = "This node answered with a locked group's chat, not a direct message, so nothing opened.";
@@ -85,25 +91,70 @@ export function holdConversation<T extends { id: string; type: string }>(
     return heldConversation(conv, lines);
 }
 
+/** Whether this page's keyrings have seen this chat locked for this identity. No read. */
+function seenInMemory(identityPub: string, id: string): boolean {
+    return groupsSeenLockedInMemory(identityPub).some((g) => groupIdKey(g) === id);
+}
+
+/**
+ * What this browser knows of a lock on this chat, its record read now: `locked` (seen locked here), `never` (the record
+ * read, and has nothing of one), or `unread` (it couldn't be read, or didn't answer in time: never "never").
+ */
+async function lockHere(identityPub: string, conversationId: string): Promise<'locked' | 'never' | 'unread'> {
+    const id = groupIdKey(conversationId);
+    if (seenInMemory(identityPub, id)) return 'locked';
+    const locked = await lockedGroupsOrNull(identityPub);
+    if (locked === null) return seenInMemory(identityPub, id) ? 'locked' : 'unread';
+    if (locked.has(id)) return 'locked';
+    // The group's own row too: held there, it is held, whatever became of the index row (finding 4).
+    try {
+        const own = await indexedDbGroupLockStore.load(`${identityPub}/${id}`);
+        if (own.locked || own.highest > 0) return 'locked';
+    } catch {
+        return 'unread';
+    }
+    return seenInMemory(identityPub, id) ? 'locked' : 'never';
+}
+
 /**
  * How a line may leave a conversation the node doesn't call a group chat, read from the lock store at send time:
  * `group` (held locked here: sealed as a group's line, or refused), `as-typed` (never held: the DM or readable path as
  * before), or `refuse` (the store unreadable and not a DM this browser knows: nothing goes).
  */
 export async function sendRouteOf(identityPub: string, conversationId: string): Promise<'group' | 'as-typed' | 'refuse'> {
-    const locked = await lockedGroupsOrNull(identityPub);
-    if (locked === null) {
-        if (groupsSeenLockedInMemory(identityPub).some((g) => groupIdKey(g) === groupIdKey(conversationId))) return 'group';
-        return isKnownDmConversation(conversationId) ? 'as-typed' : 'refuse';
-    }
+    const here = await lockHere(identityPub, conversationId);
+    if (here === 'locked') return 'group';
+    return here === 'never' || isKnownDmConversation(conversationId) ? 'as-typed' : 'refuse';
+}
+
+/** A readable line's way out ({@link readableLineTo}). */
+export interface ReadableLine {
+    /** Asked as the request leaves, with nothing awaited between: throws, and nothing goes. */
+    leaving(): void;
+}
+
+/**
+ * The one check every readable line of a chat passes, asked by lib/api.ts as it sends one: an event's and an enterprise's
+ * chat, a group's on a node from before locked chats, and an edit of any of them, whatever the node calls the chat (the
+ * phone's readableLineTo, apps/native/utils/db.ts; #3358's reviews, R2 and S1; the table: readable-line-table.test.ts).
+ *
+ * It fails closed: the line goes only when this browser positively knows the chat was never locked here. Its record, read
+ * for this line, has nothing of a lock; no keyring of this page has seen one, and no node's answer since the page loaded
+ * showed one (`leaving` asks both again as the request goes); it is no DM this browser knows; and the account is still the
+ * one it was asked for. Anything else, a record that can't be read or doesn't answer among them, throws GroupChatKeyError
+ * with the sentence the chat shows. `lockedText`: what is said of a chat seen locked.
+ */
+export async function readableLineTo(conversationId: string, lockedText: string = GROUP_CHAT_LOCK_LOST_TEXT): Promise<ReadableLine> {
     const id = groupIdKey(conversationId);
-    if (locked.has(id)) return 'group';
-    // The group's own row too: held there, it is held, whatever became of the index row (finding 4).
-    try {
-        const own = await indexedDbGroupLockStore.load(`${identityPub}/${id}`);
-        if (own.locked || own.highest > 0) return 'group';
-    } catch {
-        return isKnownDmConversation(conversationId) ? 'as-typed' : 'refuse';
-    }
-    return 'as-typed';
+    const forgotten = groupKeysForgotten();
+    const me = (await loadIdentity().catch(() => null))?.publicKey;
+    const here = me && id ? await lockHere(me, id) : 'unread';
+    const leaving = () => {
+        if (here === 'locked' || wasAnsweredLocked(id) || (me && seenInMemory(me, id))) throw new GroupChatKeyError(lockedText, 'refused');
+        if ([conversationId, id].some((c) => isKnownDmConversation(c))) throw new GroupChatKeyError(GROUP_CHAT_IS_DM_TEXT, 'refused');
+        // Signed out since it was asked (this tab or another): what it read was another account's, or a record since deleted.
+        if (here !== 'never' || forgotten !== groupKeysForgotten() || !accountEpochHolds()) throw new GroupChatKeyError(GROUP_HOLD_UNREAD_TEXT, 'store');
+    };
+    leaving();
+    return { leaving };
 }

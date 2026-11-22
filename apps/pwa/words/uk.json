@@ -4366,7 +4366,7 @@
   "This month: {trades} · +{in} in · −{out} out": "Цей місяць: {trades} · +{in} надійшло · −{out} пішло",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "Цей вузол відповів чатом захищеної групи, а не особистим повідомленням, тому нічого не відкрилося.",
   "This node is serving an older key than one this app already holds.": "Цей вузол надає старіший ключ, ніж той, що вже є в цьому застосунку.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "Цей вузол тепер повідомляє, що цей чат не захищений. Цей браузер зберіг його ключі, тому й далі шифрує кожне повідомлення і не надсилає нічого, що не може зашифрувати.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Цей вузол тепер повідомляє, що цей чат не захищений. Цей браузер бачив його захищеним, тому й далі шифрує кожне повідомлення і не надсилає нічого, що не може зашифрувати.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "Цей вузол повідомляє, що ключ від цього чату має той, кого немає в списку учасників. Нічого не було надіслано.",
   "This project's deadline has passed: it takes no more pledges.": "Строк цього проєкту минув: він більше не приймає внесків.",
   "This request is no longer open. You can ask again.": "Цей запит більше не відкритий. Ви можете запитати знову.",

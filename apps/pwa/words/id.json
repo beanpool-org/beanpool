@@ -3961,7 +3961,7 @@
   "This month: {trades} · +{in} in · −{out} out": "Bulan ini: {trades} · +{in} masuk · −{out} keluar",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "Node ini menjawab dengan obrolan grup terkunci, bukan pesan langsung, jadi tidak ada yang terbuka.",
   "This node is serving an older key than one this app already holds.": "Node ini menyajikan kunci yang lebih lama dari yang sudah dipegang aplikasi ini.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "Node ini sekarang mengatakan obrolan ini tidak terkunci. Browser ini pernah memegang kuncinya, jadi tetap mengunci setiap pesan, dan tidak mengirim apa pun yang tidak bisa dikunci.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Node ini sekarang mengatakan obrolan ini tidak terkunci. Browser ini pernah melihatnya terkunci, jadi tetap mengunci setiap pesan, dan tidak mengirim apa pun yang tidak bisa dikunci.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "Node ini mengatakan ada yang memegang kunci obrolan ini padahal tidak ada di daftar anggotanya. Tidak ada yang terkirim.",
   "This project's deadline has passed: it takes no more pledges.": "Batas waktu proyek ini sudah lewat: tidak menerima komitmen lagi.",
   "This request is no longer open. You can ask again.": "Permintaan ini tidak lagi terbuka. Kamu bisa meminta lagi.",

@@ -4097,7 +4097,7 @@
   "This month: {trades} · +{in} in · −{out} out": "Este mês: {trades} · +{in} entrada · −{out} saída",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "Este nó respondeu com o bate-papo de um grupo bloqueado, não com uma mensagem direta, então nada abriu.",
   "This node is serving an older key than one this app already holds.": "Este nó está usando uma chave mais antiga do que a que este app já tem.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "Este nó agora diz que este bate-papo não está bloqueado. Este navegador já guardou as chaves dele, então continua bloqueando cada mensagem e não envia nada que não consiga bloquear.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Este nó agora diz que este bate-papo não está bloqueado. Este navegador já o viu bloqueado, então continua bloqueando cada mensagem e não envia nada que não consiga bloquear.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "Este nó diz que alguém tem a chave deste bate-papo e não está na lista de membros dele. Nada foi enviado.",
   "This project's deadline has passed: it takes no more pledges.": "O prazo deste projeto passou: ele não recebe mais apoios.",
   "This request is no longer open. You can ask again.": "Este pedido não está mais aberto. Você pode pedir de novo.",

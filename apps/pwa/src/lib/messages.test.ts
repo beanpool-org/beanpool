@@ -29,7 +29,8 @@ describe('PWA Messaging Parity & Review Fixes', () => {
             });
             global.fetch = mockFetch;
 
-            const res = await editMessageApi('msg-1', 'pub1', 'cipher', 'nonce');
+            // A sealed line's nonce: any other line is readable, and goes only past lib/group-hold.ts readableLineTo.
+            const res = await editMessageApi('msg-1', 'pub1', 'cipher', 'x25519-xc20p-v2:nonce');
             expect(res).toEqual(mockResponse);
             expect(mockFetch).toHaveBeenCalledWith(
                 '/api/messages/edit',
@@ -41,7 +42,7 @@ describe('PWA Messaging Parity & Review Fixes', () => {
                         messageId: 'msg-1',
                         authorPubkey: 'pub1',
                         ciphertext: 'cipher',
-                        nonce: 'nonce',
+                        nonce: 'x25519-xc20p-v2:nonce',
                     }),
                 })
             );

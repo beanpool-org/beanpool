@@ -4096,7 +4096,7 @@
   "This month: {trades} · +{in} in · −{out} out": "इस महीने: {trades} · +{in} अंदर · −{out} बाहर",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "इस नोड ने सीधे संदेश की जगह एक लॉक किए गए समूह की चैट के साथ उत्तर दिया, इसलिए कुछ नहीं खुला।",
   "This node is serving an older key than one this app already holds.": "यह नोड उस चाबी से पुरानी चाबी दे रहा है जो इस ऐप के पास पहले से है।",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "यह नोड अब कहता है कि यह चैट लॉक नहीं है। इस ब्राउज़र के पास इसकी चाबियाँ रही हैं, इसलिए यह अब भी हर संदेश को लॉक करता है, और जिसे लॉक न कर सके, उसे नहीं भेजता।",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "यह नोड अब कहता है कि यह चैट लॉक नहीं है। इस ब्राउज़र ने इसे लॉक देखा है, इसलिए यह अब भी हर संदेश को लॉक करता है, और जिसे लॉक न कर सके, उसे नहीं भेजता।",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "यह नोड कहता है कि इस चैट की चाबी किसी ऐसे के पास है जो इसकी सदस्य सूची में नहीं है। कुछ भी नहीं भेजा गया।",
   "This project's deadline has passed: it takes no more pledges.": "इस परियोजना की समय-सीमा बीत चुकी है: अब इसमें और संकल्प नहीं लिए जाते।",
   "This request is no longer open. You can ask again.": "यह अनुरोध अब खुला नहीं है। फिर से पूछा जा सकता है।",

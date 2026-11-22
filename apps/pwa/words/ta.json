@@ -4096,7 +4096,7 @@
   "This month: {trades} · +{in} in · −{out} out": "இந்த மாதம்: {trades} · +{in} உள்ளே · −{out} வெளியே",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "இந்த முனை நேரடிச் செய்திக்குப் பதிலாகப் பூட்டப்பட்ட குழுவின் அரட்டையுடன் பதிலளித்தது, எனவே எதுவும் திறக்கவில்லை.",
   "This node is serving an older key than one this app already holds.": "இந்த ஆப் ஏற்கெனவே வைத்திருக்கும் சாவியை விடப் பழைய சாவியை இந்த முனை வழங்குகிறது.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "இந்த அரட்டை பூட்டப்படவில்லை என்று இந்த முனை இப்போது சொல்கிறது. இந்த உலாவி இதன் சாவிகளை வைத்திருந்ததால், இது இன்னும் ஒவ்வொரு செய்தியையும் பூட்டுகிறது, பூட்ட முடியாத எதையும் அனுப்புவதில்லை.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "இந்த அரட்டை பூட்டப்படவில்லை என்று இந்த முனை இப்போது சொல்கிறது. இந்த உலாவி இதைப் பூட்டப்பட்டதாகப் பார்த்துள்ளதால், இது இன்னும் ஒவ்வொரு செய்தியையும் பூட்டுகிறது, பூட்ட முடியாத எதையும் அனுப்புவதில்லை.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "இந்த அரட்டையின் உறுப்பினர் பட்டியலில் இல்லாத ஒருவர் இதன் சாவியை வைத்திருப்பதாக இந்த முனை சொல்கிறது. எதுவும் அனுப்பப்படவில்லை.",
   "This project's deadline has passed: it takes no more pledges.": "இந்தத் திட்டத்தின் இறுதித் தேதி கடந்துவிட்டது: இது இனி உறுதிமொழிகளை ஏற்காது.",
   "This request is no longer open. You can ask again.": "இந்தக் கோரிக்கை இனி திறந்திருக்கவில்லை. நீங்கள் மீண்டும் கேட்கலாம்.",

@@ -161,6 +161,10 @@ export function resetAnsweredLockedForTest(): void {
     answeredLocked.clear();
 }
 
+/** How many times the rings were dropped: a readable line asked about before a drop is refused after it (lib/group-hold.ts). */
+let timesForgotten = 0;
+export function groupKeysForgotten(): number { return timesForgotten; }
+
 const HOLE_REFETCH_MS = 60_000;
 /** `after` past any epoch: the keys answer's header (current, stale, fromEpoch, roster) with no records. */
 const HEADER_ONLY = '?after=999999999';
@@ -190,6 +194,8 @@ export class GroupKeyring {
     private refetched = new Set<number>();
     state: GroupKeysState | null = null;
 
+    /** Dropped once this no longer counts (forgetGroupKeys): the account has left, and no mark of it is put back. */
+    private readonly made = timesForgotten;
     /** What this group's two facts are kept under: this identity's key, then the group's (finding 8: never another's). */
     private readonly storeKey: string;
     private readonly base: string;
@@ -258,7 +264,7 @@ export class GroupKeyring {
 
     /** Put the mark in the store if this page has seen the chat locked: again at each answer and send, for one it refused. */
     async keepMark(): Promise<void> {
-        if (this.seenLockedInMemory()) await this.store.markLocked(this.storeKey).catch(() => { });
+        if (this.made === timesForgotten && this.seenLockedInMemory()) await this.store.markLocked(this.storeKey).catch(() => { });
     }
 
     /** True if a record's maker is me or someone the screen shows as a member: only such a record raises the highest (finding 6). */
@@ -661,9 +667,6 @@ function sameRecord(a: Omit<GroupEpochRecord, 'wraps'>, b: Omit<GroupEpochRecord
 }
 
 const keyrings = new Map<string, GroupKeyring>();
-/** How many times the rings were dropped: a readable line asked about before a drop is refused after it (lib/group-hold.ts). */
-let timesForgotten = 0;
-export function groupKeysForgotten(): number { return timesForgotten; }
 
 /** The keyring for one group for this identity, shared for the page's life (the opened keys with it). */
 export function groupKeyring(net: GroupKeysTransport, identity: { publicKey: string; privateKey: string }, groupId: string, store: GroupLockStore): GroupKeyring {

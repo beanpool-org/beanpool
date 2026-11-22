@@ -13,7 +13,7 @@ import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 import { indexedDbGroupLockStore as store, resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys, groupKeyring, noteAnsweredLocked, resetAnsweredLockedForTest, GROUP_KEY_STORE_UNREAD_TEXT } from '../lib/group-chat-keys';
 import { GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_OLD_NODE_NOTICE } from '../lib/group-chat-lines';
-import { GROUP_HOLD_EVENT_TEXT } from '../lib/group-hold';
+import { GROUP_HOLD_EVENT_TEXT, readableLineTo } from '../lib/group-hold';
 import { fakeGroupNode, person, type FakeGroupNode } from '../lib/group-chat-fake-node.test-support';
 import { resetPendingChatLinesForTest } from '../lib/pending-chat-lines';
 
@@ -185,7 +185,7 @@ describe('a chat open on screen, then something of a lock, then the words', () =
 describe('what the member is told', () => {
     for (const kind of ['group_thread', 'enterprise_thread']) {
         for (const action of ACTIONS) {
-            it(`${kind} | ${action}: stopped as it left: the sentence in place, no alert, no failed line left behind`, async () => {
+            it(`${kind} | ${action}: stopped as it left: the sentence in place, the words kept, no alert; a Retry asks again`, async () => {
                 const box = await openIt(kind);
                 if (action === 'edit') fireEvent.click(screen.getAllByLabelText('Edit message')[0]);
                 let n = 0;
@@ -193,9 +193,15 @@ describe('what the member is told', () => {
                 await write(box);
                 expect(await screen.findByText(GROUP_CHAT_LOCK_LOST_TEXT)).toBeTruthy();
                 expect(box.value).toBe(WORDS);
-                expect(screen.queryByText('Retry')).toBeNull();
                 expect(window.alert).not.toHaveBeenCalled();
                 expect(wordsWent()).toEqual([]);
+                // A refused line keeps its Retry, as every refused line does; the check is asked again for it.
+                if (action === 'line') {
+                    await act(async () => { fireEvent.click(screen.getByText('Retry')); });
+                    await settle();
+                    expect(wordsWent()).toEqual([]);
+                    expect(screen.getByText(GROUP_CHAT_LOCK_LOST_TEXT)).toBeTruthy();
+                }
             });
         }
     }
@@ -250,6 +256,20 @@ describe('a locked answer is kept as seen', () => {
         await settle();
         expect(await store.load(`${ana.publicKey}/${G}`)).toEqual({ highest: 0, locked: true });
         unmount();
+    });
+
+    it('one that lands after a Sign Out: nothing of the account that left is written back, and nothing readable goes to it', async () => {
+        let letGo = () => {};
+        chatAnswerHeld = new Promise<void>((r) => { letGo = r; });
+        chatLocked = true;
+        render(<MessagesPage identity={me} openConversationId={G} />);
+        await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith(`/api/groups/${G}/chat`))).toBe(true), { timeout: 5000 });
+        cleanup();
+        forgetGroupKeys();
+        letGo();
+        await settle();
+        expect(mem.dump(LOCK_DB, 'locks')).toEqual({});
+        await expect(readableLineTo(G)).rejects.toMatchObject({ code: 'refused' });
     });
 
     it('a mark the store refused is put again while the chat is open on a node that now says unlocked', async () => {

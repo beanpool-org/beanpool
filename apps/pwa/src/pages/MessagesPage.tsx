@@ -46,7 +46,7 @@ import { dmKeyContext, dmListedPeer, lockForDm, lineMetadata, payloadForChat, is
 import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths, isHundredths } from '@beanpool/core';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
-import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
+import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT, type GroupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import {
     chatIsLocked, groupChatNotice, groupChatSendPlan, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread,
@@ -1167,9 +1167,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * A group's chat answer, and whether this browser keeps the chat a DM. The DM guard's line check runs over its lines
      * before the group route takes them: a DM this browser knows, or one whose lines are encrypted, stays a DM whatever the
      * node calls it; a group held locked here still wins (review of #1816, finding 1; lib/group-hold.ts). A locked
-     * answer is kept as seen before anything else is made of it, one that lands after the member left the chat too.
+     * answer is kept as seen before anything else is made of it, one that lands after the member left the chat too, by the
+     * keyring as it was asked for (one a Sign Out dropped since writes nothing).
      */
-    async function readGroupChat(convId: string, limit?: number): Promise<{ answer: GroupChatAnswer | null; error: unknown; isDm: boolean }> {
+    async function readGroupChat(convId: string, limit?: number): Promise<{ answer: GroupChatAnswer | null; error: unknown; isDm: boolean; ring: GroupKeyring }> {
+        const ring = groupRing(convId);
         let answer: GroupChatAnswer | null = null;
         let error: unknown = null;
         try {
@@ -1178,8 +1180,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             error = e;
         }
         const isDm = holdConversation({ id: convId, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), answer?.messages).type === 'dm';
-        if (!isDm && chatIsLocked(answer)) await groupRing(convId).noteLocked();
-        return { answer, error, isDm };
+        if (!isDm && chatIsLocked(answer)) await ring.noteLocked();
+        return { answer, error, isDm, ring };
     }
 
     /**
@@ -1188,7 +1190,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * members in it are ever wrapped to). Keys missing for other members are handed over once per page.
      */
     async function loadGroupChat(convId: string, requestId: number): Promise<'dm' | boolean> {
-        const { answer, error, isDm } = await readGroupChat(convId);
+        const { answer, error, isDm, ring } = await readGroupChat(convId);
         // Whether the read worked, for the backstop (loadMessages), whatever this screen then makes of it.
         const read = answer !== null;
         if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return read;
@@ -1197,7 +1199,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setActiveConv(prev => (prev && prev.id === convId ? { ...prev, type: 'dm' } : prev));
             return 'dm';
         }
-        const ring = groupRing(convId);
         const nodeSaysLocked = chatIsLocked(answer);
         const seenLocked = await ring.seenLocked();
         const lockUnread = seenLocked && !ring.seenLockedInMemory();
@@ -1683,8 +1684,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * calls a group's chat (the page reopens it as the DM), the plan's refusal, or a chat that takes no new lines.
      */
     async function groupSendCheck(conv: Conversation): Promise<{ plan: 'seal' | 'readable'; chat: GroupChatAnswer | null; chatErr: unknown } | null> {
-        const ring = groupRing(conv.id);
-        const { answer: chat, error: chatErr, isDm } = await readGroupChat(conv.id, 1);
+        const { answer: chat, error: chatErr, isDm, ring } = await readGroupChat(conv.id, 1);
         // A DM the node calls a group's chat (finding 1): nothing leaves by the group route; the page reopens it as the DM.
         if (isDm) {
             sayRefusal(conv.id, GROUP_CHAT_IS_DM_TEXT);

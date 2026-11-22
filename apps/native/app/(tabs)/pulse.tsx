@@ -45,6 +45,7 @@ import {
     isOfficialSource,
     mergePulsePage,
     mutePulseItem,
+    pulseItemsOf,
     reportPulseItem,
     type PulseFeedItem,
 } from '../../utils/pulse';
@@ -52,7 +53,6 @@ import { PulseFeedCard } from '../../components/PulseFeedCard';
 import { PulseKnowledgeCard } from '../../components/PulseKnowledgeCard';
 import { pulseLineWords } from '../../components/pulse-lines';
 import { pulseVideoViewabilityChanged } from '../../utils/pulse-video-player';
-import { anchorUrl } from '../../utils/node-post';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { FAB_BAND_DP } from '../../utils/fab-band';
@@ -116,7 +116,6 @@ export default function PulseScreen() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [hasLocalLane, setHasLocalLane] = useState(false);
-    const [nodeUrl, setNodeUrl] = useState<string | null>(null);
 
     // Client-side split is a prototype shortcut — see isOfficialSource(). Production
     // should pass the lane to the API so pagination stays correct per lane.
@@ -164,7 +163,6 @@ export default function PulseScreen() {
             : (category === 'all' ? undefined : category);
 
         try {
-            anchorUrl().then(setNodeUrl).catch(() => {});
             const res = await fetchPulseFeed({
                 category: fetchCat,
                 limit: 20,
@@ -173,7 +171,7 @@ export default function PulseScreen() {
             // Prevent race condition if category or lane switched mid-flight
             if (activeCategoryRef.current !== category || activeLaneRef.current !== currentLane) return;
 
-            setItems(res.items);
+            setItems(pulseItemsOf(res));
             setNextCursor(res.nextCursor);
         } catch (e: any) {
             if (activeCategoryRef.current === category && activeLaneRef.current === currentLane) {
@@ -215,7 +213,7 @@ export default function PulseScreen() {
             if (activeCategoryRef.current !== selectedCategory || activeLaneRef.current !== lane) return;
 
             // Keyed by id: a Local knowledge card that comes again on a later page is one card, the newest copy (mergePulsePage).
-            setItems(prev => mergePulsePage(prev, res.items));
+            setItems(prev => mergePulsePage(prev, pulseItemsOf(res)));
             setNextCursor(res.nextCursor);
         } catch (e: any) {
             console.warn('[PulseScreen] Failed to load more items:', e);
@@ -532,10 +530,11 @@ export default function PulseScreen() {
                     {...qr.listProps}
                     data={visibleItems}
                     keyExtractor={(item: any) => item.id}
-                    renderItem={({ item }: { item: PulseFeedItem }) => isPulseKnowledgeCard(item) ? (
+                    // `nodeUrl`: each card's pictures are asked of the community its item came from, never the one in use as it is drawn.
+                    renderItem={({ item, item: { nodeUrl } }: { item: PulseFeedItem }) => isPulseKnowledgeCard(item) ? (
                         // Local knowledge's card first, before anything else reads the item (amended §3.8): it has no owner,
                         // no link and nothing to hide or report, so the creator's card must never draw it.
-                        <PulseKnowledgeCard item={item} />
+                        <PulseKnowledgeCard item={item} nodeUrl={nodeUrl} />
                     ) : (
                         <PulseFeedCard
                             item={item}

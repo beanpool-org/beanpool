@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LEARN_HOME_WORDS, inCapitalsOf, t, type KnowledgeRow } from '@beanpool/core';
 import { useStyles } from '../../app/ThemeContext';
 import { ListPhoto } from '../ListPhoto';
+import { pagePhotoUri } from './learn-keep';
 import { LEARN_LINES, checkedOverAYearAgo, monthYear, topicOf } from './learn-lines';
 
 const TILE = 64;
@@ -42,6 +43,9 @@ export function KnowledgeRowCard({ row, onPress, now, testID, fresh }: { row: Kn
         footOld: { fontSize: 12, fontWeight: '700', color: colors.feedback.warning.fg },
     }));
     const topic = topicOf(row.topic);
+    // Whole by the time it is here, on the community the row came from (the copy's by utils/db.ts getKnowledgePosts, a search's and
+    // Home's by rowOnCommunity): the card reads no address, so it never draws one community's picture from another's. A bare path: the tile.
+    const photo = pagePhotoUri(row.photo, null);
     const when = monthYear(row.checkedAt);
     const old = checkedOverAYearAgo(row.checkedAt, now);
     const checked = old ? t(LEARN_LINES.checkedOver) : when ? t(LEARN_LINES.checked, { date: when }) : '';
@@ -58,7 +62,7 @@ export function KnowledgeRowCard({ row, onPress, now, testID, fresh }: { row: Kn
             testID={testID ?? `learn-row-${row.id}`}
         >
             <View style={styles.picture}>
-                <ListPhoto photo={row.photo} fallback={<TopicTile topic={row.topic} />} style={{ width: TILE, height: TILE }} contentFit="cover" />
+                <ListPhoto photo={photo} fallback={<TopicTile topic={row.topic} />} style={{ width: TILE, height: TILE }} contentFit="cover" />
             </View>
             <View style={styles.body}>
                 <View style={styles.chips}>

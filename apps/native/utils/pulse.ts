@@ -31,6 +31,11 @@ export interface PulseFeedItem {
      * draws components/PulseKnowledgeCard for it, never the creator's card.
      */
     knowledge?: PulseKnowledgeCard['knowledge'];
+    /**
+     * The address of the community whose feed the item came in (pulseItemsOf), which every picture on its card is asked of. The
+     * tab keeps its items while the phone moves to another community (Settings, Advanced, connect), and may then read more.
+     */
+    nodeUrl?: string | null;
 }
 
 /**
@@ -76,6 +81,13 @@ export function isOfficialSource(item: PulseFeedItem): boolean {
 export interface PulseFeedResponse {
     items: PulseFeedItem[];
     nextCursor: string | null;
+    /** The address this feed was read from; none for a feed no community answered. */
+    nodeUrl?: string | null;
+}
+
+/** A feed's items, each with the address it was read from put on it by the phone, over anything the feed said (review of #3355). */
+export function pulseItemsOf(feed: PulseFeedResponse): PulseFeedItem[] {
+    return feed.items.map((item) => ({ ...item, nodeUrl: feed.nodeUrl ?? null }));
 }
 
 export interface FetchPulseFeedOptions {
@@ -316,6 +328,7 @@ export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promi
         return {
             items: data.items,
             nextCursor: data.nextCursor ?? null,
+            nodeUrl: url,
         };
     } catch (e: any) {
         // Network failure / offline during pagination should propagate error, not inject fixture

@@ -32,6 +32,8 @@ import { LEARN_LINES, topicOf } from '../components/learn/learn-lines';
 import { LEARN_WRITE, waitingLine } from '../components/learn/learn-write';
 import { useLearnWriter } from '../components/learn/useLearnWriter';
 import { getKnowledgePosts, signedGet } from '../utils/db';
+import { anchorUrl } from '../utils/node-post';
+import { rowOnCommunity } from '../utils/photo-address';
 import { learnFront, learnRows, learnSearch, type KnowledgePage } from '../utils/learn-copy';
 import { samplePages } from '../components/showcase/sample-screens';
 import { useLearnMode } from '../utils/use-learn-mode';
@@ -127,13 +129,15 @@ export default function LearnScreen() {
         if (mode !== 'live' || !words) { setAnswer(null); setCannotReach(false); return; }
         const stop = new AbortController();
         const timer = setTimeout(() => {
-            signedGet(`/api/knowledge/front?q=${encodeURIComponent(words)}`, { signal: stop.signal })
-                .then(async (res) => {
+            // The community asked, taken with the ask: its rows name their pictures by path, made whole on it as they land.
+            anchorUrl()
+                .then(async (nodeUrl) => {
+                    const res = await signedGet(`/api/knowledge/front?q=${encodeURIComponent(words)}`, { signal: stop.signal, anchorUrl: nodeUrl });
                     if (!res.ok) throw new Error('unreachable');
                     const body = await res.json();
                     if (!Array.isArray(body?.rows)) throw new Error('unreadable');
                     if (stop.signal.aborted) return;
-                    setAnswer({ words, rows: body.rows as KnowledgeRow[] });
+                    setAnswer({ words, rows: (body.rows as KnowledgeRow[]).map((r) => rowOnCommunity(nodeUrl, r)) });
                     setCannotReach(false);
                 })
                 .catch(() => { if (!stop.signal.aborted) { setAnswer(null); setCannotReach(true); } });

@@ -27,6 +27,7 @@ import type { AppColors } from '../constants/colors';
 import { pulseAge, type PulseFeedItem } from '../utils/pulse';
 import { ListPhoto } from './ListPhoto';
 import { ChipText, TopicTile } from './learn/KnowledgeRowCard';
+import { pagePhotoUri } from './learn/learn-keep';
 import { LEARN_LINES, topicOf } from './learn/learn-lines';
 
 const TILE = 64;
@@ -54,7 +55,8 @@ function openLearn() {
     router.push('/learn');
 }
 
-export function PulseKnowledgeCard({ item }: { item: PulseFeedItem }) {
+/** `nodeUrl`: the address of the community whose feed the card came in, which its pages' pictures (paths) are asked of. */
+export function PulseKnowledgeCard({ item, nodeUrl }: { item: PulseFeedItem; nodeUrl?: string | null }) {
     const styles = useStyles(makeStyles);
     const { width, fontScale } = useWindowDimensions();
     const compact = width / fontScale < 360;
@@ -82,7 +84,7 @@ export function PulseKnowledgeCard({ item }: { item: PulseFeedItem }) {
     const row = (post: PulseKnowledgePost) => (
         <View style={styles.row}>
             <View style={styles.picture}>
-                <ListPhoto photo={post.photo} fallback={<TopicTile topic={post.topic} />} style={{ width: TILE, height: TILE }} contentFit="cover" />
+                <ListPhoto photo={pagePhotoUri(post.photo, nodeUrl)} fallback={<TopicTile topic={post.topic} />} style={{ width: TILE, height: TILE }} contentFit="cover" />
             </View>
             <View style={styles.rowBody}>
                 <Text style={styles.rowTitle} numberOfLines={2}>{post.title}</Text>

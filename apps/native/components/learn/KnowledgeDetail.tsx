@@ -13,7 +13,7 @@
  * on a live Learn, to a member with a key. The node's refusal shows in its own words (learnRefusal), never a success it didn't give.
  */
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, DeviceEventEmitter, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -36,9 +36,10 @@ import { reportedAlertBody } from '../../utils/reportReasons';
 import { signedRequestWords } from '../signed-request-lines';
 import { LANGUAGE_NAMES } from '../../utils/language-choice';
 import type { KnowledgePage } from '../../utils/learn-copy';
+import { anchorUrl } from '../../utils/node-post';
 import { ChipText } from './KnowledgeRowCard';
 import { LEARN_LINES, monthYear, topicOf } from './learn-lines';
-import { LEARN_KEEP, pageActions } from './learn-keep';
+import { LEARN_KEEP, LEARN_PAGE_READ, pageActions, pagePhotoUri, pagePhotosOf } from './learn-keep';
 import { learnRefusal } from './learn-write';
 import { useLearnWriter } from './useLearnWriter';
 import { ForumLinkedTopics } from '../forum/ForumLinks';
@@ -139,14 +140,18 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
             .catch(() => { /* offline: the count is the copy's, and a tap asks the node */ });
         return () => { gone = true; };
     }, [held.id, acts.helped, reads]);
+    /** The node's newer page, shown until the copy catches up; one read before the answer already shown gives way to it, as on the web. */
+    const showAnswer = (next: KnowledgePage) => setAnswered((was) => (was && was.id === next.id && !!was.updatedAt && !!next.updatedAt && was.updatedAt > next.updatedAt ? was : next));
     /** One action, signed: the node's answer redraws the page; its refusal is shown in its own words, and nothing else changes. */
     const act = async (method: string, path: string, body?: unknown, after?: (answer: any) => void) => {
         if (busy) return;
         setBusy(true);
         setRefusal(null);
         try {
-            const answer = await signedRequestWithMethod(method, path, body, { withStatus: true });
-            if (answer?.post?.knowledge) setAnswered(answer.post);
+            // The community asked, taken with the ask: the answer names the page's pictures by path, and they are drawn from there.
+            const nodeUrl = await anchorUrl();
+            const answer = await signedRequestWithMethod(method, path, body, { withStatus: true, anchorUrl: nodeUrl });
+            if (answer?.post?.knowledge) showAnswer({ ...answer.post, nodeUrl });
             after?.(answer);
         } catch (e) {
             setRefusal(learnRefusal(e));
@@ -154,6 +159,14 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
             setBusy(false);
         }
     };
+    // An owner's or admin's Edit (app/learn/new.tsx) hands back the node's page, after a save or the read after "This page's photos
+    // changed": shown as an action's answer is, until the copy catches up, so a picture taken off is gone from here at once.
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener(LEARN_PAGE_READ, (p: KnowledgePage | null | undefined) => {
+            if (p && p.id === held.id && p.knowledge) showAnswer(p);
+        });
+        return () => sub.remove();
+    }, [held.id]);
     const at = `/api/knowledge/posts/${encodeURIComponent(page.id)}`;
     const styles = useStyles(({ colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -219,7 +232,10 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
     const rating = useMemberRating(k.gathered ? null : page.authorPublicKey);
     const readerLang = currentLanguage();
     const writtenIn = k.lang && k.lang !== readerLang ? (LANGUAGE_NAMES as Record<string, string>)[k.lang] ?? null : null;
-    const photos = (page.photos ?? []).filter((p) => typeof p === 'string' && p !== '');
+    // A page from the copy names its pictures whole (utils/db.ts getKnowledgePost, on its own community); the node's answer (a page
+    // read by its link, an action's or an Edit's) names them by path, on the community asked, which it carries (`nodeUrl`). Nothing is
+    // read as they are drawn, so the carousel stays the one on screen when an answer takes the copy's place (review of #3355).
+    const photos = pagePhotosOf(page).map((p) => pagePhotoUri(p, page.nodeUrl)).filter((p): p is string => p !== null);
     const sources = (k.sources ?? []).filter((s) => s && openableSource(s.url));
     const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/learn' as any); };
 
@@ -256,9 +272,10 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                 {sources.length > 0 ? (
                     <View style={{ gap: 8 }}>
                         <Text style={styles.label}>{t(LEARN_LINES.sources)}</Text>
-                        {sources.map((s) => (
+                        {/* Keyed by place, not address: a typed source and the node's credit for a picture may share one (§9 slice 4). */}
+                        {sources.map((s, i) => (
                             <Pressable
-                                key={s.url}
+                                key={`source-${i}`}
                                 accessibilityRole="link"
                                 accessibilityLabel={t('{label}, opens in your browser', { label: s.label || hostOf(s.url) })}
                                 onPress={() => { void Linking.openURL(s.url).catch(() => {}); }}
@@ -266,7 +283,9 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                                 testID="knowledge-source"
                             >
                                 <View style={styles.sourceText}>
-                                    <Text style={styles.sourceLabel} numberOfLines={2}>{s.label || hostOf(s.url)}</Text>
+                                    {/* Never cut: a label is at most 80 characters, and a picture's credit ("📷 1 · maker · licence") must
+                                        show whole at 320 dp and 1.3x text (§9 slice 4), so it wraps. */}
+                                    <Text style={styles.sourceLabel}>{s.label || hostOf(s.url)}</Text>
                                     <Text style={styles.sourceHost} numberOfLines={1}>{hostOf(s.url)}</Text>
                                 </View>
                                 <Text style={styles.sourceOut}>↗</Text>

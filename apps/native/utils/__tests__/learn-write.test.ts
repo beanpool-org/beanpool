@@ -9,6 +9,7 @@ import {
     EMPTY_KNOWLEDGE_FORM, LEARN_WRITE, knowledgeFormBody, knowledgeFormPath, knowledgeFormProblem, learnRefusal, mineRowStatus, refusalCode,
     waitingLine,
 } from '../../components/learn/learn-write';
+import { editBody, fixBody, formOfPage, pagePhotoUri, pagePhotosKept, pagePhotosOf } from '../../components/learn/learn-keep';
 
 const filled = { ...EMPTY_KNOWLEDGE_FORM, title: ' How recycling works at the tip ', body: 'Bring it sorted.\nThe tip is open daily.', topic: 'local-services' };
 
@@ -111,5 +112,67 @@ describe('whose words a refusal shows: the node’s only when it answered (utils
         expect(refusalCode({ code: 403 })).toBeUndefined();
         expect(refusalCode(null)).toBeUndefined();
         expect(refusalCode(undefined)).toBeUndefined();
+    });
+});
+
+// Learn web pictures, slice 4 (DESIGN-learn-web-pictures-fable.md §9): what an Edit of a page with pictures sends, and what a form
+// of a page with the node's credit rows holds. The screens are in learn-keep-render.test.ts.
+describe('an Edit\'s pictures and a form\'s sources (learn web pictures, slice 4)', () => {
+    const ADDR = [0, 1, 2].map((n) => `/api/marketplace/posts/tip/photos/${n}?v=1&k=key${n}`);
+    const page = {
+        id: 'tip', title: 'The tip', description: 'Sort it first.', category: 'local-services', photos: [...ADDR, '', null as unknown as string],
+        knowledge: {
+            lang: 'es',
+            sources: [
+                { url: 'https://council.example/tip', label: 'Council tip page' },
+                { url: 'https://commons.wikimedia.org/wiki/File:Tip.jpg', label: 'The tip entrance, on Commons' },
+                { url: 'https://commons.wikimedia.org/wiki/File:Tip.jpg', label: '📷 1 · Jane Doe · CC BY-SA 4.0', photo: 1 },
+            ],
+        },
+    };
+
+    it('a page\'s pictures are the addresses it gave, in order, never resolved; nothing else is one', () => {
+        expect(pagePhotosOf(page)).toEqual(ADDR);
+        expect(pagePhotosOf(null)).toEqual([]);
+        expect(pagePhotosOf({ ...page, photos: undefined })).toEqual([]);
+    });
+
+    it('the kept list: none taken off is no list; one off is the others as given; all off is []', () => {
+        expect(pagePhotosKept(ADDR, [])).toBeNull();
+        expect(pagePhotosKept(ADDR, [1])).toEqual([ADDR[0], ADDR[2]]);
+        expect(pagePhotosKept(ADDR, [2, 0])).toEqual([ADDR[1]]);
+        expect(pagePhotosKept(ADDR, [0, 1, 2])).toEqual([]);
+        // A place that names no picture takes nothing off.
+        expect(pagePhotosKept(ADDR, [3, -1])).toBeNull();
+        expect(pagePhotosKept([], [0])).toBeNull();
+    });
+
+    it('a picture is drawn from the node\'s address; an http(s) address as it is; anything else not at all', () => {
+        expect(pagePhotoUri(ADDR[0], 'https://node.test')).toBe(`https://node.test${ADDR[0]}`);
+        expect(pagePhotoUri(ADDR[0], 'https://node.test/')).toBe(`https://node.test${ADDR[0]}`);
+        expect(pagePhotoUri(ADDR[0], null)).toBeNull();
+        expect(pagePhotoUri(`https://node.test${ADDR[0]}`, null)).toBe(`https://node.test${ADDR[0]}`);
+        expect(pagePhotoUri('//elsewhere.example/p.jpg', 'https://node.test')).toBeNull();
+        expect(pagePhotoUri('javascript:alert(1)', 'https://node.test')).toBeNull();
+        expect(pagePhotoUri('file:///data/user/0/p.jpg', 'https://node.test')).toBeNull();
+        expect(pagePhotoUri('data:text/html;base64,AAAA', 'https://node.test')).toBeNull();
+        // A picture that carries itself is drawn as it is, on the page and in the Edit's list alike (review of #3355).
+        expect(pagePhotoUri('data:image/jpeg;base64,AAAA', 'https://node.test')).toBe('data:image/jpeg;base64,AAAA');
+        expect(pagePhotoUri('data:image/jpeg;base64,AAAA', null)).toBe('data:image/jpeg;base64,AAAA');
+    });
+
+    it('Edit sends the kept list only when given one, beside the words in the page\'s language; the form holds the page\'s own sources only', () => {
+        const form = formOfPage(page);
+        expect(form.sources).toEqual([
+            { url: 'https://council.example/tip', label: 'Council tip page' },
+            { url: 'https://commons.wikimedia.org/wiki/File:Tip.jpg', label: 'The tip entrance, on Commons' },
+        ]);
+        expect(form.photos).toEqual([]);
+        expect(editBody(page, form)).not.toHaveProperty('photos');
+        expect(editBody(page, form, null)).not.toHaveProperty('photos');
+        expect(editBody(page, form, [ADDR[2]])).toMatchObject({ photos: [ADDR[2]], lang: 'es', sources: form.sources });
+        expect(editBody(page, form, [])).toMatchObject({ photos: [] });
+        // A fix that changes nothing sends no sources: the credit row is never a change.
+        expect(fixBody(page, form, 'Closed on Mondays')).toEqual({ fixOf: 'tip', note: 'Closed on Mondays' });
     });
 });

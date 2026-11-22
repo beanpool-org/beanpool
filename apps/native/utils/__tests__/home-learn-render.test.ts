@@ -168,7 +168,7 @@ type Taps = { open: string[]; seeAll: number; check: number; first: number; keep
 async function showLearn(lines: LearnHomeLines, opts: { toCheck?: boolean; addFirst?: boolean; keep?: boolean } = {}): Promise<Taps> {
     const taps: Taps = { open: [], seeAll: 0, check: 0, first: 0, keep: 0 };
     await render(createElement(LearnBody, {
-        lines, community: 'Riverside', colors: lightColors, now: NOW,
+        lines, nodeUrl: 'https://riverside.example', community: 'Riverside', colors: lightColors, now: NOW,
         onOpen: (id: string) => { taps.open.push(id); },
         onSeeAll: () => { taps.seeAll++; },
         onToCheck: opts.toCheck ? () => { taps.check++; } : undefined,

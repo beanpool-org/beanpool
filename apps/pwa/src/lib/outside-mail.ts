@@ -86,9 +86,11 @@ export interface OutsideMailContext {
     /**
      * Whether the member let this sender in (let in once, S5 part 3: lib/let-in.ts letInOnWeb, core's rule over this
      * community's facts, a block first): their first line across, with no chat here, opens one, door open or not. One per
-     * round, read at its first ask. Left out: nobody is.
+     * round, read at its first ask. Null: not known this round (a read it needs failed, and may pass later; never a
+     * refusal), so a first line the door would drop waits at my server, unconfirmed, for a later round (#3366 review F2).
+     * Left out: nobody is.
      */
-    letIn?: (key: string) => Promise<boolean>;
+    letIn?: (key: string) => Promise<boolean | null>;
     signal?: AbortSignal;
     /**
      * Whether this still acts for the account and the community it was made for ({@link outsideContext}): false once the
@@ -525,8 +527,11 @@ export async function failUnsent(ctx: Pick<OutsideMailContext, 'identity' | 'sto
     }
 }
 
-/** `changes`: changes to lines (X6) applied here. */
-export interface SyncOutcome { written: number; changes: number; requests: number; dropped: number; confirmed: number; ticks: number }
+/**
+ * `changes`: changes to lines (X6) applied here. `waiting`: first lines left at my server, unconfirmed, for a later round,
+ * because whether their sender was let in could not be read this round.
+ */
+export interface SyncOutcome { written: number; changes: number; requests: number; dropped: number; confirmed: number; ticks: number; waiting: number }
 
 /**
  * One round: unsent lines sent again, then my items' ticks applied (every page of them first), then what waits for this
@@ -534,7 +539,7 @@ export interface SyncOutcome { written: number; changes: number; requests: numbe
  * a write that fails leaves its item unconfirmed.
  */
 export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now()): Promise<SyncOutcome> {
-    const out: SyncOutcome = { written: 0, changes: 0, requests: 0, dropped: 0, confirmed: 0, ticks: 0 };
+    const out: SyncOutcome = { written: 0, changes: 0, requests: 0, dropped: 0, confirmed: 0, ticks: 0, waiting: 0 };
     const me = ctx.identity.publicKey;
     await resendUnsent(ctx, now).catch((e) => console.warn('[OutsideMail] Unsent lines wait for the next round:', e?.message ?? e));
     await forgetBlockedHeld(ctx).catch((e) => console.warn('[OutsideMail] Held receipts are looked at again next round:', e?.message ?? e));
@@ -562,6 +567,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         const requestsHere = requestsHereOfMail(answer);
         const done: string[] = [];
         let writeFailed = false;
+        let waiting = 0;
         for (const h of held) {
             const env = readRelayEnvelope(h?.envelope);
             if (!env) continue;
@@ -582,7 +588,8 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 const theirs = chat ? { state: chat.state, theirLines: await ctx.store.theirLines(me, chatId, env.senderKey) } : null;
                 const blocked = await ctx.isBlocked(env.senderKey);
                 // Let in once (S5 part 3): asked only for a first line with no chat here, from someone not blocked, as on the phone.
-                const letIn = !chat && !blocked && env.kind === 'dm-line' && !!ctx.letIn && await ctx.letIn(env.senderKey);
+                const letInSaid = !chat && !blocked && env.kind === 'dm-line' && ctx.letIn ? await ctx.letIn(env.senderKey) : false;
+                const letIn = letInSaid === true;
                 const verdict = gateOutsideItem({
                     kind: env.kind,
                     chat: theirs,
@@ -592,7 +599,12 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                     memberHere,
                     requestsHere,
                 });
-                if (verdict === 'drop') { done.push(env.itemId); out.dropped++; continue; }
+                if (verdict === 'drop') {
+                    // Not known this round whether they were let in (a read that failed, never a refusal): the first line the
+                    // door would drop is left at my server, unconfirmed, for a later round; the round goes on (#3366 review F2).
+                    if (letInSaid === null) { waiting++; out.waiting++; continue; }
+                    done.push(env.itemId); out.dropped++; continue;
+                }
                 if (verdict === 'change') {
                     // A change to a line (X6), judged by core's one rule: applied, or dropped here; confirmed either way.
                     let change: OutsideChange | null = null;
@@ -636,7 +648,8 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         if (done.length) out.confirmed += Number((await post(ctx, '/api/mail/confirm', { ids: done, device }))?.confirmed) || 0;
         // This page's receipts, and any an earlier round didn't get to post.
         await flushReceipts(ctx, now, tried);
-        if (writeFailed || !answer?.more) break;
+        // A page that confirmed nothing, its lines left for a later round, would come again as it is: the round ends there.
+        if (writeFailed || !answer?.more || (waiting && !done.length)) break;
     }
     return out;
 }

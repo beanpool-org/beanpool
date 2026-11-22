@@ -12,12 +12,21 @@
  *   lines (GET /api/messages/:id), for a line of the member's own (core isMembersOwnLine);
  * - its friends (GET /api/friends/:me), its deals (GET /api/marketplace/transactions, the newest 200), its payments
  *   (GET /api/ledger/transactions, the newest 200);
- * - the private contacts list as this browser keeps it (lib/contacts-store.ts heldContactsList), its links' keys.
+ * - the private contacts list as this browser keeps it (lib/contacts-store.ts heldContactsList), its links' keys. A link
+ *   made in this community counts only while this community still lists its key as a member (GET /api/members?keys=, that
+ *   one key, read only then): a key it no longer lists is a re-keyed person's old one, or a departed person's (#3366
+ *   review F1: a lost phone's key, which an admin's re-key never names in `formerKeys`). A link made in another community
+ *   counts as on the phone: the web reads no other community.
  * Read at a round's first ask, once a round; the lines and the contacts only when nothing cheaper lets the person in.
  *
  * The strict side, every time: a fact that can't be read lets nobody in by it, and with the chat list unread (so its former
  * keys are unknown) nobody is let in at all. A line older than a chat's newest lines, a deal or a payment older than the
  * newest 200, is not read: that person then meets the door, as before this slice.
+ *
+ * A read that failed is told apart from "not let in" (#3366 review F2): no answer, a time-out, a 5xx, or a 401, 408, 425
+ * or 429 (try again) may pass later, so where the facts read don't let the person in, the answer is null, "not known this
+ * round", and the round leaves the line it would drop for a later round (lib/outside-mail.ts). A refusal (any other 4xx,
+ * such as a visitor's friends) says the fact is not there for this account: it lets nobody in, as before.
  *
  * The block first (S7, this community's own list): someone on the account's list here, or one the member unblocked in this
  * page (a doubt, as the phone's `once`), or a list that can't be read, is never let in.
@@ -26,9 +35,11 @@ import {
     chatLetsInKey, contactsCouldLetIn, isMembersOwnLine, letInAmong, letInByFacts, type LetInChat, type LetInFacts, type LetInKnown,
 } from '@beanpool/core';
 import {
-    getConversationMessages, getConversations, getFriends, getMyMarketplaceTransactions, getTransactions, type Conversation,
+    getConversationMessages, getConversations, getFriends, getMemberCards, getMyMarketplaceTransactions, getTransactions, nodeAddress, type Conversation,
 } from './api';
 import { heldContactsList } from './contacts-store';
+import { memberKeysBatches, memberKeysPath } from './members-on-demand';
+import { outsideCommunityOf } from './outside-chat-store';
 
 /** The reads let in once makes on the web: the api's own, unless a test hands in its own. */
 export interface WebLetInReads {
@@ -37,7 +48,11 @@ export interface WebLetInReads {
     friends: typeof getFriends;
     deals: (me: string) => Promise<ReadonlyArray<{ buyerPublicKey: string; sellerPublicKey: string; status: string; postAuthorPublicKey?: string | null }>>;
     payments: (me: string) => Promise<ReadonlyArray<{ from: string; to: string }>>;
-    contacts: (me: { publicKey: string; privateKey: string }) => Promise<{ contacts: ReadonlyArray<{ links: ReadonlyArray<{ key: string }> }> } | null>;
+    contacts: (me: { publicKey: string; privateKey: string }) => Promise<{ contacts: ReadonlyArray<{ links: ReadonlyArray<{ key: string; community: string }> }> } | null>;
+    /** Which of `keys` this community lists as members now (the directory's keys form): those it names, the rest not. */
+    members: (keys: readonly string[]) => Promise<ReadonlyArray<{ publicKey: string }>>;
+    /** The address of the community this web app talks to (lib/api nodeAddress): a contact link made here names it. */
+    community: () => string;
 }
 
 /** Deals and payments read: the newest this many (the node's largest page). */
@@ -51,7 +66,27 @@ const API_READS: WebLetInReads = {
     deals: (me) => getMyMarketplaceTransactions(me, undefined, LET_IN_PAGE),
     payments: (me) => getTransactions(me, LET_IN_PAGE),
     contacts: (me) => heldContactsList(me),
+    members: async (keys) => {
+        const [batch] = memberKeysBatches(keys);
+        return batch ? getMemberCards(memberKeysPath(batch)) : [];
+    },
+    community: () => nodeAddress(),
 };
+
+/** A read that failed but may pass later: no answer yet. Never a refusal. */
+const FAILED: unique symbol = Symbol('failed');
+/** A read's answer; null when refused (a 4xx that says no for good: as nothing); FAILED when it may pass later. */
+type Read<T> = T | null | typeof FAILED;
+
+/** Whether a thrown read may pass later: no answer, a time-out, a 5xx, or a 401 (a clock that is off), 408, 425 or 429. */
+function mayPass(e: unknown): boolean {
+    const status = (e as { status?: unknown } | null)?.status;
+    return typeof status !== 'number' || status >= 500 || [401, 408, 425, 429].includes(status);
+}
+
+function readOf<T>(read: () => Promise<T>): Promise<Read<T>> {
+    return Promise.resolve().then(read).catch((e): Read<T> => (mayPass(e) ? FAILED : null));
+}
 
 /** A direct chat in the web's list, as core's rule reads one; its lines not read yet (`memberWrote` false until they are). */
 interface ListedChat { id: string; chat: LetInChat }
@@ -79,16 +114,20 @@ function chatsOfList(me: string, list: readonly Conversation[]): { chats: Listed
     return { chats, notCurrent };
 }
 
-/** What one round reads once: the facts other than the lines and the contacts, or null when the chat list can't be read. */
-interface RoundFacts { chats: ListedChat[]; known: LetInKnown & { byFacts: Set<string>; notCurrent: Set<string> }; facts: LetInFacts }
+/**
+ * What one round reads once: the facts other than the lines and the contacts (`unsure`: one of them failed, and may pass
+ * later); null when the chat list was refused, FAILED when its read failed.
+ */
+interface RoundFacts { chats: ListedChat[]; known: LetInKnown & { byFacts: Set<string>; notCurrent: Set<string> }; facts: LetInFacts; unsure: boolean }
 
-async function readRound(me: string, reads: WebLetInReads): Promise<RoundFacts | null> {
+async function readRound(me: string, reads: WebLetInReads): Promise<RoundFacts | typeof FAILED | null> {
     const [list, friends, deals, payments] = await Promise.all([
-        reads.conversations(me).catch(() => null),
-        reads.friends(me).catch(() => null),
-        reads.deals(me).catch(() => null),
-        reads.payments(me).catch(() => null),
+        readOf(() => reads.conversations(me)),
+        readOf(() => reads.friends(me)),
+        readOf(() => reads.deals(me)),
+        readOf(() => reads.payments(me)),
     ]);
+    if (list === FAILED) return FAILED;
     if (!list || !Array.isArray(list.conversations)) return null;
     const { chats, notCurrent } = chatsOfList(me, [...list.conversations, ...(list.requests?.conversations ?? [])]);
     const facts: LetInFacts = {
@@ -98,39 +137,63 @@ async function readRound(me: string, reads: WebLetInReads): Promise<RoundFacts |
         deals: (Array.isArray(deals) ? deals : []).map((d) => ({ buyer: d.buyerPublicKey, seller: d.sellerPublicKey, status: d.status, listingAuthor: d.postAuthorPublicKey ?? null })),
         payments: (Array.isArray(payments) ? payments : []).map((p) => ({ from: p.from, to: p.to })),
     };
-    return { chats, facts, known: { byFacts: letInByFacts(me, facts), notCurrent } };
+    return { chats, facts, known: { byFacts: letInByFacts(me, facts), notCurrent }, unsure: friends === FAILED || deals === FAILED || payments === FAILED };
+}
+
+/** The contacts' linked keys: those a link made in this community names (`here`), and those a link made elsewhere names. */
+interface LinkedKeys { here: Set<string>; elsewhere: Set<string> }
+
+function linkedKeysOf(list: Awaited<ReturnType<WebLetInReads['contacts']>>, me: string, community: string): LinkedKeys {
+    const linked: LinkedKeys = { here: new Set(), elsewhere: new Set() };
+    const here = outsideCommunityOf(community);
+    for (const c of list?.contacts ?? []) {
+        for (const l of c.links) {
+            if (!l.key || l.key === me) continue;
+            (outsideCommunityOf(l.community) === here ? linked.here : linked.elsewhere).add(l.key);
+        }
+    }
+    return linked;
 }
 
 /**
  * For one round of mail across on the web (lib/outside-mail.ts `letIn`): whether a sender is let in, by core's rule over the
  * web's facts, and no block bars them (`blocked`: this community's list for the account, a block undone in this page among
- * it; throws when it can't be read). Read once, at the round's first ask; false whenever something it needs can't be read.
+ * it; throws when it can't be read, which counts as blocked). Read once, at the round's first ask: true, let in; false, not
+ * (a read it needs refused among it); null, not known this round: a read the answer needs failed, and may pass later.
  */
 export function letInOnWeb(
     identity: { publicKey: string; privateKey: string },
     blocked: (key: string) => Promise<boolean>,
     reads: WebLetInReads = API_READS,
-): (key: string) => Promise<boolean> {
+): (key: string) => Promise<boolean | null> {
     const me = identity.publicKey;
-    let round: Promise<RoundFacts | null> | null = null;
-    let contacts: Promise<Set<string>> | null = null;
-    const linesRead = new Map<string, Promise<boolean>>();
+    let round: Promise<RoundFacts | typeof FAILED | null> | null = null;
+    let contacts: Promise<LinkedKeys> | null = null;
+    const linesRead = new Map<string, Promise<Read<boolean>>>();
+    const listedHere = new Map<string, Promise<Read<boolean>>>();
     return async (key) => {
         if (!key || key === me) return false;
         if (await blocked(key).catch(() => true)) return false;
+        // Anything else that goes wrong in the reading (an answer of another shape) lets nobody in: the strict side.
         const read = await (round ??= readRound(me, reads).catch(() => null));
+        if (read === FAILED) return null;
         if (!read) return false;
         if (letInAmong([key], read.known).has(key)) return true;
         if (read.known.notCurrent.has(key)) return false;
+        let unsure = read.unsure;
         // A line of the member's own, in a direct chat with this key: its newest lines, read once a round for each chat.
         for (const c of read.chats) {
             if (c.chat.memberWrote || chatLetsInKey(c.chat, me) !== key) continue;
             let wrote = linesRead.get(c.id);
             if (!wrote) {
-                wrote = reads.lines(c.id).then((r) => (r?.messages ?? []).some((l) => isMembersOwnLine(l, me))).catch(() => false);
+                wrote = readOf(() => reads.lines(c.id))
+                    .then((r): Read<boolean> => (r === FAILED ? FAILED : (r?.messages ?? []).some((l) => isMembersOwnLine(l, me))))
+                    .catch(() => false);
                 linesRead.set(c.id, wrote);
             }
-            if (await wrote) {
+            const said = await wrote;
+            if (said === FAILED) unsure = true;
+            else if (said) {
                 c.chat.memberWrote = true;
                 read.known.byFacts = letInByFacts(me, read.facts);
             }
@@ -138,8 +201,24 @@ export function letInOnWeb(
         if (letInAmong([key], read.known).has(key)) return true;
         if (!contactsCouldLetIn([key], read.known)) return false;
         contacts ??= reads.contacts(identity)
-            .then((list) => new Set((list?.contacts ?? []).flatMap((c) => c.links.map((l) => l.key)).filter((k) => k && k !== me)))
-            .catch(() => new Set<string>());
-        return letInAmong([key], { ...read.known, contacts: await contacts }).has(key);
+            .then((list) => linkedKeysOf(list, me, reads.community()))
+            .catch(() => ({ here: new Set<string>(), elsewhere: new Set<string>() }));
+        const linked = await contacts;
+        let counted = linked.elsewhere.has(key);
+        // A link made here counts only while this community lists the key as a member now (#3366 review F1).
+        if (!counted && linked.here.has(key)) {
+            let listed = listedHere.get(key);
+            if (!listed) {
+                listed = readOf(() => reads.members([key]))
+                    .then((r): Read<boolean> => (r === FAILED ? FAILED : Array.isArray(r) && r.some((m) => m?.publicKey === key)))
+                    .catch(() => false);
+                listedHere.set(key, listed);
+            }
+            const said = await listed;
+            if (said === FAILED) unsure = true;
+            else counted = said === true;
+        }
+        if (letInAmong([key], { ...read.known, contacts: counted ? new Set([key]) : null }).has(key)) return true;
+        return unsure ? null : false;
     };
 }

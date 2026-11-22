@@ -134,9 +134,10 @@ const record = (id: string, using: string, peerId: string, listed: string): Comm
     ...makeCommunityRecord(id, { peerId, communityId: peerId, epoch: 1 }), using,
     list: { list: { peerId, addresses: [hostOf(using), listed] }, sig: '' } as unknown as CommunityRecord['list'],
 });
+/** Each other address is known one way only: an older main by the record, one on the signed list by it, the rest by the info. */
 const infoOf = (server: Server, main: string, former: string) => ({
     profile: 'local', features: { outsideMessages: server.takesAcross }, checkedAt: '2026-11-22T00:00:00.000Z',
-    addresses: server.names.filter((n) => n !== former), primaryAddress: main, formerAddresses: [former],
+    addresses: server.names.filter((n) => !/^(former|old|listed)/.test(n)), primaryAddress: main, formerAddresses: [former],
 });
 function saysNow(): void {
     phone.info.set(RIVERSIDE, infoOf(SERVERS.riverside, 'riverside.example', 'formerriver.example'));
@@ -216,6 +217,8 @@ const CHATS: Record<string, { set: () => void; WANT: [string, string, string] }>
     'across, dead: its home is another name here': { set: across(RIVERSIDE, 'river.example'), WANT: ['here held here', 'here held here', 'no-community held no-community'] },
     'across, to a held community': { set: across(RIVERSIDE, 'oldhill.example'), WANT: ['here held held', 'here held held', 'no-community held no-community'] },
     'across in the held file, open': { set: across(HILLSIDE, 'faraway.example'), WANT: ['openHeld openHeld openHeld', 'openHeld openHeld openHeld', 'openHeld openHeld openHeld'] },
+    'across in the held file, a request': { set: across(HILLSIDE, 'faraway.example', 'request'), WANT: ['openHeld openHeld openHeld', 'openHeld openHeld openHeld', 'openHeld openHeld openHeld'] },
+    'across in the held file, declined': { set: across(HILLSIDE, 'faraway.example', 'declined'), WANT: ['here held new', 'here held off', 'no-community held no-community'] },
     'across in the held file, dead: its home is another name there': { set: across(HILLSIDE, 'hill.example'), WANT: ['here held held', 'here held held', 'held held held'] },
     'across in the held file, open, the held community takes none': {
         set: () => { across(HILLSIDE, 'faraway.example')(); SERVERS.hillside.takesAcross = false; }, WANT: ['here held new', 'here held off', 'no-community held no-community'] },
@@ -235,7 +238,7 @@ const ROWS = ADDRESSES.flatMap((address) => Object.entries(CHATS).flatMap(([chat
 
 describe('Message on the phone: where it goes, and a line can go from there', () => {
     it('the table is the whole of it: every address, chat, state and block', () => {
-        expect(ROWS.length).toBe(11 * 12 * 4 * 3);
+        expect(ROWS.length).toBe(11 * 14 * 4 * 3);
     });
 
     // Named in full: a title made by it.each is cut short.
@@ -344,6 +347,14 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         SERVERS.hillside.names.push('riverside.example');
         saysNow(); kept(); SERVERS.riverside.members.add(K);
         expect(word(await message(at(RIVERSIDE)))).toBe('here');
+    });
+
+    it('the community in use says a held community\'s address is its own: that community\'s contact is there still, in place', async () => {
+        SERVERS.riverside.names.push('hillside.example', 'oldhill.example');
+        saysNow();
+        (phone.info.get(RIVERSIDE) as { addresses: string[] }).addresses.push('oldhill.example');
+        kept(); SERVERS.hillside.members.add(K);
+        for (const url of [HILLSIDE, 'https://oldhill.example']) expect(await message(at(url))).toMatchObject({ at: 'held', route: HILLSIDE });
     });
 
     it('a held community that says an address that answered this phone as something else: across, as anyone there', async () => {

@@ -44,6 +44,13 @@ vi.mock('../lib/outside-mail', async (importOriginal) => {
     };
 });
 
+// What the community says of its own addresses (its info).
+const said = vi.hoisted(() => ({ info: {} as Record<string, unknown> }));
+vi.mock('../lib/visitor-lobby-gate', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/visitor-lobby-gate')>()),
+    communityInfoOnce: async () => said.info,
+}));
+
 import { outsideChatStore, clearOutsideChats } from '../lib/outside-chat-store';
 import { doorOpen } from '../lib/outside-mail';
 import { AddressCardPanel } from './AddressCardPanel';
@@ -55,6 +62,7 @@ beforeEach(async () => {
     here.findable = false;
     here.found = null;
     here.refuse = null;
+    said.info = {};
     calls.setFindMe = [];
     calls.findByName = [];
     here.ctx = {
@@ -107,6 +115,19 @@ describe('find by name: the look-up', () => {
         expect(screen.getByText('Wren Tallowmere')).toBeTruthy();
         expect(screen.getByText('riverside.example · name not confirmed here')).toBeTruthy();
     });
+
+    // #3354 review, round 4: by any of this community's addresses (lib/community-homes.ts, Message's rule), never one spelling.
+    // Its server refuses every line across to each of them. Mutation (PR body): myHome's one home only -> the last two open a box.
+    for (const home of ['b.example', 'oldb.example', 'formerb.example']) {
+        it(`a card at ${home}, one of this community's own addresses: they are in this community, and no box opens`, async () => {
+            said.info = { addresses: ['b.example', 'oldb.example'], primaryAddress: 'b.example', formerAddresses: ['formerb.example'] };
+            here.found = await signAddressCard({ key: WREN.key, home, name: 'Wren Tallowmere' }, ed25519Signer(hexToBytes(WREN.seed)));
+            render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);
+            await find(home, 'wren tallowmere');
+            expect(await screen.findByText('Wren Tallowmere is in this community: write to them here.')).toBeTruthy();
+            expect(screen.queryByTestId('first-message')).toBeNull();
+        });
+    }
 
     it('a refusal reads in core\'s words by its code, never the server\'s English', async () => {
         here.refuse = { status: 429, code: 'find_day_used' };

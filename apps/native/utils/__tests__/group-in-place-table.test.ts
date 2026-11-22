@@ -25,6 +25,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import ts from 'typescript';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
@@ -32,12 +33,22 @@ const h = vi.hoisted(() => ({
     dir: '', store: new Map<string, string>(), me: { publicKey: '', privateKey: '' },
     /** The next writes of `file` that read as `sql` (past the first `skip`): `hit` as each is run, and SQLite refuses it when `refuse`. */
     cut: null as null | { file: string; sql: RegExp; times: number; refuse: boolean; hit: () => void; skip?: number },
+    /** The reads of `file` that read as `sql`: each fails, or never answers (`hang`); `hit` as each is asked. */
+    reads: null as null | { file: string; sql: RegExp; times: number; hang: boolean; hit?: () => void; refuse?: boolean },
 }));
 
 vi.mock('expo-sqlite', async () => {
     const { DatabaseSync: Sqlite } = await import('node:sqlite');
     const { join } = await import('node:path');
     const params = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as any[];
+    const cutRead = async (name: string, q: string) => {
+        const cut = h.reads;
+        if (!cut || cut.file !== name || cut.times <= 0 || !cut.sql.test(q)) return;
+        cut.times--;
+        cut.hit?.();
+        if (cut.hang) await new Promise<void>(() => {});
+        if (cut.refuse !== false) throw new Error('disk I/O error');
+    };
     return {
         get defaultDatabaseDirectory() { return `file://${h.dir}`; },
         openDatabaseAsync: vi.fn(async (name: string) => {
@@ -54,8 +65,8 @@ vi.mock('expo-sqlite', async () => {
                     return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) };
                 },
                 execAsync: async (q: string) => { sql.exec(q); },
-                getAllAsync: async (q: string, p?: unknown) => sql.prepare(q).all(...params(p)),
-                getFirstAsync: async (q: string, p?: unknown) => sql.prepare(q).get(...params(p)) ?? null,
+                getAllAsync: async (q: string, p?: unknown) => { await cutRead(name, q); return sql.prepare(q).all(...params(p)); },
+                getFirstAsync: async (q: string, p?: unknown) => { await cutRead(name, q); return sql.prepare(q).get(...params(p)) ?? null; },
                 withTransactionAsync: async (cb: () => Promise<void>) => { await cb(); },
                 closeAsync: async () => { sql.close(); },
             };
@@ -108,9 +119,10 @@ import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { forgetGroupKeys, groupKeyring, memoryGroupKeyStore, GROUP_KEY_ROLLBACK_TEXT, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 import { makeEpochRecord, sealLine } from '../group-chat-crypto';
 import { addGroupKeyState, sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from '../group-chat-store';
-import { groupChatShownLines, openGroupThread, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_KEYS_FOR_DM_TEXT, type OpenedGroupThread } from '../group-chat-lines';
+import { groupChatNotice, groupChatShownLines, openGroupThread, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_EDIT_NO_KEY_TEXT, GROUP_KEYS_FOR_DM_TEXT, type OpenedGroupThread } from '../group-chat-lines';
 import { dmPeerPinsStoreKey, dmConversationsSeenStoreKey } from '../storage-keys';
 import { chatInPlaceRoute } from '../held-chats';
+import { routeChat } from '../chat-route';
 import { groupsListed, heldGroups, isHeldGroup } from '../held-groups';
 import { guestRosterRows } from '../guest-chat-live';
 import { yourGroupsStore } from '../../components/useYourGroups';
@@ -216,6 +228,12 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
         s.lines.push({ id: body.clientId, authorPubkey: me.publicKey, authorCallsign: 'Me', type: 'text', ciphertext: body.ciphertext, nonce: body.nonce, metadata: body.metadata ?? null, timestamp: new Date().toISOString() });
         return answer(201, { success: true, message: { id: body.clientId } });
     }
+    if (method === 'POST' && [`/api/marketplace/posts/${g}/chat/message`, `/api/enterprise/${g}/thread/message`, `/api/treasury/${g}/thread/message`].includes(p)) {
+        s.wordsIn.push(body.text);
+        return answer(200, { success: true, message: { id: body.clientId } });
+    }
+    if (method === 'POST' && (p === '/api/messages/send' || p === '/api/messages/edit') && body.nonce === 'plaintext-v1') s.wordsIn.push(Buffer.from(body.ciphertext, 'base64').toString());
+    if (method === 'POST' && p === '/api/messages/send') return answer(200, { success: true, message: { id: body.id, ciphertext: body.ciphertext, nonce: body.nonce, timestamp: new Date().toISOString() } });
     if (p === `${at}/members/${me.publicKey}` && method === 'DELETE') return answer(200, { success: true });
     if (method === 'POST' && (p === `${at}/chat/report` || p === `${at}/chat/remove`)) return answer(200, { success: true });
     if (method === 'POST' && p === '/api/messages/mute') return answer(200, { success: true, mute: { conversationId: body.conversationId, mutedUntil: '2026-11-23T08:00:00.000Z', always: false } });
@@ -269,6 +287,7 @@ async function phoneOnB(): Promise<void> {
     servers = { [A]: { epochs: [], lines: [], wordsIn: [], left: false }, [B]: { epochs: [], lines: [], wordsIn: [], left: true }, [C]: { epochs: [], lines: [], wordsIn: [], left: true } };
     hold = null;
     h.cut = null;
+    h.reads = null;
     (globalThis as any).fetch = fetchMock;
     await switchPhoneTo(A);
     await db.getDb();
@@ -1133,6 +1152,403 @@ describe('the sticky lock: on disk before any of the chat is shown or sent; a gr
         await expect(db.groupScreenKeyringFor(g)).rejects.toThrow(GROUP_KEYS_FOR_DM_TEXT);
         await expect(db.postGroupChatMessage(g, 'a DM\'s', randomUUID(), null, { after: null })).rejects.toThrow(GROUP_KEYS_FOR_DM_TEXT);
         expect(onDisk().epochs).toEqual([]);
+    });
+});
+
+// ── Every path that can send words into a group-like chat asks the lock mark, of its own community's file, last ───────
+// (second review of #3358: R1, R2, and the class they are of)
+
+const WORDS = 'the words';
+const M4A = readFixture();
+function readFixture(): any {
+    // The smallest thing core takes for a voice message's shape here: these rows never reach a seal (no key), or a refusal.
+    return { bytes: new Uint8Array(2048), durationMs: 1200, peaks: [0.2, 0.4, 0.1] };
+}
+/** A path that sends words, a photo or a voice message into a chat. `inPlace`: it takes a community. `opens`: whose contrast row sends readable words, for which labels. */
+interface Send { fn: string; name: string; run: (c?: string) => Promise<unknown>; inPlace: boolean; readable: readonly Label[] }
+type Label = 'group_thread' | 'event_thread' | 'enterprise_thread' | 'none' | 'dm';
+const LABELS: readonly Label[] = ['group_thread', 'event_thread', 'enterprise_thread', 'none', 'dm'];
+const NOT_A_DM: readonly Label[] = ['group_thread', 'event_thread', 'enterprise_thread', 'none'];
+const A_READABLE_ROW: readonly Label[] = ['group_thread', 'event_thread', 'enterprise_thread'];
+const SENDS: Send[] = [
+    { fn: 'postGroupChatMessage', name: 'the group\'s screen: a line', run: (c) => db.postGroupChatMessage(g, WORDS, randomUUID(), null, undefined, c), inPlace: true, readable: NOT_A_DM },
+    { fn: 'editThreadMessage', name: 'the group\'s and the enterprise discussion\'s screen: an edit', run: (c) => db.editThreadMessage(mine.id, WORDS, { groupId: g, metadata: {}, locked: false }, c), inPlace: true, readable: NOT_A_DM },
+    { fn: 'postGroupChatPhoto', name: 'the group\'s screen: a photo (only ever sealed)', run: () => db.postGroupChatPhoto(g, { dataUri: 'data:image/jpeg;base64,AAAA', caption: WORDS }), inPlace: false, readable: [] },
+    { fn: 'postGroupChatVoice', name: 'the group\'s screen: a voice message (only ever sealed)', run: () => db.postGroupChatVoice(g, { voice: M4A }), inPlace: false, readable: [] },
+    { fn: 'insertMessage', name: 'the DM screen: a line', run: (c) => db.insertMessage(g, me.publicKey, WORDS, undefined, undefined, undefined, c), inPlace: true, readable: A_READABLE_ROW },
+    { fn: 'editMessage', name: 'the DM screen: an edit', run: (c) => db.editMessage(g, mine.id, WORDS, c), inPlace: true, readable: A_READABLE_ROW },
+    { fn: 'sendImageMessage', name: 'the DM screen: a photo (only ever sealed)', run: () => db.sendImageMessage(g, 'data:image/jpeg;base64,AAAA', WORDS), inPlace: false, readable: [] },
+    { fn: 'sendVoiceMessage', name: 'the DM screen: a voice message (only ever sealed)', run: () => db.sendVoiceMessage(g, M4A), inPlace: false, readable: [] },
+    { fn: 'postEventChatMessage', name: 'an event\'s chat', run: () => db.postEventChatMessage(g, WORDS, randomUUID()), inPlace: false, readable: NOT_A_DM },
+    { fn: 'postEnterpriseChatMessage', name: 'an enterprise\'s discussion', run: () => db.postEnterpriseChatMessage(g, WORDS, randomUUID()), inPlace: false, readable: NOT_A_DM },
+    { fn: 'postEnterpriseThreadMessage', name: 'an enterprise\'s page', run: () => db.postEnterpriseThreadMessage(g, WORDS, randomUUID()), inPlace: false, readable: NOT_A_DM },
+];
+const clearKeys = (file: string) => into(file, (sql) => { for (const t of ['group_chat_key_state', 'group_chat_epochs', 'group_line_signers', 'group_line_verdicts']) sql.prepare(`DELETE FROM ${t}`).run(); });
+const mark = (file: string) => into(file, (sql) => { sql.prepare('INSERT INTO group_chat_key_state (group_id) VALUES (?)').run(`${me.publicKey}/${g}`); });
+const marked = (file: string): boolean => {
+    const r = rowsOf(file);
+    return !!r && (r.group_chat_key_state as any[]).some((x) => x.group_id === `${me.publicKey}/${g}`);
+};
+/** Neither copy holds a key of the group (each was joined on another device), and its servers say no chat is locked. */
+async function neitherHolds(label: Label = 'group_thread'): Promise<void> {
+    await db.closeDB();
+    for (const file of [A_FILE, B_FILE]) {
+        clearKeys(file);
+        into(file, (sql) => {
+            sql.prepare('DELETE FROM messages').run();
+            sql.prepare('DELETE FROM conversations WHERE id = ?').run(g);
+        });
+        if (label !== 'none') groupRow(file, g, label);
+    }
+    forgetGroupKeys();
+    for (const origin of [A, B, C]) { servers[origin].unlocked = true; servers[origin].wordsIn = []; }
+    asked = [];
+}
+/** Every readable word that left the phone, by whose server it went to. */
+const wordsOut = () => Object.fromEntries([A, B, C].map((o) => [o, servers[o].wordsIn]));
+const NOTHING = { [A]: [], [B]: [], [C]: [] };
+
+describe('every path that can send words into a group-like chat asks the lock mark of its own community\'s file before it sends', () => {
+    /** Whose file is marked, and where the phone is as it sends to A: nothing readable goes once A's own file is marked, and B's mark stops nothing. */
+    const STAND = [
+        { name: 'in use, its own file marked', where: 'use', mark: A_FILE, goes: false },
+        { name: 'in use, only the other community\'s file marked', where: 'use', mark: B_FILE, goes: true },
+        { name: 'in place, its own file marked', where: 'place', mark: A_FILE, goes: false },
+        { name: 'in place, only the file of the community in use marked', where: 'place', mark: B_FILE, goes: true },
+    ] as const;
+    const rows = SENDS.flatMap((send) => LABELS.flatMap((label) => STAND.filter((st) => st.where === 'use' || send.inPlace).map((st) => [send.name, label, st.name, send, st] as const)));
+    it.each(rows)('%s x called %s x %s', async (_s, label, _st, send, st) => {
+        if (st.where === 'use') await switchPhoneTo(A);
+        await neitherHolds(label);
+        mark(st.mark);
+        await db.getDb();
+        const c = st.where === 'place' ? A : undefined;
+        if (c) db.enterChatInPlace(A);
+        const thrown: any = await send.run(c).then(() => null, (e) => e);
+        await settle();
+        if (c) await db.leaveChatInPlace(A);
+        // In place: only a group's own screen sends, and only a group that copy's row says is one (onlyGroupInPlace, onlyDmInPlace).
+        const opens = c ? (['postGroupChatMessage', 'editThreadMessage'].includes(send.fn) && label === 'group_thread' ? [label] : []) : send.readable;
+        const goes = st.goes && (opens as readonly Label[]).includes(label);
+        expect(wordsOut(), String(thrown?.message)).toEqual({ ...NOTHING, [A]: goes ? [WORDS] : [] });
+        // A DM known there is a DM in its own screen, the mark or not (it lifts no DM guard): sealed to its pin, never readable.
+        const aDmsOwn = label === 'dm' && ['insertMessage', 'editMessage', 'sendImageMessage', 'sendVoiceMessage'].includes(send.fn);
+        if (!goes && !aDmsOwn) expect(thrown, 'refused in words').toBeTruthy();
+        if (!st.goes && send.readable.includes(label) && !c) expect(thrown.message).toBe(send.fn === 'editThreadMessage' ? GROUP_EDIT_NO_KEY_TEXT : GROUP_CHAT_LOCK_LOST_TEXT);
+        // Nothing of it went anywhere but A, sealed or not.
+        expect(asked.filter((r) => r.method === 'POST' && /message|edit/.test(r.url) && !r.url.startsWith(A)).map((r) => r.url)).toEqual([]);
+        expect([marked(A_FILE), marked(B_FILE)], 'the marks are as they were').toEqual([st.mark === A_FILE, st.mark === B_FILE]);
+    });
+
+    it('the table has every path x every label x its stands (150 rows), and it is every path the phone has (the source)', () => {
+        expect(rows.length).toBe(11 * 5 * 2 + 4 * 5 * 2);
+        const native = path.join(__dirname, '..', '..');
+        const found: string[] = [];
+        const walk = (dir: string) => {
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (e.name === '__tests__' || e.name === 'node_modules') continue;
+                const full = path.join(dir, e.name);
+                if (e.isDirectory()) walk(full);
+                else if (/\.tsx?$/.test(e.name)) found.push(...sendersIn(full));
+            }
+        };
+        for (const dir of ['app', 'components', 'utils', 'services', 'tools']) if (fs.existsSync(path.join(native, dir))) walk(path.join(native, dir));
+        // The sealed lines' own two senders, and the DM screen's delivery, are reached only by the paths above.
+        const SEALED_ONLY = ['group-chat-lines.ts:sendSealedGroupLine', 'group-chat-lines.ts:editSealedGroupLine'];
+        const own = SENDS.map((x) => x.fn).filter((fn) => !['postGroupChatPhoto', 'postGroupChatVoice', 'insertMessage'].includes(fn)).map((fn) => `db.ts:${fn}`);
+        expect([...new Set(found)].sort()).toEqual([...own, 'db.ts:_deliverPendingMessage', ...SEALED_ONLY].sort());
+        // Each readable one gets its address from the one last gate, and none reads the address in use itself.
+        const source = fs.readFileSync(path.join(native, 'utils', 'db.ts'), 'utf8');
+        const bodyOf = (fn: string) => { const at = source.search(new RegExp(`(async )?function ${fn}\\(`)); return source.slice(at, source.indexOf('\n}\n', at)); };
+        for (const fn of ['postGroupChatMessage', 'editThreadMessage', 'lockForConversation']) expect(bodyOf(fn), fn).toMatch(/await readableLineTo\(asked, /);
+        for (const fn of ['postEventChatMessage', 'postEnterpriseChatMessage', 'postEnterpriseThreadMessage']) expect(bodyOf(fn), fn).toMatch(/const to = await readableChatAddress\(.*\n    return _signedRequest\(.*, to\);$/m);
+        expect(source.match(/nonce: 'plaintext-v1'/g)?.length, 'the readable lines: lockForConversation, editThreadMessage').toBe(2);
+    });
+
+    it.each(SENDS.filter((x) => x.readable.length > 0).map((x) => [x.name, x] as const))('%s: its file\'s memory can\'t be read: refused, nothing goes', async (_n, send) => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        mark(A_FILE);
+        await db.getDb();
+        h.reads = { file: A_FILE, sql: /group_chat_key_state|group_chat_epochs/, times: 1_000, hang: false };
+        await expect(send.run()).rejects.toThrow();
+        h.reads = null;
+        expect(wordsOut()).toEqual(NOTHING);
+    });
+
+    it.each(SENDS.filter((x) => x.readable.length > 0).map((x) => [x.name, x] as const))('%s: seen locked this run with the mark refused: nothing goes until the file has the mark, and then nothing readable', async (_n, send) => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        servers[A].unlocked = false;
+        await db.getDb();
+        h.cut = { file: A_FILE, sql: /INTO group_chat_key_state/, times: 1_000, refuse: true, hit: () => {} };
+        await db.getGroupChat(g);
+        servers[A].unlocked = true;
+        expect(marked(A_FILE)).toBe(false);
+        await expect(send.run()).rejects.toMatchObject({ code: 'store' });
+        h.cut = null;
+        // SQLite takes it again: the send itself puts the mark before it is refused, so a restart knows it.
+        await expect(send.run()).rejects.toThrow(send.fn === 'editThreadMessage' ? GROUP_EDIT_NO_KEY_TEXT : GROUP_CHAT_LOCK_LOST_TEXT);
+        expect(marked(A_FILE)).toBe(true);
+        expect(wordsOut()).toEqual(NOTHING);
+    });
+
+    /** The phone set to another community as A's key memory is read for the send, or as A's own chat answer for it is on its way. */
+    const LEAVES = [['to B, whose file has no mark', async () => { await switchPhoneTo(B); }], ['to B and back', async () => { await switchPhoneTo(B); await switchPhoneTo(A); }]] as const;
+    it.each(SENDS.filter((x) => x.readable.length > 0).flatMap((x) => LEAVES.map(([to, go]) => [x.name, to, x, go] as const)))('%s, the phone switched mid-send %s: never to the other community, and not at all with A\'s file marked', async (_n, _to, send, go) => {
+        for (const marks of [[A_FILE], [B_FILE]]) {
+            await switchPhoneTo(A);
+            await neitherHolds();
+            for (const file of marks) mark(file);
+            await db.getDb();
+            let moving: Promise<void> | null = null;
+            h.reads = { file: A_FILE, sql: /FROM group_chat_key_state/, times: 1, hang: false, refuse: false, hit: () => { moving = go(); } };
+            await send.run().catch(() => null);
+            await moving;
+            await settle();
+            h.reads = null;
+            expect(moving, 'switched as the send asked').not.toBeNull();
+            expect([servers[B].wordsIn, servers[C].wordsIn]).toEqual([[], []]);
+            if (marks[0] === A_FILE) expect(servers[A].wordsIn).toEqual([]);
+        }
+    });
+
+    it.each([['a line', () => db.insertMessage(g, me.publicKey, WORDS)], ['an edit', () => db.editMessage(g, mine.id, WORDS)]] as const)('the DM screen, %s: A\'s own chat answer for it on its way, the phone set to B, which says it isn\'t locked: nothing goes to either', async (_n, run) => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        await db.getDb();
+        const chat = holdNext((m, p) => m === 'GET' && p === `/api/groups/${g}/chat`);
+        const sending = run().then(() => 'sent', () => 'refused');
+        await chat.asked;
+        await switchPhoneTo(B);
+        chat.letGo();
+        expect(await sending).toBe('refused');
+        await settle();
+        expect(wordsOut()).toEqual(NOTHING);
+    });
+
+    it.each(SENDS.filter((x) => x.readable.length > 0).map((x) => [x.name, x] as const))('%s: locked by an answer that lands as its last guard is asked: refused', async (_n, send) => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        await db.getDb();
+        // The DM guard's own read, the last before the mark: the answer lands there.
+        const ring = await db.groupKeyringFor(g);
+        h.reads = { file: A_FILE, sql: /FROM messages WHERE conversation_id IN/, times: 1_000, hang: false, refuse: false, hit: () => { (ring as any).sawLocked = true; } };
+        await expect(send.run()).rejects.toThrow();
+        h.reads = null;
+        expect(wordsOut()).toEqual(NOTHING);
+    });
+
+    it('what is said is true of a phone that only saw the chat locked, and of one that held its keys (R4)', async () => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        mark(A_FILE);
+        await db.getDb();
+        expect(await (await db.groupKeyringFor(g)).holdsKeys()).toBe(false);
+        const said: any = await db.postGroupChatMessage(g, WORDS, randomUUID()).then(() => null, (e) => e);
+        expect(said.message).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
+        expect(said.message).not.toMatch(/held its keys/);
+        expect(groupChatNotice({ nodeSaysLocked: false, seenLocked: true })).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
+        // And while nothing can be known of it: neither "locked" nor "older", and only then.
+        expect(groupChatNotice({ nodeSaysLocked: false, seenLocked: false, keysUnread: true })).toBe(GROUP_KEY_STORE_UNREAD_TEXT);
+        expect(groupChatNotice({ nodeSaysLocked: true, seenLocked: false, keysUnread: true })).not.toBe(GROUP_KEY_STORE_UNREAD_TEXT);
+    });
+});
+
+/** The functions of a source that name a chat line's route, as "file:function". */
+function sendersIn(file: string): string[] {
+    const text = fs.readFileSync(file, 'utf8');
+    if (!/\/(chat|thread)\/message|\/api\/messages\/(send|edit)/.test(text)) return [];
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+    const out: string[] = [];
+    (function walk(n: ts.Node, fn: string) {
+        let here = fn;
+        if (ts.isFunctionDeclaration(n) && n.name) here = n.name.text;
+        else if (ts.isVariableDeclaration(n) && n.initializer && ts.isArrowFunction(n.initializer)) here = n.name.getText(sf);
+        if ((ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n)) && /\/(chat|thread)\/message(`|'|"|\$|$)|\/api\/messages\/(send|edit)(`|'|"|$)/.test(n.getText(sf))) out.push(`${path.basename(file)}:${here}`);
+        ts.forEachChild(n, (c) => walk(c, here));
+    })(sf, '(top level)');
+    return out;
+}
+
+describe('the mark goes to the file of the community that answered, never to the one in use as the answer lands (R1)', () => {
+    const chatAsked = (m: string, p: string) => m === 'GET' && p === `/api/groups/${g}/chat`;
+    /** Every ask whose answer marks a chat locked: the chat's own read, and the phone's own ask when the keys are refused. */
+    const ASKS: Array<[string, (c?: string) => Promise<unknown>]> = [
+        ['the chat\'s answer (getGroupChat)', (c) => db.getGroupChat(g, undefined, undefined, c)],
+        ['a refused line\'s own ask (insertMessage)', () => db.insertMessage(g, me.publicKey, WORDS)],
+        ['a refused photo\'s own ask (postGroupChatPhoto)', () => db.postGroupChatPhoto(g, { dataUri: 'data:image/jpeg;base64,AAAA', caption: '' })],
+    ];
+    const MOVES: Array<[string, () => Promise<void>]> = [
+        ['nothing (the contrast)', async () => {}],
+        ['the phone set to B', async () => { await switchPhoneTo(B); }],
+        ['the phone set to C', async () => { await switchPhoneTo(C); }],
+        ['the phone set to B and back', async () => { await switchPhoneTo(B); await switchPhoneTo(A); }],
+    ];
+    it.each(ASKS.flatMap(([ask, run]) => MOVES.map(([move, go]) => [ask, move, run, go] as const)))('in use, %s x %s as the answer is on its way: A\'s file is marked, no other, and a restart gets nothing readable out', async (_a, _m, run, go) => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        servers[A].unlocked = false;
+        servers[A].noKeys = true;
+        await db.getDb();
+        const chat = holdNext(chatAsked);
+        const asking = run().then(() => null, (e) => e);
+        await chat.asked;
+        await go();
+        chat.letGo();
+        await asking;
+        await settle();
+        expect([marked(A_FILE), marked(B_FILE), marked(C_FILE)]).toEqual([true, false, false]);
+        expect(db.heldCopyFiles(), 'nothing left open').not.toContain(A_FILE);
+        // B never answered: its chat of that id is not locked here. A's is, after a restart too.
+        await restart(B);
+        expect(await db.isLockedGroupChat(g)).toBe(false);
+        await restart(A);
+        expect(await db.isLockedGroupChat(g)).toBe(true);
+        servers[A].unlocked = true;
+        for (const send of SENDS) await send.run().catch(() => null);
+        await settle();
+        expect(wordsOut()).toEqual(NOTHING);
+    });
+
+    it.each([
+        ['in place, the phone set to a third community', async () => { await switchPhoneTo(C); }],
+        ['in place, the phone set to that very community', async () => { await switchPhoneTo(A); }],
+    ] as const)('%s as the answer is on its way: its own file is marked, no other', async (_n, go) => {
+        await neitherHolds();
+        servers[A].unlocked = false;
+        await db.getDb();
+        db.enterChatInPlace(A);
+        const chat = holdNext(chatAsked);
+        const reading = db.getGroupChat(g, undefined, undefined, A).then(() => 'shown', () => 'refused');
+        await chat.asked;
+        await go();
+        chat.letGo();
+        expect(await reading).toBe('shown');
+        expect([marked(A_FILE), marked(B_FILE), marked(C_FILE)]).toEqual([true, false, false]);
+        await db.leaveChatInPlace(A);
+    });
+
+    it.each([
+        ['A taken off the phone', async () => { await switchPhoneTo(B); await removeSavedNode(A); await removeCommunityCaches([A]); }],
+        ['A kept only as a guest\'s look', async () => { h.store.set('beanpool_guest_nodes', JSON.stringify([A])); await switchPhoneTo(B); }],
+        ['another account signed in', async () => { h.me = { ...person() }; }],
+    ] as const)('%s as the answer is on its way: there is no file to keep it in, so the answer is refused, and nothing is marked anywhere', async (_n, go) => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        servers[A].unlocked = false;
+        await db.getDb();
+        const chat = holdNext(chatAsked);
+        const reading = db.getGroupChat(g).then(() => 'shown', () => 'refused');
+        await chat.asked;
+        await go();
+        chat.letGo();
+        expect(await reading).toBe('refused');
+        await settle();
+        for (const file of [A_FILE, B_FILE]) expect((rowsOf(file)?.group_chat_key_state ?? []) as any[]).toEqual([]);
+    });
+
+    it('the route: a chat only seen locked opens in its group\'s screen whatever its server calls it or a link says; the other community\'s mark moves nothing; a DM known there stays one (R2)', async () => {
+        const ASKS_HERE = { isHeldGroupChat: db.isHeldGroupChat, isLockedGroupChat: db.isLockedGroupChat, knownDmConversationId: db.knownDmConversationId, getConversationKind: db.getConversationKind };
+        for (const label of ['event_thread', 'enterprise_thread', 'group_thread', 'none'] as const) {
+            for (const link of [{}, { event: true }, { thread: 'enterprise' as const }, { thread: 'group' as const }]) {
+                await switchPhoneTo(A);
+                await neitherHolds(label);
+                mark(A_FILE);
+                await db.getDb();
+                expect(await routeChat(ASKS_HERE, g.toUpperCase(), link), `${label} ${JSON.stringify(link)}`).toEqual({ view: 'group', screenId: g });
+            }
+        }
+        await switchPhoneTo(A);
+        await neitherHolds('event_thread');
+        mark(B_FILE);
+        await db.getDb();
+        expect((await routeChat(ASKS_HERE, g, {})).view).toBe('event');
+        await neitherHolds('event_thread');
+        mark(A_FILE);
+        h.store.set(dmConversationsSeenStoreKey(me.publicKey, A_FILE), JSON.stringify([g]));
+        await db.getDb();
+        expect((await routeChat(ASKS_HERE, g, {})).view).toBe('dm');
+        // Its memory unreadable: never a screen that posts readable words without asking it.
+        h.store.delete(dmConversationsSeenStoreKey(me.publicKey, A_FILE));
+        forgetGroupKeys();
+        h.reads = { file: A_FILE, sql: /group_chat_key_state|group_chat_epochs/, times: 1_000, hang: false };
+        expect(['dm', 'group_thread']).toContain((await routeChat(ASKS_HERE, g, {})).view);
+        h.reads = null;
+    });
+});
+
+describe('the ring\'s first read is bounded, and one that never answers is taken as locked (R3)', () => {
+    const RingOver = async (over: Partial<ReturnType<typeof memoryGroupKeyStore>>) => {
+        const { GroupKeyring } = await import('../group-chat-keys');
+        return new GroupKeyring(g, A, { ...h.me } as any, { ...memoryGroupKeyStore(), ...over });
+    };
+    it('the mark alone, read from the file: the first ask of the ring says it (no read before it)', async () => {
+        const real = memoryGroupKeyStore();
+        await real.noteLocked(`${me.publicKey}/${g}`);
+        expect(await (await RingOver(real)).seenLocked()).toBe(true);
+        expect(await (await RingOver(real)).locksSends()).toBe(true);
+        expect(await (await RingOver(memoryGroupKeyStore())).seenLocked()).toBe(false);
+    });
+
+    it.each(['load', 'loadVerdicts', 'loadSigners'] as const)('%s never answers: every ask of the ring is refused in 15 s, the lock just seen holds at once, and the next ask reads again', async (which) => {
+        vi.useFakeTimers();
+        try {
+            const real = memoryGroupKeyStore();
+            let asks = 0;
+            const ring = await RingOver({ ...real, [which]: (id: string) => (++asks === 1 ? new Promise<never>(() => {}) : (real as any)[which](id)) });
+            const noting = ring.noteLocked().then(() => 'kept', (e) => e.code);
+            const sending = ring.locksSends().then(() => 'answered', (e) => e.code);
+            expect(await ring.seenLocked(), 'with the read still out').toBe(true);
+            await vi.advanceTimersByTimeAsync(14_900);
+            const early = await Promise.race([noting, Promise.resolve('waiting')]);
+            await vi.advanceTimersByTimeAsync(200);
+            expect([early, await noting, await sending]).toEqual(['waiting', 'store', 'store']);
+            expect(await ring.locksSends()).toBe(true);
+            expect((await real.load(`${me.publicKey}/${g}`)).locked).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a late read, after its time, takes nothing into memory', async () => {
+        vi.useFakeTimers();
+        try {
+            let late!: () => void;
+            const real = memoryGroupKeyStore();
+            let asks = 0;
+            const ring = await RingOver({ load: (id) => (++asks === 1 ? new Promise((r) => { late = () => r({ epochs: [], highest: 9, after: 9, locked: true }); }) : real.load(id)) });
+            const first = ring.seenLocked().then(() => 'answered', (e) => e.code);
+            await vi.advanceTimersByTimeAsync(15_100);
+            expect(await first).toBe('store');
+            late();
+            await vi.advanceTimersByTimeAsync(1);
+            expect([await ring.seenLocked(), await ring.highestEpoch()]).toEqual([false, 0]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('the chat\'s own answer comes, locked, with its key memory never answering; nothing readable goes; and the next answer marks the file', async () => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        servers[A].unlocked = false;
+        await db.getDb();
+        h.reads = { file: A_FILE, sql: /FROM group_chat_epochs/, times: 1, hang: true };
+        vi.useFakeTimers();
+        let got: any;
+        try {
+            const reading = db.getGroupChat(g).then((b) => { got = b; }, (e) => { got = e; });
+            await vi.advanceTimersByTimeAsync(16_000);
+            await reading;
+        } finally {
+            vi.useRealTimers();
+        }
+        expect(got?.encryption, String(got?.message)).toBeTruthy();
+        expect(marked(A_FILE)).toBe(false);
+        servers[A].unlocked = true;
+        await expect(db.postEventChatMessage(g, WORDS)).rejects.toThrow(GROUP_CHAT_LOCK_LOST_TEXT);
+        expect([marked(A_FILE), wordsOut()]).toEqual([true, NOTHING]);
     });
 });
 

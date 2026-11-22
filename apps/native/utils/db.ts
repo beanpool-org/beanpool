@@ -8345,7 +8345,7 @@ async function goesAsGroup(conversationId: string, here: ChatRequestCopy): Promi
  * the phone still has that community's file, whose own DM guard ({@link refuseReadableIntoDm}) and key memory let it
  * through: no DM known there, and never seen locked, whatever its server now calls the chat (GroupKeyring.locksSends). Else
  * it throws and nothing goes. Every readable line asks it: an old node's group post and edit, the DM screen's line and
- * edit, an event's and an enterprise's chat (the table: utils/__tests__/group-lock-sends-table.test.ts; second review of
+ * edit, an event's and an enterprise's chat (the table: utils/__tests__/group-in-place-table.test.ts; second review of
  * #3358, R1 and R2).
  */
 async function readableLineTo(asked: GroupContext, conversationId: string): Promise<string> {

@@ -301,7 +301,8 @@ export class GroupKeyring {
      * decision b; review of #3358, F1). What this run has seen is asked first: it waits for no read (R3).
      */
     async seenLocked(): Promise<boolean> {
-        return this.sawLocked || this.lockKept || this.holdsKeys();
+        if (this.sawLocked || this.lockKept) return true;
+        return (await this.holdsKeys()) || this.sawLocked || this.lockKept;
     }
 
     /**

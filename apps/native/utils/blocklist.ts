@@ -1053,6 +1053,27 @@ function waiting(until: number | undefined, now: number, most: number): boolean 
     return until !== undefined && now < until && until - now <= most;
 }
 
+/** Each person the phone has a stake in at a community with record `at`: on the member's list, changed by them, or put there. */
+function peopleAt(blocks: Blocks, at: BlocksAt): Set<string>[] {
+    return peopleOf([...blocks.list, ...Object.keys(blocks.changes.of), ...at.on, ...at.sent], blocks.chains);
+}
+
+/**
+ * The key of the next unblock a community with record `at` is owed, or null: a key this phone put on its list (`on`), or
+ * sent there with no answer back (`sent`), of a person the member no longer blocks, by the member's latest change of any of
+ * their keys ({@link derive}), skipping keys already `tried` this sync. What {@link nextChange} sends first, and what
+ * {@link blocksOwedAt} counts as owed beside an unanswered block: one rule, so the latest of a block and an unblock wins
+ * at each community, whichever round brings it there.
+ */
+function unblockDue(people: readonly Set<string>[], blocks: Blocks, at: BlocksAt, tried: ReadonlySet<string>): string | null {
+    for (const person of people) {
+        if (blocks.list.some(k => person.has(k))) continue;
+        const key = [...at.on, ...at.sent].find(k => person.has(k) && !tried.has(`unblock ${k}`));
+        if (key) return key;
+    }
+    return null;
+}
+
 /**
  * {@link planChange}'s plan for one community from `blocks` and its record `at`, which it brings up to date (waits that are
  * over go, a block about to go is written down as sent): `dirty` when it did.
@@ -1067,17 +1088,13 @@ function nextChange(owner: string, blocks: Blocks, at: BlocksAt, tried: Set<stri
         delete at.addsWaitUntil;
         dirty = true;
     }
-    const people = peopleOf([...blocks.list, ...Object.keys(blocks.changes.of), ...at.on, ...at.sent], blocks.chains);
+    const people = peopleAt(blocks, at);
     const blocked = (person: Set<string>) => blocks.list.some(k => person.has(k));
     let change: PlannedChange | null = null;
-    for (const person of people) {
-        if (blocked(person)) continue;
-        const key = [...at.on, ...at.sent].find(k => person.has(k) && !tried.has(`unblock ${k}`));
-        if (key) {
-            tried.add(`unblock ${key}`);
-            change = { path: BLOCKS_REMOVE_PATH, body: { targetPubkey: key }, keys: [key], adds: false };
-            break;
-        }
+    const unblock = unblockDue(people, blocks, at, tried);
+    if (unblock) {
+        tried.add(`unblock ${unblock}`);
+        change = { path: BLOCKS_REMOVE_PATH, body: { targetPubkey: unblock }, keys: [unblock], adds: false };
     }
     if (!change && at.addsWaitUntil === undefined) {
         const adds = people.filter(p => blocked(p) && !heldAt(at, p))
@@ -1456,18 +1473,27 @@ async function tellRecord(publicKey: string, community: string, heard: { keepsNo
 }
 
 /**
- * Whether a block went to `community` (a saved address: another community this phone holds, blocked at in place) and its answer
- * never came (no connection, a timeout, the minute's limit): the account's record there still has it as sent. The round of that
- * community's across mail sends it again ({@link syncBlocksAt}; utils/outside-chat-live.ts, #3310 r3 review F1), as soon as
- * that round runs, before the next of the rounds that reach every held community ({@link syncBlocks}). False on a guest's
- * look, with no account, or on any failure.
+ * Whether `community` (a saved address: another community this phone holds, carrying an across chat) is owed a change the
+ * phone tried and that never landed: a block that went there and whose answer never came (no connection, a timeout, the
+ * minute's limit), the account's record there still having it as sent; or an unblock, of a person this phone put on its
+ * list there whom the member has since unblocked, the unblock's own request at the tap not having reached it
+ * ({@link unblockDue}; triage 23 Nov item 43). The round of that community's across mail sends it ({@link syncBlocksAt};
+ * utils/outside-chat-live.ts, #3310 r3 review F1), signed for that community's name and on its own queue, as soon as that
+ * round runs, before the next of the rounds that reach every held community ({@link syncBlocks}); a community still waited
+ * for after a refusal is sent nothing even so (the sync's plan keeps its waits). False on a guest's look, with no account,
+ * or on any failure.
  */
 export async function blocksOwedAt(community: string): Promise<boolean> {
     try {
         const owner = await accountOnPhone();
         const at = owner ? await communityToSyncAt(community) : null;
         if (!owner || !at) return false;
-        return (await serially(() => recordOf(owner, at))).at.sent.length > 0;
+        return await serially(async () => {
+            const { at: record } = await recordOf(owner, at);
+            if (record.sent.length > 0) return true;
+            const blocks = await readBlocks(owner);
+            return unblockDue(peopleAt(blocks, record), blocks, record, new Set()) !== null;
+        });
     } catch {
         return false;
     }

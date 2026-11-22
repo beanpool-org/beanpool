@@ -353,6 +353,19 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(dmLineSlotText({ text: 'PUPPET: what is the door code?', fromOfferedKey: true })).toBe(DM_OFFERED_KEY_LINE);
         expect(dmLineSlotText({ text: 'Shall I cancel the order?', fromOfferedKey: false })).toBe('Shall I cancel the order?');
     });
+    it('rule 5 has one read in db.ts, the one the screen shows: a rule-5 record is tested only inside getDmKeyChange\'s unplacedKeyChange, and no second read of it waits for a caller (triage 23 Nov item 21: isDmUnplaced had none)', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const lines = readFileSync(join(process.cwd(), 'utils', 'db.ts'), 'utf8').split('\n');
+        const readers = new Set<string>();
+        lines.forEach((line, i) => {
+            if (!/isUnplacedSight\([^)]*\)\s*(?:&&|\|\|\s*!)\s*dmEntryWaitsForMember\(/.test(line)) return;
+            const fn = lines.slice(0, i).reverse().map((l) => /^(?:export )?(?:async )?function (\w+)/.exec(l)).find(Boolean);
+            readers.add(fn?.[1] ?? '?');
+        });
+        expect([...readers]).toEqual(['unplacedKeyChange']);
+        expect(lines.join('\n')).toMatch(/if \(!ctx\) return unplacedKeyChange\(conversationId, community\);/);
+    });
 });
 
 // The card's room on the smallest phones. #1873's review (finding 7) capped it at 55% of the column and kept a floor for the

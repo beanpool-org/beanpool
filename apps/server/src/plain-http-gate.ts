@@ -23,8 +23,11 @@
  *   - a web server or proxy of the operator's own in front (the operator manual, "Behind a web server or proxy of your
  *     own"), on the host or on a Docker network, that holds the certificate and passes requests on to this port: it too
  *     arrives from a private range, naming the community's own domain. Where it says the visitor's request came over
- *     https (X-Forwarded-Proto: https, or Forwarded: proto=https: Caddy and Traefik send it by themselves, nginx when told
- *     to), it is let through, else it would be sent round the same loop once this server got a certificate of its own.
+ *     https (X-Forwarded-Proto: https, which Caddy and Traefik send by themselves and nginx when told to; or, from a proxy
+ *     that sends no X-Forwarded-Proto at all, RFC 7239's Forwarded: proto=https), it is let through, else it would be sent
+ *     round the same loop once this server got a certificate of its own. X-Forwarded-Proto, when there is one, is the
+ *     answer: a Forwarded header beside it is never read, since Cloudflare passes a visitor's own Forwarded header on
+ *     untouched while it sets X-Forwarded-Proto itself (saysHttpsBefore).
  * A private-range source that names any other host and says nothing of https (a LAN member, another stack on
  * beanpool-shared, an IPv6 visitor that Docker's proxy hands on from the gateway) is redirected. A public source is always
  * redirected, whatever host or header it sends: what lets a private-range source through is a claim about the leg before
@@ -93,10 +96,17 @@ export function hallMayReach(req: PlainRequest): boolean {
     return lightsOutOn() || hallPathWhileOff(req.path);
 }
 
-/** Whether a proxy's headers say the request before it came over https: the first hop's X-Forwarded-Proto or proto=. */
+/**
+ * Whether a proxy's headers say the request before it came over https. When an X-Forwarded-Proto header is there, its first
+ * hop alone is the answer, and a Forwarded header beside it is never read: Cloudflare (and so our tunnel) and the proxies
+ * the operator manual names set X-Forwarded-Proto themselves, while a Forwarded header is passed on from the visitor as
+ * they wrote it, so `Forwarded: proto=https` must not overrule the proxy's own `X-Forwarded-Proto: http`. Only when no
+ * X-Forwarded-Proto came at all (an RFC 7239 proxy that sends Forwarded alone) is the first element's proto= read.
+ */
 export function saysHttpsBefore(req: Pick<PlainRequest, 'forwardedProto' | 'forwarded'>): boolean {
-    const xfp = (req.forwardedProto ?? '').split(',')[0].trim().toLowerCase();
-    if (xfp === 'https') return true;
+    if (req.forwardedProto !== undefined && req.forwardedProto.trim() !== '') {
+        return req.forwardedProto.split(',')[0].trim().toLowerCase() === 'https';
+    }
     const first = (req.forwarded ?? '').split(',')[0];
     return /(?:^|;)\s*proto\s*=\s*"?https"?\s*(?:;|$)/i.test(first);
 }

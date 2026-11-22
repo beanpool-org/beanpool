@@ -5,7 +5,7 @@
  * search. Against a node in memory; the real node is e2e/group-chat-check.mjs.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { forgetGroupKeys, groupKeyring, memoryGroupLockStore, type GroupLockStore } from './group-chat-keys';
+import { forgetGroupKeys, groupKeyring, memoryGroupLockStore, GROUP_KEY_STORE_UNREAD_TEXT, type GroupLockStore } from './group-chat-keys';
 import {
     groupChatSendPlan, groupChatNotice, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread, groupLineShown, getDecryptedGroupAttachment,
     GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_CHAT_UNREAD_TEXT,
@@ -57,9 +57,38 @@ describe('the sticky lock: whether anything readable may go', () => {
     });
 
     it("a held group the node refuses keys to: the removed-member words, or the lock-lost words when the chat says unlocked", () => {
-        expect(heldGroupRefusal(null, Object.assign(new Error('x'), { status: 404 }))).toBe(GROUP_CHAT_NOT_MEMBER_TEXT);
-        expect(heldGroupRefusal(locked)).toBe(GROUP_CHAT_NOT_MEMBER_TEXT);
-        expect(heldGroupRefusal(unlocked)).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
+        for (const seenHere of [true, false]) {
+            expect(heldGroupRefusal(null, Object.assign(new Error('x'), { status: 404 }), seenHere)).toBe(GROUP_CHAT_NOT_MEMBER_TEXT);
+            expect(heldGroupRefusal(locked, null, seenHere)).toBe(GROUP_CHAT_NOT_MEMBER_TEXT);
+        }
+        expect(heldGroupRefusal(unlocked, null, true)).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
+        // Sealed only because the record couldn't be read (#3362's review, W2): it says that, never "has seen it locked".
+        expect(heldGroupRefusal(unlocked, null, false)).toBe(GROUP_KEY_STORE_UNREAD_TEXT);
+    });
+
+    it('a send sealed on an unread record, to a node with no keys route: what the keyring has seen chooses the words (W2)', async () => {
+        const ana = person();
+        // The record reads for the keyring's own load, then not for the plan's fresh read: an intermittent store.
+        const inner = memoryGroupLockStore();
+        let loads = 0;
+        const flaky: GroupLockStore = { ...inner, load: async (k) => { loads += 1; if (loads === 2) throw new Error('IndexedDB would not answer'); return inner.load(k); } };
+        const node = fakeGroupNode(G, [ana.publicKey]);
+        node.lie = (_m, path) => (path.includes('/keys') ? new Response(JSON.stringify({ error: 'Not found' }), { status: 404 }) : undefined);
+        const ring = groupKeyring(node.as(ana.publicKey), ana, G, flaky);
+        expect(await ring.highestEpoch()).toBe(0);
+        expect(await groupChatSendPlan(ring, unlocked)).toEqual({ kind: 'seal' });
+        const err = await sendSealedGroupLine(node.as(ana.publicKey), ana, flaky, { groupId: G, text: 'hello', clientId: uuid() }).catch((e) => e);
+        expect(err?.status).toBe(404);
+        expect(ring.seenLockedInMemory()).toBe(false);
+        expect(heldGroupRefusal(unlocked, null, ring.seenLockedInMemory())).toBe(GROUP_KEY_STORE_UNREAD_TEXT);
+        // The same send where the record said locked: the lock-lost words are true, and stay.
+        forgetGroupKeys();
+        const held = memoryGroupLockStore();
+        await held.markLocked(`${ana.publicKey}/${G}`);
+        const seen = groupKeyring(node.as(ana.publicKey), ana, G, held);
+        expect(await groupChatSendPlan(seen, unlocked)).toEqual({ kind: 'seal' });
+        expect((await sendSealedGroupLine(node.as(ana.publicKey), ana, held, { groupId: G, text: 'hello', clientId: uuid() }).catch((e) => e))?.status).toBe(404);
+        expect(heldGroupRefusal(unlocked, null, seen.seenLockedInMemory())).toBe(GROUP_CHAT_LOCK_LOST_TEXT);
     });
 });
 

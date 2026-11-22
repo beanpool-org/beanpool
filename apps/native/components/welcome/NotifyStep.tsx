@@ -21,7 +21,8 @@
  * what went wrong in the words the way back and the owner's card show, and its one button tries the end again.
  */
 import React from 'react';
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NotifyJoinWords } from '@beanpool/core';
@@ -58,8 +59,10 @@ export function NotifyStep({ words, flow, wayBack, busy, onBack, onTurnOn, onLat
     const { colors, dark } = useOnboardingColors();
     const win = useWindowDimensions();
     const band = notifyBandFits(win);
+    // Below the status bar, as welcome.tsx's own steps: react-native's SafeAreaView pads iOS only.
+    const insets = useSafeAreaInsets();
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.surface.page }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.surface.page, paddingTop: Platform.OS === 'android' ? insets.top : 0 }]}>
             <StatusBar style={dark ? 'light' : 'dark'} />
             <ScrollView contentContainerStyle={styles.scroll}>
                 <StepBar step="notify" flow={flow} wayBack={wayBack} notify busy={busy} onBack={onBack} />

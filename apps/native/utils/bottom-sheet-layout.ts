@@ -15,6 +15,28 @@ export const SHEET_TOP_GAP = 16;
 /** Space under the footer's button, on top of the bottom inset (gesture bar or buttons). */
 export const SHEET_FOOTER_GAP = 16;
 
+/**
+ * A sheet that lists cards (components/MyDealsSheet.tsx): three quarters of the window, as it always was, but never shorter
+ * than this where the phone has it. Three quarters of a 320 × 569 dp phone left its list 148 dp, less than one card (walk 148).
+ */
+export const LIST_SHEET_SHARE = 0.75;
+export const LIST_SHEET_MIN = 560;
+/** Under the list: the navigation bar's own room, never less than the 40 it always had (the list's own end adds 24). */
+const LIST_SHEET_FOOT = 40;
+
+/**
+ * `sheetRoom`: the height the sheet is drawn in (the whole screen under an edge-to-edge Modal), navigation bar included.
+ */
+export function listSheetLayout(sheetRoom: number, insets: SheetInsets): { maxHeight: number; paddingBottom: number } {
+    const top = Math.max(0, insets.top || 0);
+    const bottom = Math.max(0, insets.bottom || 0);
+    const h = Math.max(0, sheetRoom || 0);
+    return {
+        maxHeight: Math.max(0, Math.max(h * LIST_SHEET_SHARE, Math.min(LIST_SHEET_MIN, h - top - SHEET_TOP_GAP))),
+        paddingBottom: Math.max(LIST_SHEET_FOOT, bottom),
+    };
+}
+
 export function bottomSheetLayout(windowHeight: number, insets: SheetInsets): { maxHeight: number; footerPaddingBottom: number } {
     const top = Math.max(0, insets.top || 0);
     const bottom = Math.max(0, insets.bottom || 0);

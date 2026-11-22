@@ -67,6 +67,7 @@ const review = vi.hoisted(() => ({ opened: 0, txIds: [] as string[] }));
 vi.mock('../../components/ReviewModal', () => ({ ReviewModal: ({ txId }: { txId: string }) => { review.opened++; review.txIds.push(txId); return createElement('div', { 'data-testid': 'review-modal' }); } }));
 // Light or dark: the two sets the phone has (docs/brand-colours.md).
 const theme = vi.hoisted(() => ({ dark: false }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 48, left: 0, right: 0 }) }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors: light, darkColors: dark } = await import('../../constants/colors');
     const colors = () => (theme.dark ? dark : light);

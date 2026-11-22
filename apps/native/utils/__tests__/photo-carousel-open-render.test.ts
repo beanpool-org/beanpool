@@ -46,7 +46,10 @@ vi.mock('../db', () => ({ deletePost: vi.fn(), reportAbuse: vi.fn(), createConve
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { publicKey: 'me-key' } }) }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
-    return { useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }) };
+    return {
+        useTheme: () => ({ theme: 'light', colors: lightColors }),
+        useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }),
+    };
 });
 vi.mock('../../components/EventCopyDoor', () => ({ EventCopyDoor: () => null }));
 vi.mock('../../components/PostTagChips', () => ({ PostTagChips: () => null }));

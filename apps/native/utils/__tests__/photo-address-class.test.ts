@@ -102,7 +102,7 @@ describe('a Learn or listing picture is asked of the community it came from', ()
             const props = home.match(new RegExp(`<${card}\\b[\\s\\S]*?/>`))?.[0] ?? '';
             expect(props, card).toMatch(/nodeUrl=\{answeredBy\}/);
         }
-        // The two that are no picture of a listing or a page: the directory's reads, and the welcome's faces.
+        // The two that draw no picture from it: each asks the community with it (a place to watch, the member's role).
         const rest = [...home.matchAll(/<(\w+)\b(?:(?!<\w)[\s\S])*?nodeUrl=\{url\}/g)].map((m) => m[1]);
         expect(rest.sort()).toEqual(['CommunityWelcomeCard', 'FindCommunityBody']);
     });

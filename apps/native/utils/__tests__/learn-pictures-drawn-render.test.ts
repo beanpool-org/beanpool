@@ -220,6 +220,7 @@ import { PulseKnowledgeCard } from '../../components/PulseKnowledgeCard';
 import PulseScreen from '../../app/(tabs)/pulse';
 import { LearnBody } from '../../components/home/LearnBody';
 import { readElsewhere } from '../market-fill';
+import { setCachedAnchorUrl } from '../node-post';
 import { readShopListingsForReader } from '../shopfront';
 import { syncedCursorKeyOf } from '../../services/pillar-sync';
 import { layOut } from './yoga-dom-layout';
@@ -594,6 +595,8 @@ const feedOf = (from: string, over: Record<string, unknown> = {}) => ({
     ],
     ...over,
 });
+/** What a feed's two cards ask: the Learn card's picture, and the creator's card's preview. */
+const cardsOf = (from: string) => [small(`${from}${pictureOf(from)}`), `${from}/api/pulse/items/${NAME[from]}item/thumbnail`];
 const draw = async (element: ReactElement) => { await show(element); };
 const listed = (rows: any[], from: string) => rows.filter((r) => [`${NAME[from]}listing`, `${NAME[from]}chat`, `${NAME[from]}deal`].includes(r.id));
 
@@ -604,6 +607,8 @@ interface Place {
     /** The addresses asked, whichever community the phone is on by then. */
     on: (from: string) => string[];
 }
+/** What was asked, whichever picture mounted first: each address once, in one order. */
+const once = (asked: string[]) => [...new Set(asked)].sort();
 const both = (from: string, v = 1) => [`${from}${pictureOf(from, 0, v)}`, `${from}${pictureOf(from, 1, v)}`];
 const photoOfListing = (from: string) => `${from}${pictureOf(from, 0, 1, 'listing')}`;
 const editing = (from: string) => { h.checks = true; h.params = { edit: `${NAME[from]}page` }; };
@@ -747,7 +752,7 @@ const PLACES: Place[] = [
             await draw(createElement(PulseScreen));
             return h.asked;
         },
-        on: (from) => [small(`${from}${pictureOf(from)}`), `${from}/api/pulse/items/${NAME[from]}item/thumbnail`],
+        on: (from) => cardsOf(from),
     },
     {
         place: "the Pulse's cards, a feed on its way (the phone moves while it answers)",
@@ -756,7 +761,7 @@ const PLACES: Place[] = [
             await draw(createElement(PulseScreen));
             return h.asked;
         },
-        on: (from) => [small(`${from}${pictureOf(from)}`), `${from}/api/pulse/items/${NAME[from]}item/thumbnail`],
+        on: (from) => cardsOf(from),
     },
     {
         place: "the Market's Learn line (it draws no picture)",
@@ -804,13 +809,14 @@ const PLACES: Place[] = [
 describe.each(PLACES.map((p) => [p.place, p] as const))('%s', (_place, { asks, on }) => {
     it.each([VALLEY, RIDGE])('from %s, the community in use: asked of it', async (from) => {
         h.anchor = from;
-        expect([...new Set(await asks(from, () => {}))]).toEqual(on(from));
+        expect(once(await asks(from, () => {}))).toEqual(once(on(from)));
     });
 
     it.each([VALLEY, RIDGE])('from %s, and the phone moves to the other: still asked of the one it came from, and nothing of it of the other', async (from) => {
         h.anchor = from;
-        const asked = [...new Set(await asks(from, () => { h.anchor = other(from); }))];
-        expect(asked).toEqual(on(from));
+        // As the phone's move does: the address changes, and the next read of it anywhere on the phone has the new one to hand.
+        const asked = once(await asks(from, () => { h.anchor = other(from); setCachedAnchorUrl(h.anchor); }));
+        expect(asked).toEqual(once(on(from)));
         expect(asked.filter((a) => !ownAddress(a) && !a.includes('/api/pulse/items/'))).toEqual([]);
         expect(asked.filter((a) => a.startsWith(other(from)))).toEqual([]);
     });
@@ -821,13 +827,13 @@ describe("the Pulse's tab, with two communities' items in it", () => {
         h.anchor = from;
         h.node = (p) => (p.startsWith('/api/pulse/feed') ? feedOf(h.anchor!) : {});
         await draw(createElement(PulseScreen));
-        expect(h.asked).toEqual([small(`${from}${pictureOf(from)}`), `${from}/api/pulse/items/${NAME[from]}item/thumbnail`]);
+        expect(once(h.asked)).toEqual(once(cardsOf(from)));
         h.asked.length = 0;
         const to = other(from);
         h.anchor = to;
         await act(async () => { await h.list.refresh!(); });
         await settle();
-        expect(h.asked).toEqual([small(`${to}${pictureOf(to)}`), `${to}/api/pulse/items/${NAME[to]}item/thumbnail`]);
+        expect(once(h.asked)).toEqual(once(cardsOf(to)));
     });
 
     it.each([VALLEY, RIDGE])('a refresh on its way after the phone moved from %s: the cards still on screen ask nothing new until it answers', async (from) => {
@@ -864,16 +870,13 @@ describe("the Pulse's tab, with two communities' items in it", () => {
         h.anchor = later;
         await act(async () => { await h.list.more!(); });
         await settle();
-        expect([...new Set(h.asked)]).toEqual([
-            small(`${from}${pictureOf(from)}`), `${from}/api/pulse/items/${NAME[from]}item/thumbnail`,
-            small(`${later}${pictureOf(later)}`), `${later}/api/pulse/items/${NAME[later]}item/thumbnail`,
-        ]);
+        expect(once(h.asked)).toEqual(once([...cardsOf(from), ...cardsOf(later)]));
     });
 
     it('a feed that names an address itself is not believed: the one asked is what its pictures are asked of', async () => {
         h.node = (p) => (p.startsWith('/api/pulse/feed') ? { ...feedOf(VALLEY), nodeUrl: RIDGE, items: feedOf(VALLEY).items.map((i) => ({ ...i, nodeUrl: RIDGE })) } : {});
         await draw(createElement(PulseScreen));
-        expect(h.asked).toEqual([small(`${VALLEY}${pictureOf(VALLEY)}`), `${VALLEY}/api/pulse/items/valleyitem/thumbnail`]);
+        expect(once(h.asked)).toEqual(once(cardsOf(VALLEY)));
     });
 
     it('so is a page: one that names an address itself is drawn from the one asked', async () => {

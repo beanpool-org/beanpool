@@ -13,7 +13,8 @@
  *   "the PWA holds keys in memory only and re-opens wraps on load"; it caches no messages).
  * - In IndexedDB, per identity and group (GroupLockStore): the highest epoch this browser has verified or made, which
  *   never falls, and whether it has seen the group locked (provenance §10 pick 1; the director's sticky lock). A read of
- *   that store that fails is never taken as "never seen": nothing is sealed or sent readable until it reads.
+ *   that store that fails is never taken as "never seen": nothing is sealed or sent readable until it reads. Nothing is
+ *   written to it once the account has left, in this tab or another, heard or not (GroupKeyring put; #3362's review, W1).
  * - In memory, for the page's life, whoever is signed in: the ids a node answered locked (answeredLocked). No ring's end
  *   takes one off, and a readable line asks it last of all (lib/group-hold.ts readableLineTo; #3358's review, S1 and R2).
  *
@@ -28,7 +29,7 @@ import {
     makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError,
     type GroupEpochProgress, type GroupEpochReason, type GroupEpochRecord, type GroupLineVerifyMemo, type GroupServedWrap,
 } from './group-chat-crypto';
-import { onAccountEpochEnd } from './account-epoch';
+import { accountEpochHolds, onAccountEpochEnd } from './account-epoch';
 
 /** Exact words the chat shows: the phone's (provenance §7 rule 2; epochs-over-time §1, §5), "phone" said as "browser". */
 export const GROUP_KEY_ROLLBACK_TEXT = 'This node is serving an older key than one this app already holds.';
@@ -264,7 +265,26 @@ export class GroupKeyring {
 
     /** Put the mark in the store if this page has seen the chat locked: again at each answer and send, for one it refused. */
     async keepMark(): Promise<void> {
-        if (this.made === timesForgotten && this.seenLockedInMemory()) await this.store.markLocked(this.storeKey).catch(() => { });
+        if (this.seenLockedInMemory()) await this.put();
+    }
+
+    /**
+     * True while the account this ring was made for is still signed in here: no Sign Out since, in this tab or another.
+     * Another tab's is asked of the storage every tab shares (accountEpochHolds), so one this page hasn't heard yet counts
+     * too (#3362's review, W1). Asked with nothing awaited between it and the write it guards.
+     */
+    private stillHere(): boolean {
+        return accountEpochHolds() && this.made === timesForgotten;
+    }
+
+    /**
+     * The one way this ring writes to the store: the highest epoch raised to `epoch`, or, with none, the mark alone. Nothing
+     * is written once the account has left (stillHere): a late answer never puts a row of it back. Never throws.
+     */
+    private async put(epoch?: number): Promise<void> {
+        if (!this.stillHere()) return;
+        const write = epoch === undefined ? this.store.markLocked(this.storeKey) : this.store.raiseHighest(this.storeKey, epoch);
+        await write.catch(() => { });
     }
 
     /** True if a record's maker is me or someone the screen shows as a member: only such a record raises the highest (finding 6). */
@@ -297,7 +317,7 @@ export class GroupKeyring {
     private async raise(epoch: number): Promise<void> {
         if (epoch > this.highest) this.highest = epoch;
         this.locked = true;
-        await this.store.raiseHighest(this.storeKey, epoch).catch(() => { });
+        await this.put(epoch);
     }
 
     /** The verify memo for this group's lines (core GroupLineVerifyMemo): memory only. */
@@ -492,7 +512,7 @@ export class GroupKeyring {
             this.keys.set(epoch, key);
             wrapOpenedThisSession = true;
             if (this.makerShown(held.record)) await this.raise(epoch);
-            else { this.locked = true; await this.store.markLocked(this.storeKey).catch(() => { }); }
+            else { this.locked = true; await this.put(); }
             return key;
         } catch (e) {
             if (!(e instanceof GroupKeyNotVerifiedError)) throw e;

@@ -2016,7 +2016,7 @@
   "Not confirmed\u0004chat line": "غير مؤكد",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "خادم هذا المجتمع قديم ويمكنه قراءة محادثة هذه المجموعة. سيتم قفلها بمجرد تحديث الخادم.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "تشفير تام بين الطرفين: أعضاء هذه المجموعة فقط يمكنهم قراءتها. يرى الخادم كاتب الرسالة، ووقتها، والإشارات، والرسائل المردود عليها، والتفاعلات.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "يفيد هذا الخادم الآن بأن هذه المحادثة ليست مقفلة. يحتفظ هذا الهاتف بمفاتيحها، لذا يظل يقفل كل رسالة، ولا يرسل أي شيء لا يمكنه قفله.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "يفيد هذا الخادم الآن بأن هذه المحادثة ليست مقفلة. لقد رآها هذا الهاتف مقفلة، لذا يظل يقفل كل رسالة، ولا يرسل أي شيء لا يمكنه قفله.",
   "Only members of this group can open its chat": "أعضاء هذه المجموعة فقط يمكنهم فتح محادثتها",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "يتعرف هذا الهاتف على هذه المحادثة كرسالة مباشرة، وليس كمحادثة جماعية. لم يُرسل أي شيء.",
   "This message's key isn't on this phone, so it can't be edited here.": "مفتاح هذه الرسالة ليس على هذا الهاتف، لذا لا يمكن تعديلها هنا.",

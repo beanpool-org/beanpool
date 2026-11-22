@@ -1591,7 +1591,7 @@
   "Not confirmed\u0004chat line": "미확인",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "이 커뮤니티의 노드가 이전 버전이어서 이 그룹의 대화를 읽을 수 있어요. 노드가 업데이트되면 암호화 잠금 처리돼요.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "종단 간 암호화됨: 이 그룹의 멤버만 읽을 수 있어요. 노드는 작성자, 시간, 멘션, 답장 대상, 반응만 볼 수 있어요.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "이 노드는 이제 이 대화가 잠겨 있지 않다고 응답해요. 이 휴대폰에는 키가 보관되어 있어서 모든 메시지를 계속 잠그며, 잠글 수 없는 메시지는 보내지 않아요.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "이 노드는 이제 이 대화가 잠겨 있지 않다고 응답해요. 이 휴대폰은 이 대화가 잠긴 것을 본 적이 있어서 모든 메시지를 계속 잠그며, 잠글 수 없는 메시지는 보내지 않아요.",
   "Only members of this group can open its chat": "이 그룹의 멤버만 대화를 열 수 있어요",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "이 휴대폰은 이 대화를 그룹 대화가 아닌 1:1 대화로 인식하고 있어요. 아무것도 전송되지 않았어요.",
   "This message's key isn't on this phone, so it can't be edited here.": "이 메시지의 키가 이 휴대폰에 없어서 여기서는 수정할 수 없어요.",

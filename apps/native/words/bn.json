@@ -1676,7 +1676,7 @@
   "Not confirmed\u0004chat line": "নিশ্চিত নয়",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "এই কমিউনিটির নোডটি পুরোনো এবং এই গ্রুপের চ্যাট পড়তে পারে। নোড আপডেট করা হলে এটি লক হয়ে যাবে।",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "এন্ড-টু-এন্ড এনক্রিপ্ট করা: কেবল এই গ্রুপের সদস্যরা এটি পড়তে পারেন। নোড কেবল দেখে কে লিখেছেন, কখন লিখেছেন, মেনশন, প্রতিটি লাইনে কী উত্তর দেওয়া হয়েছে এবং প্রতিক্রিয়া।",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "এই নোড এখন বলছে এই চ্যাটটি লক করা নেই। এই ফোনটি এর কি ধরে রেখেছে, তাই এটি এখনও প্রতিটি বার্তা লক করে এবং লক করতে পারে না এমন কিছু পাঠায় না।",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "এই নোড এখন বলছে এই চ্যাটটি লক করা নেই। এই ফোনটি এটিকে লক করা অবস্থায় দেখেছে, তাই এটি এখনও প্রতিটি বার্তা লক করে এবং লক করতে পারে না এমন কিছু পাঠায় না।",
   "Only members of this group can open its chat": "কেবল এই গ্রুপের সদস্যরা এর চ্যাট খুলতে পারবেন",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "এই ফোনটি এই বার্তালাপটিকে সরাসরি বার্তা হিসেবে চেনে, গ্রুপের চ্যাট হিসেবে নয়। কিছুই পাঠানো হয়নি।",
   "This message's key isn't on this phone, so it can't be edited here.": "এই বার্তার কি এই ফোনে নেই, তাই এটি এখানে সম্পাদনা করা যাবে না।",

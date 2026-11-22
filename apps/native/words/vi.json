@@ -1591,7 +1591,7 @@
   "Not confirmed\u0004chat line": "Chưa xác nhận",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "Máy chủ của cộng đồng này là phiên bản cũ hơn và có thể đọc được đoạn chat của nhóm này. Đoạn chat sẽ được khóa bảo mật sau khi máy chủ được cập nhật.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "Được mã hóa đầu cuối: chỉ thành viên của nhóm này mới có thể đọc. Máy chủ chỉ thấy người viết, thời gian, lượt nhắc, tin nhắn được trả lời và các lượt bày tỏ cảm xúc.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "Máy chủ hiện báo rằng cuộc trò chuyện này không được khóa. Điện thoại này đã lưu giữ các khóa, nên vẫn khóa bảo mật mọi tin nhắn và không gửi nội dung nào không thể khóa.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Máy chủ hiện báo rằng cuộc trò chuyện này không được khóa. Điện thoại này đã từng thấy nó được khóa, nên vẫn khóa bảo mật mọi tin nhắn và không gửi nội dung nào không thể khóa.",
   "Only members of this group can open its chat": "Chỉ thành viên của nhóm này mới có thể mở đoạn chat",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "Điện thoại này nhận biết cuộc trò chuyện này là tin nhắn trực tiếp, không phải chat nhóm. Không có gì được gửi.",
   "This message's key isn't on this phone, so it can't be edited here.": "Khóa của tin nhắn này không có trên điện thoại này, nên không thể chỉnh sửa tại đây.",

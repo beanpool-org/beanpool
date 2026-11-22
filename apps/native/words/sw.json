@@ -1676,7 +1676,7 @@
   "Not confirmed\u0004chat line": "Haijathibitishwa",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "Seva ya jumuiya hii ni ya zamani na inaweza kusoma gumzo la kikundi hiki. Litafungwa mara tu seva itakaposasishwa.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "Imesimbwa mwanzo hadi mwisho: wanachama wa kikundi hiki pekee ndio wanaoweza kuisoma. Seva inaona nani aliandika, lini, waliotajwa, kile ambacho kila mstari unajibu, na maitikio.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "Seva hii sasa inasema gumzo hili halijafungwa. Simu hii imeshikilia funguo zake, kwa hivyo bado inafunga kila ujumbe, na haitumi chochote ambacho haiwezi kukifunga.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Seva hii sasa inasema gumzo hili halijafungwa. Simu hii imeliona likiwa limefungwa, kwa hivyo bado inafunga kila ujumbe, na haitumi chochote ambacho haiwezi kukifunga.",
   "Only members of this group can open its chat": "Wanachama wa kikundi hiki pekee ndio wanaoweza kufungua gumzo lake",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "Simu hii inatambua mazungumzo haya kama ujumbe wa moja kwa moja, si gumzo la kikundi. Hakuna kilichotumwa.",
   "This message's key isn't on this phone, so it can't be edited here.": "Ufunguo wa ujumbe huu haupo kwenye simu hii, kwa hivyo hauwezi kuhaririwa hapa.",

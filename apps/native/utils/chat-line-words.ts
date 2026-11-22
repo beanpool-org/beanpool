@@ -44,7 +44,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     // utils/group-chat-lines.ts: the notice above a group chat's box, and why a line wasn't sent or changed.
     "This community's node is older and can read this group's chat. It will be locked once the node is updated.": word("This community's node is older and can read this group's chat. It will be locked once the node is updated."),
     "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": word("End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions."),
-    "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": word("This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock."),
+    "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": word("This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock."),
     'Only members of this group can open its chat': word('Only members of this group can open its chat'),
     "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": word("This phone knows this conversation as a direct message, not a group's chat. Nothing was sent."),
     "This message's key isn't on this phone, so it can't be edited here.": word("This message's key isn't on this phone, so it can't be edited here."),

@@ -61,17 +61,17 @@ export async function knownChatsWith(me: string, keys: readonly string[]): Promi
 }
 
 /**
- * Whether Message refuses this person (#3354 review), by any key `links` names them by: blocked anywhere the phone holds
- * (blocklist.ts blockedAnywhere: on this phone's list now, or on any community's own list as the phone last read it, a block
- * made in the web app or on another device). Someone blocked once and unblocked since is not: their chats show in Chat again,
- * and Message is the member's own step to them (only a quiet let in asks `once`, blocklist.ts neverLetInQuietly). Null when
- * the lists can't be read: nothing opens on a guess.
+ * Whether Message refuses this person (#3354 review), by any key `links` names them by: blocked on this phone's own list
+ * (the list Chat, the across list, the address card and Contacts read). A block seen only on another community's own list
+ * (a block made in that community's web app) does not refuse it: Marty, 22 Nov, keeping his S7 answer to question 2 (such a
+ * block stops the quiet Accept and hides the request card, nothing more), so Message and Chats never disagree. Someone
+ * blocked once and unblocked since is not refused either (only a quiet let in asks `once`). Null when the lists can't be
+ * read: nothing opens on a guess.
  */
 export async function blockedForMessage(me: string, keys: readonly string[]): Promise<boolean | null> {
     const { readBlockLists } = await import('./blocklist');
-    const { blockedAnywhere } = await import('./block-rules');
     const lists = await readBlockLists(me).catch(() => null);
-    return lists ? blockedAnywhere(lists, keys) : null;
+    return lists ? keys.some((k) => lists.onPhone.has(k)) : null;
 }
 
 /**

@@ -581,7 +581,8 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
     /**
      * Every path Message takes asks one block rule first (#3354 review: Message on a blocked contact in another community opened
      * their hidden chat across, composer and all): (path) x (blocked here / in another held community / unblocked since /
-     * none). Blocked anywhere the phone holds (blocklist.ts blockedAnywhere) is refused on every path in the same words, and
+     * none). Blocked on this phone's own list is refused on every path in the same words (a block seen only on another
+     * community's list is not: Marty 22 Nov, S7 Q2), and
      * nothing opens, starts or is made; unblocked since and none open what the path opens. Mutations (PR body): no block asked
      * -> the blocked rows open; the phone's list only (isUserBlocked) -> the "another held community" rows open; `once` asked
      * (neverLetInQuietly) -> the "unblocked since" rows are refused; existing chats from the raw stores, not Chat's list ->
@@ -592,7 +593,8 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         const REFUSED = [['Message', 'You have blocked this user. Messaging is disabled.']];
         const BLOCKS = [
             { name: 'blocked here', set: () => { mem.blocked = [ANA]; }, refused: true },
-            { name: 'blocked in another held community', set: () => { mem.seenThere = [ANA]; }, refused: true },
+            // Marty 22 Nov (S7 Q2 kept): a block seen only on another community's own list doesn't refuse Message, as Chats.
+            { name: 'blocked only on another community\'s own list', set: () => { mem.seenThere = [ANA]; }, refused: false },
             { name: 'unblocked since', set: () => { mem.once = [ANA]; }, refused: false },
             { name: 'none', set: () => {}, refused: false },
         ];

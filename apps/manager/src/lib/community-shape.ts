@@ -180,8 +180,8 @@ export const isCoreSetting = (k: string): k is CoreSettingKey => (CORE_SETTINGS 
 
 /**
  * Whether a change of `setting` (a shape setting, or a known-floor line `knownFloor.<part>`) to `to` is a Core change: the
- * server's rule, copied (apps/server config/core-settings.ts isCoreChange; community-shape.test.ts holds the two bodies
- * equal). Who can join is two things in one setting: the door (Core) and the pause (everyday). A change to a door other
+ * server's rule, copied (apps/server config/core-settings.ts isCoreChange; community-shape.core-change.test.ts holds the
+ * two bodies equal). Who can join is two things in one setting: the door (Core) and the pause (everyday). A change to a door other
  * than the one stored (`doorBefore`) is Core; pausing, and un-pausing to the door it had, are not.
  */
 export function isCoreChange(setting: string, to: string, doorBefore: string): boolean {

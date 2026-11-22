@@ -9,7 +9,9 @@
 // see. Capitals aside (a role named mid-sentence, "an **observer**", is the app's word in lower case), and without what
 // the app draws around a label (an emoji before it, an arrow after it: `👥 Chat groups`, `Manage ›`): the guide may
 // bold the words alone, as long as they are the app's words. Where one English word is several sentences in the
-// catalogs (a context: "Open" a vote, "Open" to anyone), any of their values passes.
+// catalogs (a context: "Open" a vote, "Open" to anyone), any of their values passes. Each English bold needs a bold of
+// its own on the translated line (pairBolds): two labels a language says with one word (vi Remove and Delete, "Xóa")
+// are bolded twice, so one right word cannot hide a wrong second one.
 //
 // The lines are paired by position: a translated page keeps the English page's lines, headings and list items one for
 // one (the drafting round, titles.mjs --draft-page, starts from the English body). Only pages at today's English (their

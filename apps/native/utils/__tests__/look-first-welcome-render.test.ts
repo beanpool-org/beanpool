@@ -484,7 +484,11 @@ describe('look before you join on a new phone (slice S12)', () => {
         lookedAround();
         params.now = { invite: 'MULL-1234', server: MULLUM };
         await mount();
-        expect(communityField()).toBe(MULLUM);
+        // The invite named it, so it isn't asked for (walk 148): where Join goes says which server is used.
+        expect(communityField()).toBeUndefined();
+        await type('Your name or nickname', 'Rowan');
+        await press('Join');
+        expect(store.map.get('beanpool_anchor_url')).toBe(MULLUM);
     });
 
     it('4b. a phone that looked around, a bare invite code: the community field is empty, as on a new phone, never the look\'s', async () => {

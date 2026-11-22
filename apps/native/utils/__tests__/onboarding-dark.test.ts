@@ -30,7 +30,7 @@ describe('onboarding screens follow dark mode', () => {
         expect(src).toMatch(/useOnboardingColors\(\)/);
         expect(src).not.toMatch(/import\s*\{[^}]*\bcolors\b[^}]*\}\s*from\s*'\.\.\/constants\/colors'/);
         // Every style sheet is built inside makeStyles(colors, dark), none at module level from the light colours.
-        const factory = src.search(/function makeStyles\(colors: AppColors(, dark: boolean)?\)/);
+        const factory = src.search(/function makeStyles\(colors: AppColors(, dark: boolean(, barTop: number, barBottom: number)?)?\)/);
         expect(factory).toBeGreaterThan(-1);
         expect(src.indexOf('StyleSheet.create(')).toBeGreaterThan(factory);
     });

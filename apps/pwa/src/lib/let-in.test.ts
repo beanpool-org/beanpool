@@ -14,6 +14,10 @@
  *   5  through the real round (lib/outside-mail.ts syncOutsideMail, core gateOutsideItem): a first line across from
  *      someone let in opens a chat with the door closed and is receipted now; a stranger is dropped; a block beats it;
  *      while a read failed, the line the door would drop waits at the server, unconfirmed, and the round goes on
+ *   6  how long a line waits (#3366 review N1): 10 / 49 / 50 / 120 lines waiting, then a line in a chat already open
+ *      behind them -> that line written in the same round, at most 25 waiting, the oldest dropped as before; a line waits
+ *      3 rounds a minute or more apart, or 30 minutes, whichever first, then is dropped as before; a read that mends
+ *      within that lets the friend's line in
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -21,7 +25,8 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX, ed25519Signer, relayConversationId, relayPayloadHash, sealOutsideLine, signRelayEnvelope, type RelayItem } from '@beanpool/core';
 import { MemoryIDBKeyRange, memoryIndexedDB } from './memory-indexeddb';
 
-const server = vi.hoisted(() => ({ held: [] as any[], receipts: [] as Array<{ to: string; ids: string[] }>, more: false, pages: 0 }));
+/** `page`: 0 serves every item held with `more` as set; a number serves the oldest that many unconfirmed and says whether more wait, as relay-mail.ts heldMailFor does. */
+const server = vi.hoisted(() => ({ held: [] as any[], receipts: [] as Array<{ to: string; ids: string[] }>, more: false, pages: 0, page: 0 }));
 
 vi.mock('./api', async (importOriginal) => {
     const core = await import('@beanpool/core');
@@ -34,7 +39,8 @@ vi.mock('./api', async (importOriginal) => {
         signedMailFetch: vi.fn(async (method: string, _community: string, path: string, body: any) => {
             if (method === 'GET') {
                 if (path.startsWith('/api/mail?')) server.pages++;
-                return new Response(JSON.stringify({ items: server.held, more: server.more, outbox: [], outboxMore: false }), { status: 200 });
+                const [items, more] = server.page ? [server.held.slice(0, server.page), server.held.length > server.page] : [server.held, server.more];
+                return new Response(JSON.stringify({ items, more, outbox: [], outboxMore: false }), { status: 200 });
             }
             if (path === '/api/mail/confirm') {
                 server.held = server.held.filter((h) => !body.ids.includes(h.envelope.itemId));
@@ -322,7 +328,7 @@ describe('through the real round: the web\'s across gate takes let in', () => {
     let blocked: Set<string>;
 
     beforeEach(async () => {
-        server.held = []; server.receipts = []; server.more = false; server.pages = 0;
+        server.held = []; server.receipts = []; server.more = false; server.pages = 0; server.page = 0;
         vi.stubGlobal('indexedDB', memoryIndexedDB());
         vi.stubGlobal('IDBKeyRange', MemoryIDBKeyRange);
         await clearOutsideChats();
@@ -394,11 +400,11 @@ describe('through the real round: the web\'s across gate takes let in', () => {
     const heldIds = () => server.held.map((h) => h.envelope.itemId);
     const receiptedTo = (key: string) => server.receipts.filter((r) => r.to === key).flatMap((r) => r.ids);
     const stateOf = async (c: OutsideMailContext, key: string) => (await c.store.chat(ME, relayConversationId(ME, key)))?.state ?? null;
-    async function roundWith(facts: Facts, broken: Partial<Record<ReadName, () => unknown>>, door = false) {
+    async function roundWith(facts: Facts, broken: Partial<Record<ReadName, () => unknown>>, door = false, now = Date.now()) {
         const c = contextLettingIn(facts, broken);
         await c.store.setMeta(ME, 'home', `b.example ${Date.now()} ${B}`);
         await setDoor(c, door);
-        return { c, out: await syncOutsideMail(c) };
+        return { c, out: await syncOutsideMail(c, now) };
     }
 
     const WAITS: Array<{ name: string; facts: Facts; broken: Partial<Record<ReadName, () => unknown>> }> = [
@@ -469,5 +475,93 @@ describe('through the real round: the web\'s across gate takes let in', () => {
         expect(server.pages).toBe(2);
         expect(out).toMatchObject({ waiting: 1, written: 1, confirmed: 1 });
         expect(heldIds()).toEqual([waits]);
+    });
+
+    // #3366 review N1: a line waits only so long, and never holds up what is behind it. My server serves the oldest 50
+    // unconfirmed (relay-mail.ts heldMailFor), so 50 lines left waiting would be every round's first page, and a line in a
+    // chat already open behind them would never be fetched. At most 25 wait at once, the oldest dropped as before; and each
+    // waits at most 3 rounds a minute or more apart, or 30 minutes, whichever first, kept in this browser's store.
+    const FRIEND: Facts = { friends: [{ publicKey: THEM }] };
+    const PAYMENTS_DOWN = { payments: () => status(503) };
+    const STRANGERS = Array.from({ length: 10 }, seedKey);
+    const MIN = 60_000;
+    const waitsKept = async (c: OutsideMailContext) => Object.keys(JSON.parse((await c.store.getMeta(ME, 'waiting')) ?? '{}'));
+    async function chatOpenWithThem() {
+        await heldLine(SOL);
+        const { c } = await roundWith(FRIEND, {});
+        expect(await stateOf(c, THEM)).toBe('open');
+        server.receipts = []; server.pages = 0;
+    }
+    /** The pages one round asks for: 50 at a time, 25 of them the lines still waiting from the page before. */
+    const PAGES: Record<number, number> = { 10: 1, 49: 1, 50: 2, 120: 4 };
+
+    for (const n of [10, 49, 50, 120]) {
+        const kept = Math.min(n, 25);
+        it(`${n} strangers' first lines waiting (the payments read a 503), then a line in a chat already open: written and receipted in the same round; ${kept} wait, ${n - kept} oldest dropped as before`, async () => {
+            server.page = 50;
+            await chatOpenWithThem();
+            const strangers: string[] = [];
+            for (let i = 0; i < n; i++) strangers.push(await heldLine(STRANGERS[i % STRANGERS.length]));
+            const theirs = await heldLine(SOL);
+            const { c, out } = await roundWith(FRIEND, PAYMENTS_DOWN);
+            expect(await c.store.hasLine(ME, relayConversationId(ME, THEM), theirs)).toBe(true);
+            expect(receiptedTo(THEM)).toEqual([theirs]);
+            expect(out).toMatchObject({ written: 1, waiting: kept, dropped: n - kept, confirmed: n - kept + 1 });
+            // The newest wait; the oldest were dropped and confirmed, as before the wait.
+            expect(heldIds()).toEqual(strangers.slice(n - kept));
+            expect((await waitsKept(c)).sort()).toEqual(strangers.slice(n - kept).sort());
+            expect(server.pages).toBe(PAGES[n]);
+        });
+    }
+
+    it('a line waits 3 rounds a minute or more apart; rounds closer than that count as one; at the next it is dropped and confirmed, as before', async () => {
+        const id = await heldLine(SOL);
+        const t0 = Date.now();
+        // Rounds every 10 s (Messages showing, chats opened): one round as far as the wait goes.
+        for (const at of [t0, t0 + 10_000, t0 + 20_000, t0 + 30_000, t0 + 40_000, t0 + 50_000, t0 + 1.02 * MIN, t0 + 2.04 * MIN]) {
+            const { out } = await roundWith(FRIEND, { friends: noAnswer }, false, at);
+            expect(out).toMatchObject({ waiting: 1, dropped: 0, confirmed: 0 });
+            expect(heldIds()).toEqual([id]);
+        }
+        const { c, out } = await roundWith(FRIEND, { friends: noAnswer }, false, t0 + 3.06 * MIN);
+        expect(out).toMatchObject({ waiting: 0, dropped: 1, confirmed: 1 });
+        expect(heldIds()).toEqual([]);
+        expect(await stateOf(c, THEM)).toBeNull();
+        expect(receiptedTo(THEM)).toEqual([]);
+        expect(await waitsKept(c)).toEqual([]);
+    });
+
+    it('a line waits 30 minutes at most, however few rounds: 29 minutes on it still waits; at 30 it is dropped and confirmed, as before', async () => {
+        const id = await heldLine(SOL);
+        const t0 = Date.now();
+        expect((await roundWith(FRIEND, { friends: noAnswer }, false, t0)).out).toMatchObject({ waiting: 1, dropped: 0 });
+        expect((await roundWith(FRIEND, { friends: noAnswer }, false, t0 + 29 * MIN)).out).toMatchObject({ waiting: 1, dropped: 0 });
+        expect(heldIds()).toEqual([id]);
+        const { c, out } = await roundWith(FRIEND, { friends: noAnswer }, false, t0 + 30 * MIN);
+        expect(out).toMatchObject({ waiting: 0, dropped: 1, confirmed: 1 });
+        expect(heldIds()).toEqual([]);
+        expect(await stateOf(c, THEM)).toBeNull();
+    });
+
+    it('this browser\'s clock moved back an hour: the wait is over, as at 30 minutes', async () => {
+        await heldLine(SOL);
+        const t0 = Date.now();
+        await roundWith(FRIEND, { friends: noAnswer }, false, t0);
+        const { out } = await roundWith(FRIEND, { friends: noAnswer }, false, t0 - 60 * MIN);
+        expect(out).toMatchObject({ waiting: 0, dropped: 1, confirmed: 1 });
+        expect(heldIds()).toEqual([]);
+    });
+
+    it('a read that mends within the bound lets the friend\'s line in: opened, confirmed and receipted at the third round, its wait forgotten', async () => {
+        const id = await heldLine(SOL);
+        const t0 = Date.now();
+        for (const at of [t0, t0 + 1.02 * MIN]) expect((await roundWith(FRIEND, { friends: () => status(429) }, false, at)).out).toMatchObject({ waiting: 1 });
+        expect(await waitsKept(contextLettingIn(FRIEND))).toEqual([id]);
+        const { c, out } = await roundWith(FRIEND, {}, false, t0 + 2.04 * MIN);
+        expect(out).toMatchObject({ waiting: 0, written: 1, dropped: 0, confirmed: 1 });
+        expect(await stateOf(c, THEM)).toBe('open');
+        expect(receiptedTo(THEM)).toEqual([id]);
+        expect(heldIds()).toEqual([]);
+        expect(await waitsKept(c)).toEqual([]);
     });
 });

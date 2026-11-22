@@ -65,6 +65,25 @@ export const DEVICE_META = 'device';
 const HOME_META = 'home';
 const HOME_FRESH_MS = 60 * 60_000;
 const PAGES_MAX = 10;
+/**
+ * How long a first line waits at my server while whether its sender was let in can't be read (#3366 review N1): at most
+ * WAIT_ROUNDS_MAX rounds, and at most WAIT_MS since this browser first left it, whichever comes first; then the door's rule
+ * meets it as before (not let in: dropped and confirmed). A round counts only WAIT_ROUND_GAP_MS or more after the last one
+ * that counted: rounds run every 15 s while Messages shows, and again at each chat opened, so three could pass in seconds.
+ */
+const WAIT_ROUNDS_MAX = 3;
+const WAIT_ROUND_GAP_MS = 60_000;
+const WAIT_MS = 30 * 60_000;
+/**
+ * At most this many lines wait at once, half a page of my server's mail (relay-mail.ts MAIL_FETCH_PAGE, 50): past it the
+ * oldest waiting are dropped as before, so a page with more behind it always confirms some, and the round reaches what is
+ * behind them (a line in a chat already open, a change, a blob) in the same round (#3366 review N1).
+ */
+const WAITING_MAX = 25;
+/** Where the waits are kept, per community and account, so a reload doesn't start them again. */
+const WAIT_META = 'waiting';
+/** A wait is kept no longer than my server keeps its item (relay-mail.ts MAIL_HELD_DAYS, 30), and a day. */
+const WAIT_KEPT_MS = 31 * 24 * 60 * 60_000;
 const RESEND_WITHIN_MS = 6 * 24 * 60 * 60_000;
 /** A receipt stays owed while its sender's server keeps its line's row (relay-outbox.ts OUTBOX_KEPT_MS). */
 const RECEIPT_KEPT_MS = 30 * 24 * 60 * 60_000;
@@ -87,8 +106,8 @@ export interface OutsideMailContext {
      * Whether the member let this sender in (let in once, S5 part 3: lib/let-in.ts letInOnWeb, core's rule over this
      * community's facts, a block first): their first line across, with no chat here, opens one, door open or not. One per
      * round, read at its first ask. Null: not known this round (a read it needs failed, and may pass later; never a
-     * refusal), so a first line the door would drop waits at my server, unconfirmed, for a later round (#3366 review F2).
-     * Left out: nobody is.
+     * refusal), so a first line the door would drop waits at my server, unconfirmed, for a later round (#3366 review F2),
+     * within its bound (WAIT_ROUNDS_MAX, WAIT_MS, WAITING_MAX: #3366 review N1). Left out: nobody is.
      */
     letIn?: (key: string) => Promise<boolean | null>;
     signal?: AbortSignal;
@@ -529,9 +548,37 @@ export async function failUnsent(ctx: Pick<OutsideMailContext, 'identity' | 'sto
 
 /**
  * `changes`: changes to lines (X6) applied here. `waiting`: first lines left at my server, unconfirmed, for a later round,
- * because whether their sender was let in could not be read this round.
+ * because whether their sender was let in could not be read this round (at most WAITING_MAX). A line that waited its
+ * bound, or was one too many to wait, is counted in `dropped`.
  */
 export interface SyncOutcome { written: number; changes: number; requests: number; dropped: number; confirmed: number; ticks: number; waiting: number }
+
+/** A first line's wait (#3366 review N1): when this browser first left it, how many rounds have counted, the last one's time. */
+interface Wait { since: number; rounds: number; last: number }
+
+/** The waits kept here, each still within my server's keeping; anything unreadable is no wait at all. */
+async function keptWaits(ctx: OutsideMailContext, now: number): Promise<Map<string, Wait>> {
+    const waits = new Map<string, Wait>();
+    let kept: unknown = null;
+    try { kept = JSON.parse((await ctx.store.getMeta(ctx.identity.publicKey, WAIT_META)) ?? 'null'); } catch { /* none */ }
+    if (!kept || typeof kept !== 'object') return waits;
+    for (const [id, w] of Object.entries(kept as Record<string, Partial<Wait> | null>)) {
+        const since = Number(w?.since), rounds = Number(w?.rounds), last = Number(w?.last);
+        if (Number.isFinite(since) && Number.isFinite(rounds) && Number.isFinite(last) && Math.abs(now - since) < WAIT_KEPT_MS) waits.set(id, { since, rounds, last });
+    }
+    return waits;
+}
+
+/**
+ * A line's wait after this round, or null once it has waited its bound: WAIT_ROUNDS_MAX rounds, each a WAIT_ROUND_GAP_MS
+ * or more after the last that counted, or WAIT_MS since it first waited, whichever first. Either way, should this browser's
+ * clock move back.
+ */
+function waitOn(kept: Wait | undefined, now: number): Wait | null {
+    if (!kept) return { since: now, rounds: 1, last: now };
+    const next = Math.abs(now - kept.last) >= WAIT_ROUND_GAP_MS ? { since: kept.since, rounds: kept.rounds + 1, last: now } : kept;
+    return next.rounds > WAIT_ROUNDS_MAX || Math.abs(now - kept.since) >= WAIT_MS ? null : next;
+}
 
 /**
  * One round: unsent lines sent again, then my items' ticks applied (every page of them first), then what waits for this
@@ -547,8 +594,11 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
     const device = await mailDevice(ctx);
     const tried = new Set<string>();
     const owe = (env: RelayEnvelope) => ctx.store.oweReceipt(me, { id: env.itemId, key: env.senderKey, home: env.senderHome }, now);
-    // The lines left at my server for a later round: each once, though a later page serves it again.
+    // The lines left at my server for a later round, oldest first: each once, though a later page serves it again. Each
+    // one's wait, kept here across rounds and reloads, bounds it (#3366 review N1).
     const waitingIds = new Set<string>();
+    const waits = await keptWaits(ctx, now);
+    let waitsKept = JSON.stringify(Object.fromEntries(waits));
     for (let page = 0; page < PAGES_MAX; page++) {
         const stop = stopOf(ctx);
         if (stop) throw stop;
@@ -569,7 +619,8 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         const requestsHere = requestsHereOfMail(answer);
         const done: string[] = [];
         let writeFailed = false;
-        let waited = false;
+        // This page's lines left waiting, in its order (oldest first).
+        const pageWaiting: string[] = [];
         for (const h of held) {
             const env = readRelayEnvelope(h?.envelope);
             if (!env) continue;
@@ -604,7 +655,16 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 if (verdict === 'drop') {
                     // Not known this round whether they were let in (a read that failed, never a refusal): the first line the
                     // door would drop is left at my server, unconfirmed, for a later round; the round goes on (#3366 review F2).
-                    if (letInSaid === null) { waitingIds.add(env.itemId); waited = true; continue; }
+                    // Only within its bound (#3366 review N1): once it has waited that long, it is dropped, as before.
+                    if (letInSaid === null) {
+                        const wait = waitingIds.has(env.itemId) ? waits.get(env.itemId) : waitOn(waits.get(env.itemId), now);
+                        if (wait) {
+                            waits.set(env.itemId, wait);
+                            waitingIds.add(env.itemId);
+                            pageWaiting.push(env.itemId);
+                            continue;
+                        }
+                    }
                     done.push(env.itemId); out.dropped++; continue;
                 }
                 if (verdict === 'change') {
@@ -647,11 +707,23 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 break;
             }
         }
+        // At most WAITING_MAX lines wait at once (#3366 review N1): past it, this page's oldest waiting are dropped as before.
+        // My server serves the oldest unconfirmed first, so a page with more behind it always confirms some, and the round
+        // goes on to the lines behind them.
+        for (let over = waitingIds.size - WAITING_MAX; over > 0 && pageWaiting.length; over--) {
+            const id = pageWaiting.shift()!;
+            waitingIds.delete(id);
+            done.push(id); out.dropped++;
+        }
         if (done.length) out.confirmed += Number((await post(ctx, '/api/mail/confirm', { ids: done, device }))?.confirmed) || 0;
+        // The waits as they stand after this page, kept before anything else can stop the round: a line confirmed waits no more.
+        for (const id of done) waits.delete(id);
+        const waitsNow = JSON.stringify(Object.fromEntries(waits));
+        if (waitsNow !== waitsKept) { await ctx.store.setMeta(me, WAIT_META, waitsNow); waitsKept = waitsNow; }
         // This page's receipts, and any an earlier round didn't get to post.
         await flushReceipts(ctx, now, tried);
         // A page that confirmed nothing, its lines left for a later round, would come again as it is: the round ends there.
-        if (writeFailed || !answer?.more || (waited && !done.length)) break;
+        if (writeFailed || !answer?.more || (pageWaiting.length && !done.length)) break;
     }
     out.waiting = waitingIds.size;
     return out;

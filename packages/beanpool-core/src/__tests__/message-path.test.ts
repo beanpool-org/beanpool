@@ -5,7 +5,7 @@
  * taken out in turn (mutants) and every one gets rows wrong.
  */
 import { describe, expect, it } from 'vitest';
-import { ACROSS_FIRST_LINE_NOTE, acrossFirstLineNoteUnder, messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '../message-path';
+import { ACROSS_FIRST_LINE_NOTE, acrossChatListed, acrossFirstLineNoteUnder, messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '../message-path';
 import { nodeHomeOf } from '../node-request-signing';
 
 const HERE = 'https://riverside.example';
@@ -109,6 +109,18 @@ describe('messagePathFor: which chat Message opens', () => {
             expect(ROWS.filter((r) => JSON.stringify(mutant(r.input)) !== JSON.stringify(r.want)).length).toBeGreaterThan(0);
         });
     }
+});
+
+// #3354 review, round 3: an across chat is the existing chat only while Chat lists it (open, or a request behind Requests);
+// a declined one is listed nowhere and its thread has no composer and no Accept. Both apps' readers ask this before the rule.
+describe('acrossChatListed: which chats across Message may open as the existing chat', () => {
+    it.each([
+        { state: 'open' as const, listed: true },
+        { state: 'request' as const, listed: true },
+        { state: 'declined' as const, listed: false },
+    ])('$state -> $listed', ({ state, listed }) => {
+        expect(acrossChatListed(state)).toBe(listed);
+    });
 });
 
 describe('the note under a first line across', () => {

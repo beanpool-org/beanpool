@@ -242,8 +242,30 @@ describe('Contacts on the web', () => {
         expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /Open faraway\.example/ })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Message' }));
-        expect(onMessageAcross).toHaveBeenCalledWith({ key: dee, community: 'https://faraway.example' }, 'Dée Walker');
+        expect(onMessageAcross).toHaveBeenCalledWith([{ key: dee, community: 'https://faraway.example' }], 'Dée Walker');
         expect(onMessage).not.toHaveBeenCalled();
+    });
+
+    // #3354 review, round 3: the block is asked by every key the contact's links name (as the phone asks), so Message hands
+    // on every link, the one the row shows first (a chat across is made from it). Mutation: only the shown link -> red.
+    it('a member linked in two other communities: Message hands on both links, the one shown first', async () => {
+        const dee = 'cd'.repeat(32);
+        const deeThere = 'ce'.repeat(32);
+        await changeContacts(me, (l) => putContact(l, {
+            id: newContactId(), name: 'Dée Walker', phones: [], emails: [], note: '', invite: null,
+            links: [
+                { key: dee, community: 'https://faraway.example', callsign: 'dee', how: 'profile', at: '2026-11-12T01:00:00.000Z' },
+                { key: deeThere, community: 'https://hillside.example', callsign: 'dee', how: 'profile', at: '2026-11-12T01:00:00.000Z' },
+            ],
+        }));
+        const onMessageAcross = vi.fn();
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} onMessageAcross={onMessageAcross} />);
+        expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Message' }));
+        expect(onMessageAcross).toHaveBeenCalledWith([
+            { key: dee, community: 'https://faraway.example' },
+            { key: deeThere, community: 'https://hillside.example' },
+        ], 'Dée Walker');
     });
 
     it('sign-out says when the community does not hold the latest copy yet, and Save now saves it', async () => {

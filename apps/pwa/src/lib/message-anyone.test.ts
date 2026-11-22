@@ -12,7 +12,7 @@ import { nodeHomeOf, relayConversationId } from '@beanpool/core';
 const ME = 'e5'.repeat(32);
 const web = vi.hoisted(() => ({
     here: 'https://riverside.example',
-    across: [] as Array<{ id: string; peerKey: string }>,
+    across: [] as Array<{ id: string; peerKey: string; state: 'open' | 'request' | 'declined' }>,
     noContext: false,
     outsideOn: true as boolean | null,
     // This community's list for the account (lib/blocklist.ts), whether it was read, whether a read fails, and the keys
@@ -55,6 +55,8 @@ vi.mock('./outside-mail', async (importOriginal) => {
 import { messageOnWeb, messagePathOnWeb, openAcrossOnWeb } from './message-anyone';
 
 const K = 'a1'.repeat(32);
+/** Their key in another community: a contact keeps one link a key. */
+const K2 = 'c3'.repeat(32);
 const FAR = 'https://faraway.example';
 const HELD_ON_PHONE = 'https://hillside.example';
 const BLOCKED_WORDS = 'You have blocked this user. Messaging is disabled.';
@@ -66,15 +68,15 @@ beforeEach(() => {
 
 describe('which chat Message opens on the web', () => {
     it.each([
-        { name: 'an across chat already here wins', links: [{ community: FAR, key: K, name: 'Dee' }], across: [{ id: 'x-1', peerKey: K }],
+        { name: 'an across chat already here wins', links: [{ community: FAR, key: K, name: 'Dee' }], across: [{ id: 'x-1', peerKey: K, state: 'open' as const }],
             want: { open: 'existing', chat: { kind: 'across', community: null, id: 'x-1', key: K } } },
-        { name: 'an across chat with someone else is not theirs', links: [{ community: FAR, key: K, name: 'Dee' }], across: [{ id: 'x-2', peerKey: 'b2'.repeat(32) }],
+        { name: 'an across chat with someone else is not theirs', links: [{ community: FAR, key: K, name: 'Dee' }], across: [{ id: 'x-2', peerKey: 'b2'.repeat(32), state: 'open' as const }],
             want: { open: 'across', key: K, home: nodeHomeOf(FAR), name: 'Dee' } },
         { name: 'this community, however spelled', links: [{ community: 'https://riverside.example/', key: K }], across: [],
             want: { open: 'shared', community: 'https://riverside.example', key: K } },
         { name: 'another community (one the phone may hold): across', links: [{ community: HELD_ON_PHONE, key: K, name: 'Dee' }], across: [],
             want: { open: 'across', key: K, home: nodeHomeOf(HELD_ON_PHONE), name: 'Dee' } },
-        { name: 'no account here: no across chats read, across from the link', links: [{ community: FAR, key: K }], across: [{ id: 'x-1', peerKey: K }], noContext: true,
+        { name: 'no account here: no across chats read, across from the link', links: [{ community: FAR, key: K }], across: [{ id: 'x-1', peerKey: K, state: 'open' as const }], noContext: true,
             want: { open: 'across', key: K, home: nodeHomeOf(FAR), name: null } },
     ])('$name', async ({ links, across, noContext, want }) => {
         web.across = across;
@@ -117,7 +119,7 @@ describe('one block rule on every path (MessagesPage messageAcross: lib/message-
         { name: 'none', set: () => {}, refused: false },
     ];
     const PATHS = [
-        { name: 'existing chat across', link: { key: K, community: FAR }, set: () => { web.across = [{ id: 'x-1', peerKey: K }]; }, want: { across: 'x-1' }, made: false },
+        { name: 'existing chat across', link: { key: K, community: FAR }, set: () => { web.across = [{ id: 'x-1', peerKey: K, state: 'open' }]; }, want: { across: 'x-1' }, made: false },
         { name: 'a new chat across', link: { key: K, community: FAR }, set: () => {}, want: { across: relayConversationId(ME, K) }, made: true },
         { name: 'this community (a chat here)', link: { key: K, community: 'https://riverside.example' }, set: () => {}, want: { dm: K }, made: false },
     ];
@@ -125,7 +127,7 @@ describe('one block rule on every path (MessagesPage messageAcross: lib/message-
     it.each(ROWS)('$row', async ({ link, set, want, made, block }) => {
         set();
         block.set();
-        const done = await messageOnWeb(link, 'Dee');
+        const done = await messageOnWeb([link], 'Dee');
         if (block.refused) {
             expect(done).toEqual({ refused: BLOCKED_WORDS });
             expect(web.opened).toEqual([]);
@@ -138,20 +140,68 @@ describe('one block rule on every path (MessagesPage messageAcross: lib/message-
     it('a list not read yet is read first: a block on it refuses', async () => {
         web.loaded = false;
         web.blocked = [K];
-        web.across = [{ id: 'x-1', peerKey: K }];
-        expect(await messageOnWeb({ key: K, community: FAR }, 'Dee')).toEqual({ refused: BLOCKED_WORDS });
+        web.across = [{ id: 'x-1', peerKey: K, state: 'open' }];
+        expect(await messageOnWeb([{ key: K, community: FAR }], 'Dee')).toEqual({ refused: BLOCKED_WORDS });
     });
 
     it('a list that cannot be read: nothing opens or is made, and it says so', async () => {
         web.loaded = false;
         web.readFails = true;
-        web.across = [{ id: 'x-1', peerKey: K }];
-        expect(await messageOnWeb({ key: K, community: FAR }, 'Dee')).toEqual({ refused: "Couldn't reach your community. Check your connection and try again." });
+        web.across = [{ id: 'x-1', peerKey: K, state: 'open' }];
+        expect(await messageOnWeb([{ key: K, community: FAR }], 'Dee')).toEqual({ refused: "Couldn't reach your community. Check your connection and try again." });
         expect(web.opened).toEqual([]);
     });
 
     it('a link to an address that is not a community\'s: says so, never a tap that does nothing', async () => {
-        expect(await messageOnWeb({ key: K, community: 'not an address' }, 'Dee')).toEqual({ refused: 'Please try again.' });
+        expect(await messageOnWeb([{ key: K, community: 'not an address' }], 'Dee')).toEqual({ refused: 'Please try again.' });
         expect(web.opened).toEqual([]);
+    });
+
+    /**
+     * The block is asked by every key the contact's links name, as the phone asks (#3354 review, round 3: the web asked the
+     * tapped link's key only). Mutation (PR body): messageOnWeb asking only links[0] -> the "another link's key" row opens.
+     */
+    it.each([
+        { name: "blocked by the tapped link's key", blocked: [K], refused: true },
+        { name: "blocked by another link's key (their key in a third community)", blocked: [K2], refused: true },
+        { name: 'neither key blocked', blocked: [] as string[], refused: false },
+    ])("every link's key: $name", async ({ blocked, refused }) => {
+        web.blocked = blocked;
+        const done = await messageOnWeb([{ key: K, community: FAR }, { key: K2, community: HELD_ON_PHONE }], 'Dee');
+        if (refused) {
+            expect(done).toEqual({ refused: BLOCKED_WORDS });
+            expect(web.opened).toEqual([]);
+        } else {
+            // Across from the tapped link (the first), never the other.
+            expect(done).toEqual({ across: relayConversationId(ME, K) });
+            expect(web.opened.map((o) => o.peer)).toEqual([{ key: K, home: nodeHomeOf(FAR), name: 'Dee' }]);
+        }
+    });
+});
+
+/**
+ * A chat across counts as the existing chat only while the chat list shows it (#3354 review, round 3: a declined one, which
+ * the list shows nowhere and whose thread has no composer and no Accept, was opened as "the existing chat"): (state: open /
+ * request / declined) x (path). Open and request open that chat; a declined one falls through: this community (a chat here),
+ * else across, which opens it again from the link (lib/outside-mail.ts openChatFromCard reopens a declined one, as the
+ * address card does). Mutation (PR body): messagePathOnWeb counting every state -> the declined rows open the dead thread.
+ */
+describe('a chat across, by its state: what Message opens on the web', () => {
+    const PATHS = [
+        { name: 'they are in another community', links: [{ key: K, community: FAR }], declined: { across: relayConversationId(ME, K) }, madeWhenDeclined: true },
+        { name: 'they are in this community, however spelled', links: [{ key: K, community: 'https://riverside.example/' }], declined: { dm: K }, madeWhenDeclined: false },
+        { name: 'another link of theirs names this community', links: [{ key: K2, community: FAR }, { key: K, community: 'https://riverside.example' }], declined: { dm: K }, madeWhenDeclined: false },
+    ];
+    const ROWS = PATHS.flatMap((path) => (['open', 'request', 'declined'] as const).map((state) => ({ ...path, state, row: `${path.name} x ${state}` })));
+    it.each(ROWS)('$row', async ({ links, declined, madeWhenDeclined, state }) => {
+        web.across = [{ id: 'x-1', peerKey: K, state }];
+        const done = await messageOnWeb(links, 'Dee');
+        if (state === 'declined') {
+            expect(done).toEqual(declined);
+            expect(web.opened.map((o) => o.peer.key)).toEqual(madeWhenDeclined ? [K] : []);
+        } else {
+            expect(done).toEqual({ across: 'x-1' });
+            expect(web.opened).toEqual([]);
+        }
     });
 });

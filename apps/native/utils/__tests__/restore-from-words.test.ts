@@ -38,6 +38,7 @@ vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => 
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { restoreFromWords, ReplaceNotSaved, saveRestoredAccount } from '../restore-account';
+import { accountStays } from '../account-leaving';
 import { UnsafeNodeAddressError } from '../node-url';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import {
@@ -233,6 +234,50 @@ describe('a 12-word restore onto a phone that holds another account', () => {
         await expect(restoreFromWords(WORDS, NODE, { nameOnNode: async () => 'Marty' })).rejects.toThrow(/different BeanPool account/);
 
         await expectPhoneKept();
+    });
+});
+
+describe('the account a Replace takes off the phone is leaving it until the restored key is over its own (account-leaving.ts; #3358 N1)', () => {
+    /** Whether an account is leaving as the old copies go, as the new address is written, and as the key is. */
+    function watched() {
+        const leaving: Record<string, boolean> = {};
+        vi.mocked(removeCommunityCaches).mockImplementationOnce(async () => { leaving.copies = !accountStays()(); });
+        vi.mocked(AsyncStorage.setItem).mockImplementation(async (key, value) => { if (key === ANCHOR) leaving.address = !accountStays()(); mem.async.set(key, value); });
+        vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => { if (key === 'sovereign-identity') leaving.key = !accountStays()(); mem.secure.set(key, value); });
+        return {
+            leaving,
+            done: () => {
+                vi.mocked(AsyncStorage.setItem).mockImplementation(async (key, value) => { mem.async.set(key, value); });
+                vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => { mem.secure.set(key, value); });
+            },
+        };
+    }
+
+    it('Replace: from the first thing taken to the key, and not after; what was asked before it is the old account\'s', async () => {
+        await phoneWithInviteJoin();
+        const askedBefore = accountStays();
+        const w = watched();
+        await restoreFromWords(WORDS, NODE, { confirmReplace: async () => true, nameOnNode: async () => 'Marty' });
+        w.done();
+        expect(w.leaving).toEqual({ copies: true, address: true, key: true });
+        expect([askedBefore(), accountStays()()]).toEqual([false, true]);
+    });
+
+    it('a Replace that can\'t be saved: no account is leaving once it has failed', async () => {
+        await phoneWithInviteJoin();
+        vi.mocked(SecureStore.setItemAsync).mockRejectedValueOnce(new Error('Keystore unavailable'));
+        await expect(restoreFromWords(WORDS, NODE, { confirmReplace: async () => true, nameOnNode: async () => 'Marty' })).rejects.toBeInstanceOf(ReplaceNotSaved);
+        expect(accountStays()()).toBe(true);
+    });
+
+    it('the same account restored: none leaves', async () => {
+        await importIdentity({ ...phone, publicKey: restoredPub, privateKey: (await mnemonicToKeypair(WORDS)).privateKeyHex });
+        const askedBefore = accountStays();
+        const w = watched();
+        await restoreFromWords(WORDS, NODE, { nameOnNode: async () => 'Marty' });
+        w.done();
+        expect(Object.values(w.leaving)).not.toContain(true);
+        expect(askedBefore()).toBe(true);
     });
 });
 

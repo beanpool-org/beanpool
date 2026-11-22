@@ -2132,6 +2132,12 @@ describe('a community followed to a new address: what this run saw locked goes w
         servers[A].unlocked = true;
         await everyReadable();
         expect([wordsOut(), markedIn(A_FILE)]).toEqual([NOTHING, true]);
+        // Set to that address some other time: nothing was followed there, so its file is owed no mark.
+        await switchPhoneTo(A2);
+        await db.getDb();
+        groupRow(A2_FILE, g);
+        await everyReadable();
+        expect([wordsOut(), markedIn(A2_FILE)]).toEqual([NOTHING, false]);
         await aRestartKnows(A);
     });
 

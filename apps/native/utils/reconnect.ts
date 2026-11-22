@@ -62,7 +62,7 @@ export async function switchPhoneTo(url: string, carryFrom?: string, held?: Comm
     let carried: CopyCarry | null = null;
     if (carryFrom) {
         const [{ carryCommunityCopy }, { whileCopyMoves }] = await Promise.all([import('./community-copy-carry'), import('./db')]);
-        carried = await whileCopyMoves(url, () => carryCommunityCopy(carryFrom, url, () => writeCommunityAddress(held, url)), carryFrom);
+        carried = await whileCopyMoves({ from: carryFrom, to: url }, () => carryCommunityCopy(carryFrom, url, () => writeCommunityAddress(held, url)));
     } else {
         await closeDB();
         await writeCommunityAddress(held, url);

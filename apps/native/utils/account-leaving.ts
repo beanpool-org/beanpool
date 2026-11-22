@@ -9,8 +9,12 @@
 let leaving = 0;
 let leaves = 0;
 
-/** `leave` takes an account off this phone: from this call, no await before it, until `leave` settles (the account gone, or the leave failed and it stays). */
-export async function whileAccountLeaves<T>(leave: () => Promise<T>): Promise<T> {
+/**
+ * `leave` takes an account off this phone: from this call, no await before it, until `leave` settles (the account gone, or the
+ * leave failed and it stays). `oneLeaves` false (a restore that replaces none): just `leave`.
+ */
+export async function whileAccountLeaves<T>(leave: () => Promise<T>, oneLeaves = true): Promise<T> {
+    if (!oneLeaves) return leave();
     leaves++;
     leaving++;
     try {

@@ -489,10 +489,10 @@ export async function signOutOfThisPhone(account: LeavingAccount | null, opts: {
         await clearDB({ identityLeaves: true });
         await releaseAccountFromPhone(account, AsyncStorage, { keepDmMemoryOf });
         await wipeIdentity();
+        // No community and no account on the phone now: the update screen's block, if one was up, comes down
+        // (utils/community-switch.ts).
+        communitySwitched();
     });
-    // No community and no account on the phone now: the update screen's block, if one was up, comes down
-    // (utils/community-switch.ts).
-    communitySwitched();
     // Sign Out ends once the forget has settled too: begun before the tables went, it is done or given up by now, or soon.
     await forgetting.done;
 }
@@ -511,6 +511,6 @@ export async function deleteAccountFromThisPhone(account: LeavingAccount | null)
         await clearDB({ identityLeaves: true });
         await removeEveryCommunityCopy(await communitiesOnThisPhone());
         await wipeIdentity();
+        communitySwitched();
     });
-    communitySwitched();
 }

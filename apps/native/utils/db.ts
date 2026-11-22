@@ -423,11 +423,12 @@ async function closeOpenCopy() {
  * Moves wait for each other on the lock. An open already on its way finishes first (untilNoOpenOnItsWay), and a copy a
  * swap left is closed with the copy open (closeOpenCopy).
  *
- * `from`: the address followed. Which of its groups' chats this run saw locked goes with its copy, still under the lock (max
- * review of #3358, T3); then the marks its file had refused, or never got, are put in `to`'s, so a restart knows them too. One
- * that won't go in is owed still: the next answer or send puts it.
+ * With `from`, the address followed: which of its groups' chats this run saw locked goes with its copy, still under the lock
+ * (max review of #3358, T3); then the marks its file had refused, or never got, are put in `to`'s, so a restart knows them too.
+ * One that won't go in is owed still: the next answer or send puts it.
  */
-export async function whileCopyMoves<T>(to: string, move: () => Promise<T>, from?: string): Promise<T> {
+export async function whileCopyMoves<T>(where: string | { from: string; to: string }, move: () => Promise<T>): Promise<T> {
+    const { from, to } = typeof where === 'string' ? { from: null, to: where } : where;
     const toFile = getDatabaseFilenameForNode(to);
     const fromFile = from ? getDatabaseFilenameForNode(from) : null;
     let done: T;

@@ -23,7 +23,7 @@ Per ora, l'unico posto da cui inviare una fattura è un invito: puoi aggiungere 
 ## Aggiungere una fattura a un invito
 
 - Apri **Inviti**: sul telefono, la persona con un più in alto a destra; nella web app, **Persone**, poi **Inviti**. Vedi "Entrare in BeanPool".
-- Sotto la nota (e sotto **Garantisci**, se garantisci per le persone), tocca **Aggiungi una fattura per questa persona (facoltativo)**. Si aprono due caselle: **A cosa serve?** e **Quanti fagioli?**
+- Sotto la nota (e sotto **Garantisci**, se garantisci per le persone), tocca **Aggiungi una richiesta di pagamento per questa persona (facoltativa)**. Si aprono due caselle: **A cosa serve?** e **Quanti fagioli?**
 - Sotto c'è scritto quanto riceveresti, ad esempio **Ricevi 59,10 di 60 fagioli: l'1,5% va alla comunità.**, e **La persona sceglie se pagare, una volta entrata. Non viene preso nulla da solo.**
 - Tocca **Genera biglietto** (nella web app, **Genera nuovo invito**). La fattura accompagna l'invito solo finché la sezione a comparsa è aperta: chiudila e l'invito parte senza fattura. Quello che hai scritto resta, nel caso la riaprissi.
 - Una fattura per invito. Una fattura non può andare su un biglietto creato senza connessione. Se non torna nessuna risposta, l'app dice che non si sa se l'invito sia stato creato, e **Riprova con la stessa fattura quando sei online: se è stato creato, riceverai quell'invito, non un secondo.**
@@ -31,7 +31,7 @@ Per ora, l'unico posto da cui inviare una fattura è un invito: puoi aggiungere 
 
 **Cosa vede la persona.** Quando condividi l'invito, il messaggio dice **Rob ti ha mandato anche una fattura da pagare in fagioli una volta dentro.** Non dice mai quanto. Entrare non mostra mai la fattura e non la aspetta mai: nulla nell'ingresso la chiede.
 
-**Finché nessuno ha usato l'invito.** In **In attesa**, l'invito dice **fattura da 60 fagioli**. Se lo revochi, l'app dice **Chi ha il link non può usarlo, e la fattura che lo accompagnava è ritirata.** Un invito che nessuno usa nei suoi 30 giorni scade, e la sua fattura scade con lui.
+**Finché nessuno ha usato l'invito.** In **In attesa**, l'invito dice **richiesta di 60 fagioli**. Se lo revochi, l'app dice **Chi ha il link non potrà usarlo, e la richiesta di pagamento che lo accompagnava viene ritirata.** Un invito che nessuno usa nei suoi 30 giorni scade, e la sua fattura scade con lui.
 
 **Quando la persona entra.** La fattura diventa sua dal momento in cui entra con quell'invito, e aspetta 30 giorni da quel giorno. Una garanzia sullo stesso invito le dà credito, ma non può pagare la tua fattura: una prima fattura tua può essere pagata solo con fagioli che la persona possiede, finché voi due non avete concluso un accordo (vedi sotto).
 
@@ -67,7 +67,7 @@ Se tre membri diversi segnalano le fatture di una persona entro 7 giorni, le sue
 ## Da sapere
 
 - **Imprese.** Un'impresa non può ancora pagare fatture, quindi nessuno può inviargliene una.
-- **Dove ci sono le fatture.** Le fatture hanno bisogno dei fagioli. La comunità globale e una comunità senza fagioli non hanno fatture, e **Aggiungi una fattura per questa persona** non compare.
+- **Dove ci sono le fatture.** Le fatture hanno bisogno dei fagioli. La comunità globale e una comunità senza fagioli non hanno fatture, e **Aggiungi una richiesta di pagamento per questa persona** non compare.
 
 ## Prossimamente
 

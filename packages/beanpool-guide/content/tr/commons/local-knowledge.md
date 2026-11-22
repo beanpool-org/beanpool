@@ -72,7 +72,7 @@ Bekleyen bir şeyiniz olduğunda Öğren, **1 önerinizi bir yönetici bekliyor 
 
 ## Bir şey mi değişti?
 
-Herhangi bir sayfada **Bir şey mi değişti? Düzeltme öner**'e dokunun. **Ne değişti?** altında şimdi neyin farklı olduğunu yazın, örneğin "Döküm alanı Mart'tan beri pazartesileri kapalı", isterseniz sözcükleri değiştirin, ya da yalnızca notu gönderin. Bir sahip ya da yönetici önce kontrol eder: o zamana kadar sayfa olduğu gibi kalır. Her sayfa için bekleyen bir düzeltmeniz olabilir. Cevabı **Düzeltmeniz yapıldı** ya da **Düzeltmeniz kullanılmadı** olarak alırsınız.
+Herhangi bir sayfada **Bir şey mi değişti? Düzeltme öner**'e dokunun. **Ne değişti?** altında şimdi neyin farklı olduğunu yazın, örneğin "Döküm alanı Mart'tan beri pazartesileri kapalı", isterseniz sözcükleri değiştirin, ya da yalnızca notu gönderin. Bir sahip ya da yönetici önce kontrol eder: o zamana kadar sayfa olduğu gibi kalır. Her sayfa için bekleyen bir düzeltmeniz olabilir. Cevabı **Düzeltmen yayında** ya da **Düzeltmen kullanılmadı** olarak alırsınız.
 
 Sayfanın yazarı da **Güncel değil olarak işaretle**'ye dokunup nedenini söyleyebilir. Bu, bir sahip ya da yönetici işareti kaldırana kadar sayfaya kehribar kutuyu koyar.
 

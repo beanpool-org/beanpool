@@ -193,7 +193,7 @@ describe('the screens\' wiring', () => {
      * chat that community's copy or list holds draws the group's screen in place the same way, its id as the node makes it
      * (screenIdOf), never the link's spelling.
      */
-    const IN_PLACE_BRANCH = "if (id && placedNow?.open === 'in-place') return <ChatScreen id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;";
+    const IN_PLACE_BRANCH = "if (id && placedNow?.open === 'in-place') return <ChatScreen key={placedNow.community + ' ' + id} id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;";
     const IN_PLACE_GROUP_BRANCH = "if (id && placedNow?.open === 'in-place' && placedNow.kind === 'group') return <GroupChatView kind=\"group\" id={screenIdOf(String(id))} initialName={name} inPlace={{ community: placedNow.community, name: placedNow.name }} />;";
     const NOT_IN_PLACE_BRANCH = "if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;";
     const WAITS_FOR_THE_ANSWER = 'if (id && community && !placedNow) return null;';
@@ -211,7 +211,8 @@ describe('the screens\' wiring', () => {
     });
 
     it('the DM screen gets routeChat\'s id too, and never reads the link\'s spelling itself; in place, only with its community, before routeChat is asked', () => {
-        expect(chatRoute).toMatch(/return <ChatScreen id=\{screenId\} \/>;/);
+        // Keyed by its chat (slice S6c: one screen per chat and community, so no deal of one shows under another's name).
+        expect(chatRoute).toMatch(/return <ChatScreen key=\{screenId\} id=\{screenId\} \/>;/);
         // Named with a community: nothing draws until chatInPlaceRoute has answered for this id and community; in place, or
         // opening nothing, before any route answer; routeChat asked only for the ordinary route (no community, or the one in use).
         const routeNull = chatRoute.indexOf('if (!id || !route || route.for !== String(id)) return null;');

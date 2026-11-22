@@ -34,6 +34,7 @@ import ts from 'typescript';
 const DB_TS = path.join(__dirname, '..', 'db.ts');
 const CHAT_TSX = path.join(__dirname, '..', '..', 'app', 'chat', '[id].tsx');
 const GROUP_TSX = path.join(__dirname, '..', '..', 'components', 'GroupChatView.tsx');
+const REVIEW_TSX = path.join(__dirname, '..', '..', 'components', 'ReviewModal.tsx');
 const KEY_CODE_TSX = path.join(__dirname, '..', '..', 'app', 'chat', 'key-code.tsx');
 
 /** The in-place set (slice S2): every function of utils/db.ts that takes a community. */
@@ -55,6 +56,9 @@ const IN_PLACE = [
     'nodeChatAnswer', 'nodeChatIsUnlocked', 'editRefusal', 'getGroupChat', 'fetchGroupDetails', 'postGroupChatMessage',
     'editThreadMessage', 'removeGroupChatMessage', 'reportGroupChatLine', 'getDecryptedGroupPhoto', 'getDecryptedGroupVoice',
     'leaveGroupApi', 'markThreadReadOnNode', 'noteGroupLocked',
+    // Slice S6c, deals in place: what a deal is read by, and every step on one (its money steps, a standing deal's, its rating).
+    'getDealsBetween', 'syncDealsBetween', 'dealStep', 'standingDealStep', 'completeMarketplaceTransaction', 'cancelMarketplaceTransaction',
+    'stopStandingDeal', 'lowerStandingPeriod', 'answerStandingAsk', 'withdrawStandingAsk', 'submitRating',
 ].sort();
 /** A function the DM screen may call with no `at`: it reads neither a copy nor a server (this run's memory, by the chat's id). */
 const NO_COPY = new Set(['getKnownChatMute']);
@@ -255,7 +259,46 @@ describe('slice S2: every in-place read and write takes its community by name', 
         expect(screenHolesIn(source, takesAtOf(dbSource))).toEqual([]);
         // Not vacuous: the screen makes in-place calls, and calls some that aren't.
         expect((source.match(/, at\)/g) ?? []).length).toBeGreaterThan(10);
-        expect(source).toMatch(/getDealsBetween\(/);
+        for (const not of ['sendImageMessage(', 'sendVoiceMessage(', 'getDb(']) expect(source, not).toContain(not);
+    });
+
+    it('the DM screen asks every step on a deal of the chat\'s own community, and holds that chat until it settles (slice S6c)', () => {
+        const source = fs.readFileSync(CHAT_TSX, 'utf8');
+        // Every one under whileChatInPlace(at, …): a step begun as the chat is left finishes in its own community or says it didn't.
+        for (const step of ['completeMarketplaceTransaction', 'cancelMarketplaceTransaction', 'stopStandingDeal']) {
+            const calls = source.split(`${step}(`).length - 1;
+            expect(calls, step).toBeGreaterThan(0);
+            expect(source.split(`whileChatInPlace(at, () => ${step}(`).length - 1, step).toBe(calls);
+        }
+        const lower = source.slice(source.indexOf('const lowerThere = async'), source.indexOf('const movingThere ='));
+        expect(lower).toContain('await whileChatInPlace(at, async () => {');
+        for (const step of ['lowerStandingPeriod(', 'answerStandingAsk(', 'withdrawStandingAsk(']) {
+            expect(lower.split(step).length - 1, step).toBe(1);
+            expect(source.split(step).length - 1, step).toBe(1);
+        }
+        // A dropped `at` is seen, on each of them (mutation, on the real screen).
+        for (const [call, dropped] of [
+            ['completeMarketplaceTransaction(pendingTx.id, identity.publicKey, undefined, at)', 'completeMarketplaceTransaction(pendingTx.id, identity.publicKey)'],
+            ['completeMarketplaceTransaction(txId, identity.publicKey, undefined, at)', 'completeMarketplaceTransaction(txId, identity.publicKey)'],
+            ['cancelMarketplaceTransaction(pendingTx.id, identity.publicKey, at)', 'cancelMarketplaceTransaction(pendingTx.id, identity.publicKey)'],
+            ['cancelMarketplaceTransaction(txId, identity.publicKey, at)', 'cancelMarketplaceTransaction(txId, identity.publicKey)'],
+            ['stopStandingDeal(standingId, myKey, at)', 'stopStandingDeal(standingId, myKey)'],
+            ['step.beans_c, myKey, at)', 'step.beans_c, myKey)'],
+            ['step.yes, myKey, at)', 'step.yes, myKey)'],
+            ['step.changeId, myKey, at)', 'step.changeId, myKey)'],
+            ['getDealsBetween(identity.publicKey, peerPubkey, at)', 'getDealsBetween(identity.publicKey, peerPubkey)'],
+            ['syncDealsBetween(me, peerPubkey, at)', 'syncDealsBetween(me, peerPubkey)'],
+        ]) {
+            expect(source.split(call).length - 1, call).toBe(1);
+            expect(screenHolesIn(source.replace(call, dropped), takesAtOf(dbSource)).length, call).toBe(1);
+        }
+        // Its rating's own window: the same community, held the same way, and nothing read of the one in use.
+        expect(source).toMatch(/<ReviewModal[\s\S]{0,400}community=\{at\}/);
+        const review = fs.readFileSync(REVIEW_TSX, 'utf8');
+        expect(review).toContain('await whileChatInPlace(community, () => submitRating(identity.publicKey, targetPubkey, stars, comment, txId, community));');
+        expect(review.split('submitRating(').length - 1).toBe(1);
+        expect(review).toMatch(/if \(visible && txId && identity\?\.publicKey && !community\) \{\s*\(async \(\) => \{\s*try \{\s*const db = await getDb\(\);/);
+        expect(review.split('getDb()').length - 1).toBe(1);
     });
 
     it('the group screen hands `at` to every in-place call, keeps every other behind it, and holds its sends (rule 11b)', () => {

@@ -1701,7 +1701,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     function saidGroupRefusal(e: unknown, convId: string, chat: GroupChatAnswer | null, chatErr: unknown): boolean {
         if (e instanceof GroupChatKeyError) { sayRefusal(convId, e.message); return true; }
         // The node refuses this member the keys (a removal, or a node that won't say): nothing readable went.
-        if (e instanceof GroupKeysRequestError && (e.status === 403 || e.status === 404)) { sayRefusal(convId, heldGroupRefusal(chat, chatErr)); return true; }
+        if (e instanceof GroupKeysRequestError && (e.status === 403 || e.status === 404)) { sayRefusal(convId, heldGroupRefusal(chat, chatErr, groupRing(convId).seenLockedInMemory())); return true; }
         if (e instanceof GroupKeysRequestError) { sayRefusal(convId, e.message); return true; }
         return false;
     }

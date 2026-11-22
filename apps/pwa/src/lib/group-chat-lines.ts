@@ -120,10 +120,13 @@ export async function groupChatSendPlan(ring: GroupKeyring, chat: unknown, chatE
 
 /**
  * The sentence for a held group the node refuses keys to: "Only members…" unless the chat answer just read is an
- * unlocked 200 (then the lock-lost sentence). The node can always deny a member the chat; nothing readable goes either way.
+ * unlocked 200. Then the lock-lost sentence only when this page has seen the chat locked (`seenHere`: the keyring's
+ * seenLockedInMemory, its record as read included); a send sealed only because the record couldn't be read says that,
+ * never "has seen it locked" (#3362's review, W2; as groupChatNotice's `lockUnread`). The node can always deny a member
+ * the chat; nothing readable goes either way.
  */
-export function heldGroupRefusal(chat: unknown, chatError?: unknown): string {
-    if (!chatError && chat && typeof chat === 'object' && !chatIsLocked(chat)) return GROUP_CHAT_LOCK_LOST_TEXT;
+export function heldGroupRefusal(chat: unknown, chatError: unknown, seenHere: boolean): string {
+    if (!chatError && chat && typeof chat === 'object' && !chatIsLocked(chat)) return seenHere ? GROUP_CHAT_LOCK_LOST_TEXT : GROUP_KEY_STORE_UNREAD_TEXT;
     return GROUP_CHAT_NOT_MEMBER_TEXT;
 }
 

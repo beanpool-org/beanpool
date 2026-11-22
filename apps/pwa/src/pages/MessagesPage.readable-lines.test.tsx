@@ -16,6 +16,9 @@ import { GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_OLD_NODE_NOTICE } from '../lib/gr
 import { GROUP_HOLD_EVENT_TEXT, readableLineTo } from '../lib/group-hold';
 import { fakeGroupNode, person, type FakeGroupNode } from '../lib/group-chat-fake-node.test-support';
 import { resetPendingChatLinesForTest } from '../lib/pending-chat-lines';
+import { makeEpochRecord } from '../lib/group-chat-crypto';
+import { resetAccountEpochForTest } from '../lib/account-epoch';
+import { epochEndsInAnotherTab } from '../lib/another-tab';
 
 if (typeof window !== 'undefined' && window.HTMLElement) window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -97,6 +100,8 @@ function browserStorage() {
 beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // A row's Sign Out in another tab ends this page's epoch: each row starts as a page loaded now.
+    resetAccountEpochForTest();
     resetPendingChatLinesForTest();
     mem = memoryIndexedDB();
     readsFail = false; commitsFail = false; chatLocked = false; nodeType = 'group_thread'; posts = []; chatAnswerHeld = null; chatLines = [mine];
@@ -235,6 +240,23 @@ describe('what the member is told', () => {
         expect(screen.getByTestId('group-chat-notice').textContent).toBe(GROUP_KEY_STORE_UNREAD_TEXT);
     });
 
+    it("sealed only because the record didn't read, refused by a node with no keys route: it says it couldn't check, never that it has seen it locked (W2)", async () => {
+        // An older node: its chat says unlocked, and it has no keys route.
+        node.lie = (_m, path) => (path.includes('/keys') ? new Response(JSON.stringify({ error: 'Not found' }), { status: 404 }) : undefined);
+        const box = await openIt('group_thread');
+        expect(screen.getByTestId('group-chat-notice').textContent).toBe(GROUP_CHAT_OLD_NODE_NOTICE);
+        // The keyring has read the record once (an open's sync does), and remembers that read; then it stops reading.
+        await act(async () => { expect(await groupKeyring(node.as(ana.publicKey), ana, G, store).highestEpoch()).toBe(0); });
+        readsFail = true;
+        resetGroupChatLockStoreForTest();
+        await write(box);
+        expect(await screen.findByText(GROUP_KEY_STORE_UNREAD_TEXT)).toBeTruthy();
+        expect(screen.queryByText(GROUP_CHAT_LOCK_LOST_TEXT)).toBeNull();
+        expect(document.body.textContent).not.toContain('has seen it locked');
+        expect(wordsWent()).toEqual([]);
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
     it('nothing of a lock: an older node, as ever', async () => {
         await openIt('group_thread');
         expect(screen.getByTestId('group-chat-notice').textContent).toBe(GROUP_CHAT_OLD_NODE_NOTICE);
@@ -262,19 +284,32 @@ describe('a locked answer is kept as seen', () => {
         unmount();
     });
 
-    it('one that lands after a Sign Out: nothing of the account that left is written back, and nothing readable goes to it', async () => {
-        let letGo = () => {};
-        chatAnswerHeld = new Promise<void>((r) => { letGo = r; });
-        chatLocked = true;
-        render(<MessagesPage identity={me} openConversationId={G} />);
-        await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith(`/api/groups/${G}/chat`))).toBe(true), { timeout: 5000 });
-        cleanup();
-        forgetGroupKeys();
-        letGo();
-        await settle();
-        expect(mem.dump(LOCK_DB, 'locks')).toEqual({});
-        await expect(readableLineTo(G)).rejects.toMatchObject({ code: 'refused' });
-    });
+    // A chat with an epoch is the usual locked one: its answer goes on to the keys, which raise the highest (#3362's
+    // review, W1). Another tab's Sign Out this page hasn't heard yet leaves this page open on the chat.
+    const SIGN_OUTS: { name: string; leave: () => void }[] = [
+        { name: 'in this tab', leave: () => { cleanup(); forgetGroupKeys(); } },
+        { name: "in another tab, not heard here yet", leave: () => { epochEndsInAnotherTab('signed-out', { heard: false }); } },
+    ];
+    for (const withEpoch of [false, true]) {
+        for (const s of SIGN_OUTS) {
+            it(`one that lands after a Sign Out ${s.name}${withEpoch ? ', a chat with an epoch' : ''}: nothing of the account that left is written back, and nothing readable goes to it`, async () => {
+                if (withEpoch) node.epochs.set(1, (await makeEpochRecord({ myEdPrivHex: ben.privateKey, groupId: G, epoch: 1, reason: 'start', subject: null, createdAt: now(), recipients: node.roster })).record);
+                let letGo = () => {};
+                chatAnswerHeld = new Promise<void>((r) => { letGo = r; });
+                chatLocked = true;
+                render(<MessagesPage identity={me} openConversationId={G} />);
+                await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).startsWith(`/api/groups/${G}/chat`))).toBe(true), { timeout: 5000 });
+                const asked = node.calls.length;
+                s.leave();
+                letGo();
+                await settle();
+                // The answer was taken in after the Sign Out (with an epoch, its keys asked for), and wrote nothing.
+                if (withEpoch) expect(node.calls.slice(asked).some((c) => c.method === 'GET' && c.path.includes('/keys'))).toBe(true);
+                expect(mem.dump(LOCK_DB, 'locks')).toEqual({});
+                await expect(readableLineTo(G)).rejects.toMatchObject({ code: 'refused' });
+            });
+        }
+    }
 
     it('a mark the store refused is put again while the chat is open on a node that now says unlocked', async () => {
         commitsFail = true;

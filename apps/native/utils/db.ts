@@ -2758,12 +2758,26 @@ export async function oldestUnreadAt(conversationId: string, myPubkey: string, c
     }
 }
 
+/** Each chat's mark read here still running (markConversationReadLocally), settled either way: the next waits for it. */
+const _markingReadLocally = new Map<string, Promise<void>>();
+
 /**
  * The phone's own read marker (the Talk tab's badge counts from it); no request. Resolves, for a direct chat read in place
  * (`community`), to how many of the lines it marked that community counts as unread (as its held row counts them: core
  * countsAsUnreadSql); 0 otherwise.
  */
-export async function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity): Promise<number> {
+export function markConversationReadLocally(conversationId: string, myPubkey: string, community?: ChatCommunity): Promise<number> {
+    // One chat's marks one after another (#3370 decide): two at once each counted the same lines before either moved the
+    // marker, and a direct chat's lines then came off its community's number twice. The second, after the first, counts none.
+    const before = _markingReadLocally.get(conversationId);
+    const run = (before ? before.then(() => markReadLocallyOnce(conversationId, myPubkey, community)) : markReadLocallyOnce(conversationId, myPubkey, community));
+    const settled = run.then(() => {}, () => {});
+    _markingReadLocally.set(conversationId, settled);
+    void settled.then(() => { if (_markingReadLocally.get(conversationId) === settled) _markingReadLocally.delete(conversationId); });
+    return run;
+}
+
+async function markReadLocallyOnce(conversationId: string, myPubkey: string, community?: ChatCommunity): Promise<number> {
     const copy = await chatReadFor(community);
     // In place, only a direct chat that community's copy holds (#3305 review F1): nothing marked for any other id.
     if (copy.inPlace && !(await heldAsDmThrough(copy.database, conversationId))) return 0;

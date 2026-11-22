@@ -121,8 +121,8 @@
     "other": "{n} پیام قبلی هنگام قفل شدن این گفت‌وگو حذف شد"
   },
   "{n} message removed by a convenor|{n} messages removed by a convenor": {
-    "one": "{n} پیام توسط مدیر حذف شد",
-    "other": "{n} پیام توسط مدیر حذف شد"
+    "one": "{n} پیام توسط یک هماهنگ‌کننده حذف شد",
+    "other": "{n} پیام توسط یک هماهنگ‌کننده حذف شد"
   },
   "{n} message was deleted|{n} messages were deleted": {
     "one": "{n} پیام حذف شد",

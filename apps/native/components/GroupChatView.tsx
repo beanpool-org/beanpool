@@ -841,8 +841,6 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     };
 
     const openOwner = () => {
-        // In place, the group's own page is its community's: the menu says what opens there.
-        if (at) { setMenuOpen(true); return; }
         if (kind === 'enterprise') {
             router.push({ pathname: '/treasury-detail', params: { publicKey: id, name } });
             return;
@@ -873,7 +871,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
             lifecycle={lifecycle}
             detail={detail}
             onBack={goBack}
-            onOpenOwner={openOwner}
+            // In place, the group's own page is its community's: the ⋮ menu's Open {community} › goes there.
+            onOpenOwner={at ? undefined : openOwner}
             onMenu={openMenu}
         />
     );

@@ -316,13 +316,19 @@ describe('a group\'s chat in place (GroupChatView inPlace)', () => {
         expect(shownItems()).toEqual(expect.arrayContaining(['Invite people', 'Group info']));
     });
 
-    it('the group\'s header opens that menu, never the community in use\'s page of the same id', async () => {
+    it('the group\'s header opens no page (the community in use\'s, of the same id, least of all) and says it opens none', async () => {
         await open();
-        const header = [...host.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.startsWith('Garden Crew, group'))!;
-        expect(bits.menu.menuOpen).toBe(false);
-        await act(async () => { header.click(); });
-        expect(bits.menu.menuOpen).toBe(true);
-        expect(nav.push).not.toHaveBeenCalled();
+        const said = [...host.querySelectorAll('[aria-label]')].map((b) => b.getAttribute('aria-label')!);
+        expect(said.filter((l) => l.includes('Opens the group page'))).toEqual([]);
+        expect(host.textContent).not.toContain('tap for info');
+        const title = [...host.querySelectorAll('span')].find((x) => x.textContent?.endsWith('Garden Crew'))!;
+        await act(async () => { (title.closest('button') as HTMLElement).click(); });
+        expect([nav.push.mock.calls, host.querySelector('[data-info]')]).toEqual([[], null]);
+        // Contrast: in use, the header is the way to the group's page, and says so.
+        await act(async () => { root.render(null); });
+        await open(null);
+        expect([...host.querySelectorAll('[aria-label]')].some((b) => b.getAttribute('aria-label')!.includes('Opens the group page'))).toBe(true);
+        expect(host.textContent).toContain('tap for info');
     });
 
     it('Open Riverside ›: the phone moves there and opens this group; a tap that moved nothing says so', async () => {

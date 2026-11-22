@@ -488,6 +488,42 @@ describe('what opens in place (the route), and the list that names a group', () 
         }
     });
 
+    it('two asks at once (Chat opens as a count changes) ask each community once each turn and keep one set of rows', async () => {
+        await Promise.all([heldGroups.refresh(me.publicKey), heldGroups.refresh(me.publicKey)]);
+        expect(heldGroups.getState().map((r) => r.conversationId)).toEqual([g]);
+        const row = heldGroups.at(A);
+        await Promise.all([heldGroups.refresh(me.publicKey), heldGroups.refresh(me.publicKey)]);
+        expect(heldGroups.at(A), 'the same community keeps its one list').toBe(row);
+    });
+
+    it('a group left in place stays gone while its community can\'t be asked, and comes back only when that community lists it again', async () => {
+        await heldGroups.refresh(me.publicKey);
+        const realFetch = (globalThis as any).fetch;
+        (globalThis as any).fetch = async () => { throw new Error('no signal'); };
+        heldGroups.forget(A, g);
+        expect(heldGroups.getState()).toEqual([]);
+        await heldGroups.refresh(me.publicKey);
+        await settle();
+        expect(heldGroups.getState(), 'still gone, the ask having failed').toEqual([]);
+        (globalThis as any).fetch = realFetch;
+        // An answer from before the leave still lists it: no row. One without it: forgotten. Listed again after that: let back in.
+        await heldGroups.refresh(me.publicKey);
+        expect(heldGroups.getState()).toEqual([]);
+        servers[A].left = true;
+        await heldGroups.refresh(me.publicKey);
+        servers[A].left = false;
+        await heldGroups.refresh(me.publicKey);
+        expect(heldGroups.getState().map((r) => r.conversationId), 'let back in since').toEqual([g]);
+    });
+
+    it('a list wanted for one account is never asked with another\'s key', async () => {
+        const was = me.publicKey;
+        h.me = { ...person() };
+        asked = [];
+        expect(await db.fetchHeldYourGroups(was, A)).toBeNull();
+        expect(asked.filter((r) => r.url.endsWith('/api/your-groups'))).toEqual([]);
+    });
+
     it('a community that doesn\'t answer keeps its rows; another account sees none of them', async () => {
         await heldGroups.refresh(me.publicKey);
         expect(heldGroups.getState().length).toBe(1);

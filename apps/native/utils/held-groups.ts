@@ -28,16 +28,18 @@ export interface HeldGroup extends YourChat {
 /** How long one community's list is waited for. */
 export const HELD_GROUPS_ASK_MS = 10_000;
 
-interface Place { file: string; url: string; name: string; store: YourGroupsStore; stop: () => void }
+interface Place { file: string; url: string; name: string; store: YourGroupsStore; stop: () => void; left: Set<string> }
 
 let owner: string | null = null;
 let places: Place[] = [];
 let rows: HeldGroup[] = [];
 const listeners = new Set<() => void>();
+/** Which communities there are, worked out one at a time: two asks at once would make each other's stores again. */
+let listing: Promise<unknown> = Promise.resolve();
 
 function emit(): void {
-    const next = places.flatMap(({ file, url, name, store }) => (store.getState().items ?? [])
-        .filter((item) => item.kind === 'group')
+    const next = places.flatMap(({ file, url, name, store, left }) => (store.getState().items ?? [])
+        .filter((item) => item.kind === 'group' && !left.has(item.conversationId))
         .map((item) => ({ ...item, key: `held-group:${file}:${item.conversationId}`, community: url, communityName: name })));
     if (JSON.stringify(next) === JSON.stringify(rows)) return;
     rows = next;
@@ -45,6 +47,8 @@ function emit(): void {
 }
 
 function placeOf(me: string, file: string, url: string, name: string): Place {
+    /** Groups left in place (forget): no row of theirs until that community has answered without them. */
+    const left = new Set<string>();
     const store = createYourGroupsStore(async () => {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), HELD_GROUPS_ASK_MS);
@@ -53,12 +57,13 @@ function placeOf(me: string, file: string, url: string, name: string): Place {
             const items = await fetchHeldYourGroups(me, url, controller.signal);
             // Not answered: the rows it had stay (the store keeps its items on a failure).
             if (!items) throw new Error('not answered');
+            for (const id of left) if (!items.some((i) => i.conversationId === id)) left.delete(id);
             return { items, totalUnread: 0 };
         } finally {
             clearTimeout(timer);
         }
     });
-    return { file, url, name, store, stop: store.subscribe(emit) };
+    return { file, url, name, store, stop: store.subscribe(emit), left };
 }
 
 function drop(gone: Place[]): void {
@@ -90,40 +95,43 @@ export const heldGroups = {
         const file = getDatabaseFilenameForNode(community);
         return places.find((p) => p.file === file)?.store ?? NO_ROW;
     },
-    /** The member left the group there: its row goes now, not at the next answer. */
+    /** The member left the group there: its row goes now, and stays gone until that community has answered without it. */
     forget(community: string, conversationId: string): void {
-        const file = getDatabaseFilenameForNode(community);
-        rows = rows.filter((r) => r.conversationId !== conversationId || getDatabaseFilenameForNode(r.community) !== file);
-        listeners.forEach((l) => l());
-        void places.find((p) => p.file === file)?.store.refresh();
+        const place = places.find((p) => p.file === getDatabaseFilenameForNode(community));
+        if (!place) return;
+        place.left.add(conversationId);
+        emit();
+        void place.store.refresh();
     },
     /** Ask each held community for `me`'s list there. Rows of one no longer held, or of another account, go before any answer. */
     async refresh(me: string): Promise<void> {
-        if (owner !== me) {
-            drop([...places]);
-            owner = me;
-            emit();
-        }
-        const held: Place[] = [];
-        // Loaded as Chat asks: a chat's screen imports this for its own row alone.
-        const { heldCommunityList } = await import('./held-chats');
-        for (const { url, name } of await heldCommunityList()) {
-            if (await isGuestCopy(url).catch(() => true)) continue;
-            const file = getDatabaseFilenameForNode(url);
-            const kept = places.find((p) => p.file === file);
-            held.push(kept && kept.url === url && kept.name === name ? kept : placeOf(me, file, url, name));
-        }
-        // Another account signed in while the list was read: its own refresh decides.
-        if (owner !== me) {
-            for (const place of held) if (!places.includes(place)) place.stop();
-            return;
-        }
-        drop(places.filter((p) => !held.includes(p)));
-        places = held;
-        emit();
-        await Promise.all(held.map((p) => p.store.refresh()));
+        const held = listing.then(() => heldNow(me));
+        listing = held.catch(() => {});
+        await Promise.all((await held).map((p) => p.store.refresh()));
     },
 };
+
+/** The communities `me`'s rows come from now, each with its store: the ones already here keep theirs, and their rows. */
+async function heldNow(me: string): Promise<Place[]> {
+    if (owner !== me) {
+        drop([...places]);
+        owner = me;
+        emit();
+    }
+    const held: Place[] = [];
+    // Loaded as Chat asks: a chat's screen imports this for its own row alone.
+    const { heldCommunityList } = await import('./held-chats');
+    for (const { url, name } of await heldCommunityList()) {
+        if (await isGuestCopy(url).catch(() => true)) continue;
+        const file = getDatabaseFilenameForNode(url);
+        const kept = places.find((p) => p.file === file);
+        held.push(kept && kept.url === url && kept.name === name ? kept : placeOf(me, file, url, name));
+    }
+    drop(places.filter((p) => !held.includes(p)));
+    places = held;
+    emit();
+    return held;
+}
 
 const NONE: HeldGroup[] = [];
 /** The held communities' group rows, as they stand: `myPubkey`'s only, so another account never sees the last one's, not even for a frame. */

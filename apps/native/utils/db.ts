@@ -11853,6 +11853,8 @@ export async function fetchYourGroups(): Promise<import('./your-groups').YourCha
  * the phone meanwhile (ownListRead).
  */
 export async function fetchHeldYourGroups(myPubkey: string, community: string, signal?: AbortSignal): Promise<import('./your-groups').YourChat[] | null> {
+    // Signed by the account on the phone: never by another that signed in since this one's list was wanted.
+    if ((await loadIdentity().catch(() => null))?.publicKey !== myPubkey) return null;
     const asked = ownListRead(myPubkey);
     try {
         const res = await signedGet('/api/your-groups', { anchorUrl: community, signal });

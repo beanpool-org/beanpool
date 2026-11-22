@@ -16,7 +16,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { t } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { blocksOwedAt, blockUser, isUserBlocked, syncBlocksAt } from './blocklist';
-import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn } from './node-profile';
+import { fetchNodeProfile, getCachedNodeProfile, outsideMessagesOn, type NodeProfile } from './node-profile';
 import { failUnsent, setOutsideQuiet, syncOutsideMail, OutsideMailError, type OutsideMailContext, type SyncOutcome } from './outside-mail';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy } from './nodes';
 import { isPlainNodeAddress } from './node-url';
@@ -191,6 +191,17 @@ export async function outsideMessagesHere(nodeUrl: string): Promise<boolean> {
 /** The community's profile as this phone keeps it, read from the community when it keeps none; null when neither can be had. */
 async function profileHere(nodeUrl: string) {
     return (await getCachedNodeProfile(nodeUrl).catch(() => null)) ?? (await fetchNodeProfile(nodeUrl).catch(() => null));
+}
+
+/** How long Message waits for a community's own answer before it goes by what this phone keeps. */
+const ANSWER_MS = 5_000;
+
+/**
+ * What the community at `nodeUrl` says of itself, asked now (utils/community-homes.ts askedNow; #3354 review round 4): a switch
+ * turned off, a name taken on or one lost since this phone last heard. Null with no answer in time.
+ */
+export async function answerNow(nodeUrl: string): Promise<NodeProfile | null> {
+    return fetchNodeProfile(nodeUrl, fetch, ANSWER_MS).catch(() => null);
 }
 
 /**

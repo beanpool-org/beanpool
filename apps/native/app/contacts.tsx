@@ -22,7 +22,7 @@ import { router, ErrorBoundary, useLocalSearchParams, useNavigation } from 'expo
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     CONTACTS_LIMITS, addPeopleWords, cleanContactName, contactInviteAsk, contactInviteAskWords, contactInviteCancelWords, contactInviteCodes, contactInviteNoWords, contactInviteOut,
-    contactInviteWords, contactInvitedLine, emptyContactsList, forgetContactInvite, formatCount, formerContactsWords, linkContactToInvite, newContactId, putContact,
+    contactInviteWords, contactInvitedLine, emptyContactsList, forgetContactInvite, formatCount, formerContactsWords, linkContactToInvite, newContactId, nodeHomeOf, putContact,
     removeContact, removeEveryContact, t, tn, type Contact, type ContactInviteUsed, type ContactsList, type MyInviteSeen,
 } from '@beanpool/core';
 import { Alert } from '../utils/keyboard-alert';
@@ -35,11 +35,11 @@ import { communityLabel, contactsOf, contactsWhereWords, shareContactsFile, useC
 import { checkContactsHere, contactsKeptAt, editContacts, syncContacts } from '../utils/contacts-sync';
 import { setAsideDamaged } from '../utils/contacts-store';
 import { sameCommunity } from '../utils/push-pins';
-import { getSavedNodes } from '../utils/nodes';
 import { BLOCKLIST_UPDATED_EVENT, getBlockedUsers, unblockUser, withoutBlockedPeople } from '../utils/blocklist';
-import { createConversationApi, enterChatInPlace, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace, leaveChatInPlace } from '../utils/db';
+import { createConversationApi, getChattedWithMembers, getFriendsLocal, isNoCopyInPlace } from '../utils/db';
 import { CONTACTS_FORMER_CHANGED_EVENT, deleteFormerCopies, formerNoticeHere, peopleToAdd, withPeopleAdded, type BeanPoolPerson } from '../utils/contacts-former';
 import { communitySwitchUnderWay, switchCommunity } from '../utils/use-communities';
+import { anchorUrl, existingChatRoute, messagePathOnPhone, openAcrossChat, startChatInPlace } from '../utils/message-anyone';
 import { messageInHeldCommunity, takeMessageAfterSwitch } from '../utils/message-after-switch';
 import { getPendingOnboarding } from '../utils/onboarding-state';
 import { useNodeStatus } from './NodeStatusContext';
@@ -368,9 +368,6 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
         ];
     }, [people, q]);
     const here = (community: string) => !!view.anchor && sameCommunity(community, view.anchor);
-    // A community this phone holds (kept, and not a guest's look: use-contacts.ts `communities`): Message moves there with no
-    // question and opens the chat (Marty, 19 Nov 2026, S0 of DESIGN-no-switch-messaging-fable.md; utils/message-after-switch.ts).
-    const holds = (community: string) => view.communities.some((c) => sameCommunity(c, community));
     const { recheck } = useNodeStatus();
 
     const message = async (key: string) => {
@@ -401,15 +398,12 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
     const messageThere = async (key: string, community: string) => {
         if (opening) return;
         setOpening(key);
-        // The community as this phone saved it (its copy's address), however the contact's link spells it.
-        const saved = (await getSavedNodes().catch(() => [])).find((n) => sameCommunity(n.url, community))?.url ?? community;
-        // Held in place while the chat starts there (utils/db.ts enterChatInPlace): a chat of that community left a moment
-        // ago doesn't refuse it, and the copy closes as this lets go unless the chat it opens holds it by then.
-        enterChatInPlace(saved);
+        // Started by the address the phone saved, held in place while it starts (utils/message-anyone.ts startChatInPlace): a
+        // chat of that community left a moment ago doesn't refuse it, and the copy closes as it lets go unless the chat holds it.
         try {
-            const conv = await createConversationApi('dm', [me, key], me, undefined, undefined, saved);
+            const conv = await startChatInPlace(me, key, community);
             setOpening(null);
-            router.push({ pathname: '/chat/[id]', params: { id: String(conv.id), community: saved, communityName: communityLabel(view, community) } });
+            router.push({ pathname: '/chat/[id]', params: { id: conv.id, community: conv.community, communityName: communityLabel(view, community) } });
             return;
         } catch (e: any) {
             if (!isNoCopyInPlace(e)) {
@@ -418,8 +412,6 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
                 Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : signedRequestWords(e.message));
                 return;
             }
-        } finally {
-            void leaveChatInPlace(saved);
         }
         const moved = await messageInHeldCommunity(key, community, {
             storage: AsyncStorage,
@@ -433,6 +425,49 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
         // A switch that didn't happen says so, in the words the Communities list uses (useCommunities.switchTo).
         if (moved !== 'switched') Alert.alert(t("Couldn't switch community"), t('Please try again.'));
     };
+    // Message on a contact (slice S5 part 2, utils/message-anyone.ts; DESIGN-no-switch-messaging-fable.md §3): an existing
+    // chat with them wins (here, in a held community in place, or across), else the community the phone shares with them
+    // (the one in use first, then one it holds), else a chat across from their link. A refusal says why: someone blocked
+    // on this phone's own list (Marty 22 Nov, the S7 rule) is refused on every path, an existing chat included (#3354
+    // review), in the across path's words. Nothing it opens or makes is a chat the member can't write in now (the rule's
+    // invariant): a chat across they declined, or to someone in a community shared by any of its addresses, is no existing chat.
+    // Where it can't be said for certain whose the contact's address is, nothing opens: the question Contacts always asked for a
+    // community this phone isn't set to, to switch to that address (round 6), so no line is written where no one reads it.
+    const offerSwitch = (name: string, address: string) => {
+        const community = communityLabel(view, address);
+        Alert.alert(
+            t('Switch to this community'),
+            t('{name} is in {community}. Switch to {community} to message them?', { name, community }),
+            // A switch that fails says so, in the words the Communities list uses (useCommunities.switchTo).
+            [{ text: t('Cancel'), style: 'cancel' }, { text: t('Switch'), onPress: () => {
+                switchCommunity(address).catch((e) => Alert.alert(t("Couldn't switch community"), e?.message || t('Please try again.')));
+            } }],
+        );
+    };
+    const messageAnyone = async (c: Contact) => {
+        if (opening) return;
+        const links = c.links.map((l) => ({ community: l.community, key: l.key, name: c.name }));
+        setOpening(links[0]?.key ?? c.id);
+        const path = await messagePathOnPhone(me, links, view.communities).catch(() => ({ open: 'nothing' as const }));
+        setOpening(null);
+        if (path.open === 'blocked') Alert.alert(t('Message', undefined, 'button: write to'), t('You have blocked this user. Messaging is disabled.'));
+        // Nothing to open (the link's address isn't a community's, or a read failed): said, never a tap that does nothing.
+        else if (path.open === 'nothing') Alert.alert(t('Message', undefined, 'button: write to'), t('Please try again.'));
+        else if (path.open === 'existing') router.push(existingChatRoute(path.chat, await anchorUrl(), (community) => communityLabel(view, community)) as any);
+        else if (path.open === 'shared') await (here(path.community) ? message(path.key) : messageThere(path.key, path.community));
+        else if (path.open === 'switch') offerSwitch(c.name, path.community);
+        else if (path.open === 'across') {
+            setOpening(path.key);
+            const opened = await openAcrossChat(path).catch(() => ({ refused: 'no-community' as const }));
+            setOpening(null);
+            if ('chatId' in opened) router.push(`/outside-chat/${opened.chatId}`);
+            else if ('here' in opened) await message(opened.here);
+            else if (opened.refused === 'uncertain') offerSwitch(c.name, links.find((l) => nodeHomeOf(l.community) === path.home)?.community ?? `https://${path.home}`);
+            else Alert.alert(t('Message', undefined, 'button: write to'), opened.refused === 'off' ? t("This community doesn't take messages from other communities.")
+                : opened.refused === 'no-home' ? t("This community's server knows none of its own names yet, so it can't send to another community.")
+                : opened.refused === 'blocked' ? t('You have blocked this user. Messaging is disabled.') : t('Connect to your community to start a chat.'));
+        }
+    };
     const action = (c: Contact) => {
         const link = c.links.find((l) => here(l.community)) ?? c.links[0];
         if (!link) {
@@ -444,25 +479,12 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
                 </Pressable>
             );
         }
-        if (!here(link.community) && holds(link.community)) {
-            return (
-                <Pressable accessibilityRole="button" style={styles.go} disabled={opening !== null} onPress={() => void messageThere(link.key, link.community)}>
-                    <Text style={styles.goText}>{t('Message', undefined, 'button: write to')}</Text>
-                </Pressable>
-            );
-        }
+        // Any community but the one in use: one Message, through the path rule (slice S5 part 2): an existing chat wins, else
+        // a community the phone holds (in place, S2), else a chat across from their link. No switch, no question.
         if (!here(link.community)) {
-            const community = communityLabel(view, link.community);
             return (
-                <Pressable accessibilityRole="button" style={styles.btn} onPress={() => Alert.alert(
-                    t('Switch to this community'),
-                    t('{name} is in {community}. Switch to {community} to message them?', { name: c.name, community }),
-                    // A switch that fails says so, in the words the Communities list uses (useCommunities.switchTo).
-                    [{ text: t('Cancel'), style: 'cancel' }, { text: t('Switch'), onPress: () => {
-                        switchCommunity(link.community).catch((e) => Alert.alert(t("Couldn't switch community"), e?.message || t('Please try again.')));
-                    } }],
-                )}>
-                    <Text style={styles.btnText}>{t('Open {community} ›', { community })}</Text>
+                <Pressable accessibilityRole="button" style={styles.go} disabled={opening !== null} onPress={() => void messageAnyone(c)}>
+                    <Text style={styles.goText}>{t('Message', undefined, 'button: write to')}</Text>
                 </Pressable>
             );
         }
@@ -477,7 +499,7 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
             );
         }
         return (
-            <Pressable accessibilityRole="button" style={styles.go} disabled={opening !== null} onPress={() => void message(link.key)}>
+            <Pressable accessibilityRole="button" style={styles.go} disabled={opening !== null} onPress={() => void messageAnyone(c)}>
                 <Text style={styles.goText}>{t('Message', undefined, 'button: write to')}</Text>
             </Pressable>
         );

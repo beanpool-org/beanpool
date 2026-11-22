@@ -165,6 +165,36 @@ describe('readNodeProfile', () => {
         expect(p).not.toHaveProperty('primaryAddress');
     });
 
+    // #3354 review round 4: a contact saved at a name the community had before is in this community (utils/community-homes.ts).
+    it('keeps the names it had before as bare hosts, apart from its addresses; none, or not a list, says nothing', () => {
+        const p = readNodeProfile({ addresses: ['beans.example.org'], primaryAddress: 'beans.example.org', formerAddresses: ['Old.Example.ORG', 'https://x.example.org', 7, 'old.example.org'] }, new Date('2026-11-22T00:00:00Z'))!;
+        expect(p.addresses).toEqual(['beans.example.org']);
+        expect(p.formerAddresses).toEqual(['old.example.org']);
+        expect(readNodeProfile(JSON.parse(JSON.stringify(p)), new Date(p.checkedAt))).toEqual(p);
+        for (const formerAddresses of [undefined, null, [], 'old.example.org']) {
+            expect(readNodeProfile({ addresses: ['beans.example.org'], formerAddresses })!).not.toHaveProperty('formerAddresses');
+        }
+    });
+
+    // #3354 review round 5: a community with no address of its own sends nothing across (utils/message-anyone.ts).
+    it.each([
+        { name: 'it publishes none', body: { addresses: [], primaryAddress: null }, noHome: true },
+        { name: 'it publishes none and says no main', body: { addresses: [] }, noHome: true },
+        { name: 'its only name has no route yet', body: { addresses: ['beans.example.org'], primaryAddress: null }, noHome: true },
+        { name: 'it has one', body: { addresses: ['beans.example.org'], primaryAddress: 'beans.example.org' }, noHome: undefined },
+        { name: 'its main is one this phone keeps none of (an IPv6 number)', body: { addresses: ['[2001:db8::1]'], primaryAddress: '[2001:db8::1]' }, noHome: undefined },
+        { name: 'it says nothing of its addresses', body: { profile: 'local' }, noHome: undefined },
+    ])('knows no address of its own: $name, said and as the phone keeps it', async ({ body, noHome }) => {
+        expect(readNodeProfile(body)!.noHome).toBe(noHome);
+        vi.stubGlobal('fetch', async () => new Response(JSON.stringify(body), { status: 200 }));
+        try {
+            expect((await fetchNodeProfile('https://nohome.example', fetch))!.noHome).toBe(noHome);
+            expect((await getCachedNodeProfile('https://nohome.example'))!.noHome).toBe(noHome);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('a copy read back from the phone keeps them', async () => {
         const p = readNodeProfile({ addresses: ['203.0.113.5', 'beans.example.org'], primaryAddress: 'beans.example.org' }, new Date('2026-10-18T00:00:00Z'))!;
         expect(readNodeProfile(JSON.parse(JSON.stringify(p)), new Date(p.checkedAt))).toEqual(p);

@@ -27,6 +27,7 @@ import { Alert } from '../utils/keyboard-alert';
 import { useTheme, useStyles } from './ThemeContext';
 import { doorOpen, myAddressCard, myHome, openChatFromCard, sendFromBox, setDoor } from '../utils/outside-mail';
 import { OUTSIDE_SEND_MS, outsideContext, outsideErrorWords, outsideMessagesHere } from '../utils/outside-chat-live';
+import { cardRefusal } from '../utils/message-anyone';
 import { FindByNameStep, FindMeSwitch } from '../components/FindByName';
 import { useScreenKeyboardOffset } from '../components/useScreenKeyboardOffset';
 
@@ -94,7 +95,15 @@ export default function AddressCardScreen() {
         const ctx = await outsideContext();
         if (!ctx) return false;
         if (card.key === ctx.identity.publicKey) { setCardNote(t("That's your own card.")); return true; }
-        if (card.home === await myHome(ctx).catch(() => null)) { setCardNote(t('{name} is in this community: write to them here.', { name: card.name })); return true; }
+        // By any of this community's own names, not one spelling (utils/message-anyone.ts, Message's rule): its server
+        // refuses every line across to one of them, an older main address among them. And one that says it has no address
+        // of its own sends no line at all.
+        const why = await cardRefusal(ctx.nodeUrl, card, await myHome(ctx).catch(() => null));
+        if (why) {
+            setCardNote(why === 'here' ? t('{name} is in this community: write to them here.', { name: card.name })
+                : t("This community's server knows none of its own names yet, so it can't send to another community."));
+            return true;
+        }
         // A block is the account's: no box to write to them, and their chat here stays as it is (outside-mail.ts openChatFromCard).
         if (await ctx.isBlocked(card.key)) { setCardNote(t('You have blocked this user. Messaging is disabled.')); return true; }
         setCardNote(null);

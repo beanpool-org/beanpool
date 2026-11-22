@@ -114,11 +114,14 @@ vi.mock('react-native-keyboard-controller', () => {
     const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
     return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
 });
+/** The theme the screen draws in (S5 part 2's note rows draw it in both). */
+const look = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors } = await import('../../constants/colors');
+    const { darkColors, lightColors } = await import('../../constants/colors');
+    const now = () => (look.dark ? { theme: 'dark', colors: darkColors } : { theme: 'light', colors: lightColors });
     return {
-        useTheme: () => ({ theme: 'light', colors: lightColors }),
-        useStyles: (make: (t: { theme: string; colors: unknown; patternEnabled: boolean }) => unknown) => make({ theme: 'light', colors: lightColors, patternEnabled: false }),
+        useTheme: () => now(),
+        useStyles: (make: (t: { theme: string; colors: unknown; patternEnabled: boolean }) => unknown) => make({ ...now(), patternEnabled: false }),
     };
 });
 // A dialog the screen opens: kept, so a row presses the button it names.
@@ -406,4 +409,56 @@ describe('a block in place whose answer from A never came is sent to A again at 
         await blockSyncsEndedForTests();
         expect(net.asked.filter((r) => r.path === '/api/blocks'), 'nothing owed, nothing sent').toEqual([]);
     });
+});
+
+/**
+ * The note under a first line across (slice S5 part 2, DESIGN-no-switch-messaging-fable.md §3 "Member-facing words": core
+ * ACROSS_FIRST_LINE_NOTE, acrossFirstLineNoteUnder): under my first line while no line of theirs is here, on the 320 dp, 130 %
+ * screen this file draws, in light and in dark, its colour the theme's secondary text, readable on the page (4.5:1).
+ */
+describe('the note under a first line across (S5 part 2), light and dark, 320 dp at 130 %', () => {
+    const NOTE = 'They will see this if they take messages from other communities.';
+    for (const dark of [false, true]) {
+        it(`${dark ? 'dark' : 'light'}: under my first line only, while they have written nothing; gone once they write; never in a chat brought back from 12 words`, async () => {
+            look.dark = dark;
+            try {
+                const { contrastRatio } = await import('@beanpool/core');
+                const { darkColors, lightColors } = await import('../../constants/colors');
+                const colors = dark ? darkColors : lightColors;
+                files.lines = [
+                    { id: 'm1', chatId: CHAT, author: ME.publicKey, text: 'Hello from my community', replyTo: null, at: Date.now() - 2_000, state: 'sent', note: null },
+                    { id: 'm2', chatId: CHAT, author: ME.publicKey, text: 'A second line', replyTo: null, at: Date.now() - 1_000, state: 'sent', note: null },
+                ];
+                mem.map.set('beanpool_anchor_url', A);
+                files.params = { id: CHAT };
+                await act(async () => { root.render(createElement(OutsideChatScreen) as any); });
+                await settle();
+                const notes = byTest('outside-first-line-note');
+                expect(notes.map((n) => n.textContent)).toEqual([NOTE]);
+                // Under the first line of mine, in the same row as its bubble.
+                expect(notes[0].parentElement?.textContent).toContain('Hello from my community');
+                expect(notes[0].parentElement?.textContent).not.toContain('A second line');
+                expect(contrastRatio(colors.text.secondary, colors.surface.page)).toBeGreaterThanOrEqual(4.5);
+
+                // They write: the note goes.
+                files.lines = [...files.lines, { id: 't1', chatId: CHAT, author: peer, text: 'Hi back', replyTo: null, at: Date.now(), state: null, note: null }];
+                await act(async () => { root.unmount(); });
+                root = createRoot(host);
+                await act(async () => { root.render(createElement(OutsideChatScreen) as any); });
+                await settle();
+                expect(byTest('outside-first-line-note')).toEqual([]);
+
+                // A chat brought back from 12 words: never.
+                files.lines = files.lines.filter((l) => l.author === ME.publicKey);
+                files.chat = { ...files.chat, restored: true };
+                await act(async () => { root.unmount(); });
+                root = createRoot(host);
+                await act(async () => { root.render(createElement(OutsideChatScreen) as any); });
+                await settle();
+                expect(byTest('outside-first-line-note')).toEqual([]);
+            } finally {
+                look.dark = false;
+            }
+        });
+    }
 });

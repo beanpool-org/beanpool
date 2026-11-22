@@ -66,6 +66,7 @@ vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => 
 
 import { getDb, getConversations, getConversation, getUnreadByConversation, _resetDmPeerPinsForTests } from '../db';
 import { dmPeerName, isDmBlocked, talkShowsChat } from '../dm-blocked';
+import { directChatsHere } from '../message-anyone';
 
 const sql = (globalThis as any).__dmBlockedPhoneSql as import('node:sqlite').DatabaseSync;
 
@@ -147,6 +148,15 @@ describe("a DM after the blocked person's re-key: blocked in the thread, hidden 
                         threadBlocked: isDmBlocked(threadKeys, block.list),
                         talkListed: !!row && talkShowsChat(row, block.list),
                     }).toEqual({ threadBlocked: block.blocked, talkListed: !block.blocked });
+
+                    // Message (S5 part 2, utils/message-anyone.ts directChatsHere) finds the DM in what getConversations itself
+                    // RETURNS, by either of his keys, unless Talk hides it (#3354 review: it read the SQL row's aliases, so it
+                    // found no DM here on a real phone, and a hand-written row hid that). Mutation: read `convType` /
+                    // `otherPubkey` / `otherKeys` again -> no chat found, and every unblocked row goes red.
+                    const listed = await withScreens(() => getConversations(ME));
+                    for (const key of [OLD, NEW]) {
+                        expect(directChatsHere(listed, [key], 'https://riverside.example', (c) => talkShowsChat(c, block.list)).map((c) => c.id)).toEqual(block.blocked ? [] : [CONV]);
+                    }
 
                     // The name, the same in all three: his card's, else the start of the key each names him by (no card for
                     // it yet), never the conversation's id. With both keys still participants, a card for either names him.

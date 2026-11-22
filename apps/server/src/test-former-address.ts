@@ -24,6 +24,11 @@
  *     newname don't count), where it is now, and each name's own count.
  *  4. G, whose only name is one it released: no primary address (the web app then says nothing), the former name
  *     listed. U, a node with no names: no primary address, no former names.
+ *  5. F, two of its former names LOST (one to another key, one let go): neither is listed, current or former, and a
+ *     member's app signing for either is refused; every name it does list is accepted. Its current name lost: not listed as
+ *     former either. The marks cleared: listed as before. The apps take a listed former name as this community
+ *     (@beanpool/core community-homes.ts), so a lost one there put a member's lines to someone in the other community into a
+ *     chat here that nobody reads (#3354 review, round 5).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-former-address.ts
  */
@@ -335,6 +340,43 @@ async function main(): Promise<void> {
             const u = await info(U);
             assert(same(u.addresses, []) && u.primaryAddress === null && same(u.formerAddresses, []),
                 `U (no names): no primary address, no former names (${JSON.stringify({ a: u.addresses, p: u.primaryAddress, f: u.formerAddresses })})`);
+        });
+
+        await section('5', async () => {
+            await F.send('resetLimits');
+            const toAnother = { lost: { since: iso(2), why: 'another-key', holderKey: 'ab'.repeat(32) } };
+            const letGo = { lost: { since: iso(2), why: 'released', holderKey: null } };
+            const names = (gone: boolean) => [
+                entry('oldname.beanpool.org', 'former', 'live'),
+                entry('lostname.beanpool.org', 'former', 'none', gone ? toAnother : {}),
+                entry('letgo.beanpool.org', 'former', 'none', gone ? letGo : {}),
+                entry('newname.beanpool.org', 'current', 'live', { since: iso(5) }),
+            ];
+            await F.send('nodeConfig', { registrarNames: names(true) });
+            let i = await info(F);
+            assert(same(i.formerAddresses, ['oldname.beanpool.org']), `F: a lost name is no former name of its own (${JSON.stringify(i.formerAddresses)})`);
+            assert(same(i.addresses, ['newname.beanpool.org']) && i.primaryAddress === 'newname.beanpool.org',
+                `F: nor one it goes by now (${JSON.stringify({ a: i.addresses, p: i.primaryAddress })})`);
+            for (const host of ['lostname.beanpool.org', 'letgo.beanpool.org']) {
+                const r = await readAt(F, mia, host);
+                assert(r.status === 421, `F: an app signing for ${host} is refused: this server answers as it no more (${show(r)})`);
+            }
+            for (const host of [...i.addresses, ...i.formerAddresses]) {
+                const r = await readAt(F, mia, host);
+                assert(r.status === 200, `F: every name it lists is accepted, ${host} (${show(r)})`);
+            }
+            const row = ((await report(F))?.addresses ?? []).find((x: any) => x.address === 'lostname.beanpool.org');
+            assert(row?.lost === true, `Settings still shows the lost name, as lost (${JSON.stringify(row ?? null)})`);
+
+            await F.send('nodeConfig', { registrarNames: names(false) });
+            i = await info(F);
+            assert(same(i.formerAddresses, ['oldname.beanpool.org', 'lostname.beanpool.org', 'letgo.beanpool.org']),
+                `F: the marks cleared, they are former names again (${JSON.stringify(i.formerAddresses)})`);
+
+            await F.send('nodeConfig', { registrarNames: [entry('oldname.beanpool.org', 'former', 'live'), entry('newname.beanpool.org', 'current', 'live', { since: iso(5), ...toAnother })] });
+            i = await info(F);
+            assert(same(i.formerAddresses, ['oldname.beanpool.org']) && same(i.addresses, []) && i.primaryAddress === null,
+                `F: its current name lost: in neither list, and it has no address of its own now (${JSON.stringify({ a: i.addresses, p: i.primaryAddress, f: i.formerAddresses })})`);
         });
     } finally {
         stopAll();

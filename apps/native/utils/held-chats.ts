@@ -10,7 +10,8 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
+import { acrossChatListed, type KnownChat } from '@beanpool/core';
+import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, isHeldMember, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { communityAddress, sameCommunity } from './push-pins';
@@ -138,6 +139,76 @@ export async function heldLetIn(myPubkey: string): Promise<LetInRead | null> {
     } finally {
         await closeUnlessInView();
     }
+}
+
+/** The other communities this phone holds as a member, by address and saved name, in the order Chat lists them (Message's path rule: S5 part 2). */
+export async function heldCommunityList(): Promise<Array<{ url: string; name: string }>> {
+    return (await heldCommunities()).map(({ url, name }) => ({ url, name }));
+}
+
+/**
+ * The chats with any of `keys` that Chat lists in every other community this phone holds (Message's path rule, slice S5
+ * part 2; #3354 review): direct ones ({@link heldChatsShown}) and across ones ({@link heldOutsideChatsShown}) while Chat
+ * lists them, open or a request (core acrossChatListed: a declined one has no composer and no Accept), so none a block hid,
+ * none declined, and none in a guest's file. A read that fails counts as no chat. The handles are Chat's: what this opened
+ * closes as it ends, unless Chat is in view (#3302 review F3).
+ */
+export async function heldChatsWith(myPubkey: string, keys: readonly string[]): Promise<KnownChat[]> {
+    const want = new Set(keys);
+    const out: KnownChat[] = [];
+    try {
+        for (const c of await heldChatsShown(myPubkey).catch(() => [] as HeldChatRow[])) {
+            if (c.type !== 'dm') continue;
+            for (const key of new Set([...c.peerKeys, ...(c.peerPubkey ? [c.peerPubkey] : [])])) if (want.has(key)) out.push({ kind: 'direct', community: c.community, id: c.id, key });
+        }
+        for (const c of await heldOutsideChatsShown(myPubkey).catch(() => [] as HeldOutsideChat[])) {
+            if (want.has(c.peerKey) && acrossChatListed(c.state)) out.push({ kind: 'across', community: c.community, id: c.id, key: c.peerKey, home: c.peerHome });
+        }
+    } finally {
+        await closeUnlessInView();
+    }
+    return out;
+}
+
+/**
+ * Whether the copy of `community`, another community this phone holds, has a row for `key` (slice S5 part 2:
+ * community-homes.ts doubted). Not proof of a member: the directory lists visitors' rows too, and the copy can't tell them
+ * apart. The handle is Chat's, as {@link heldChatsWith}'s.
+ */
+export async function heldMemberThere(community: string, key: string): Promise<boolean> {
+    try {
+        return await isHeldMember(community, key);
+    } finally {
+        await closeUnlessInView();
+    }
+}
+
+/** A person in another community this phone holds, found by New message's search (slice S5 part 2). */
+export interface HeldPerson {
+    public_key: string;
+    callsign: string | null;
+    avatar_url: string | null;
+    joined_at: string | null;
+    community: string;
+    communityName: string;
+}
+
+/**
+ * New message's search of every other community this phone holds (slice S5 part 2, DESIGN-no-switch-messaging-fable.md §6
+ * row S5: "New message searches your contacts from every community"): each copy's people whose name holds `typed`, read
+ * through held, read-only handles (db.ts getHeldMembers), each with the community they were found in. The handles are
+ * Chat's: what this opened closes as it ends, unless Chat is in view.
+ */
+export async function heldPeopleMatching(myPubkey: string, typed: string): Promise<HeldPerson[]> {
+    const out: HeldPerson[] = [];
+    try {
+        for (const { url, name } of await heldCommunities()) {
+            for (const m of (await getHeldMembers(myPubkey, url, typed)) ?? []) out.push({ ...m, community: url, communityName: name });
+        }
+    } finally {
+        await closeUnlessInView();
+    }
+    return out;
 }
 
 async function heldChatRowsWhile(myPubkey: string, inView: () => boolean): Promise<HeldChatRow[]> {

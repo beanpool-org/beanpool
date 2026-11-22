@@ -174,6 +174,15 @@ function noteUnblockedHere(k: string, asked: number): void {
     if ((unblockedHere.get(k) ?? 0) < asked) unblockedHere.set(k, asked);
 }
 
+/**
+ * Whether the member unblocked `k` in this page, the node taking it (S5 part 2): the web's `once`, as the phone remembers a
+ * block undone (blocklist.ts there). A held Delivered (lib/outside-mail.ts heldReceiptsOn) is then not let go by an open
+ * alone, only by the member's Accept or answer (core outsideHeldReceipts `barred`). Gone with the page, as every note here is.
+ */
+export function unblockedInThisPage(k: string): boolean {
+    return unblockedHere.has(k);
+}
+
 /** The keys this member has blocked, for the screens that hide them. */
 export function getBlockedUsers(): string[] {
     return current;

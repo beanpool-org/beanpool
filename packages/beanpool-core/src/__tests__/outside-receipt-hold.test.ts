@@ -97,11 +97,15 @@ const ACTIONS: OutsideReceiptAction[] = ['none', 'open', 'accept', 'answer', 'de
 const STATES: OutsideChatState[] = ['open', 'request', 'declined'];
 const heldRows = ACTIONS.flatMap((action) => STATES.flatMap((state) => [false, true].flatMap((blocked) => [false, true].map((barred) => ({ action, state, blocked, barred })))));
 
-/** The decision, written out: accept, answer or open (an open chat) sends; a block forgets; a doubt holds; nothing else moves it. */
+/**
+ * The decision, written out: accept, answer or open (an open chat) sends; a block forgets; a doubt holds an open only (S5
+ * part 2: an explicit Accept or answer lets go even after a block since undone, on the phone and the web alike); nothing
+ * else moves it.
+ */
 function wantHeld(r: { action: OutsideReceiptAction; state: OutsideChatState; blocked: boolean; barred: boolean }): 'send' | 'hold' | 'forget' {
     if (r.action === 'block' || r.blocked) return 'forget';
-    if (r.barred) return 'hold';
     if (r.action === 'accept' || r.action === 'answer') return 'send';
+    if (r.barred) return 'hold';
     if (r.action === 'open' && r.state === 'open') return 'send';
     return 'hold';
 }
@@ -111,6 +115,15 @@ describe('B  outsideHeldReceipts: the member\'s step', () => {
         expect(outsideHeldReceipts(r)).toBe(wantHeld(r));
     });
 
+    it('once lined up (S5 part 2): barred holds only an open; an Accept or an answer lets go; blocked now still forgets', () => {
+        for (const state of STATES) {
+            expect(outsideHeldReceipts({ action: 'accept', state, blocked: false, barred: true })).toBe('send');
+            expect(outsideHeldReceipts({ action: 'answer', state, blocked: false, barred: true })).toBe('send');
+            expect(outsideHeldReceipts({ action: 'open', state, blocked: false, barred: true })).toBe('hold');
+            expect(outsideHeldReceipts({ action: 'answer', state, blocked: true, barred: true })).toBe('forget');
+        }
+    });
+
     it('a request opened is still held (its screen says they will not know unless you accept); an open chat opened is sent', () => {
         expect(outsideHeldReceipts({ action: 'open', state: 'request', blocked: false, barred: false })).toBe('hold');
         expect(outsideHeldReceipts({ action: 'open', state: 'open', blocked: false, barred: false })).toBe('send');
@@ -118,15 +131,17 @@ describe('B  outsideHeldReceipts: the member\'s step', () => {
 
     type HeldRule = typeof outsideHeldReceipts;
     const MUTANTS: Record<string, HeldRule> = {
-        'a block not forgotten': (i) => (i.barred || i.blocked ? 'hold' : i.action === 'accept' || i.action === 'answer' || (i.action === 'open' && i.state === 'open') ? 'send' : 'hold'),
-        'blocked now ignored (only the Block step forgets)': (i) => (i.action === 'block' ? 'forget' : i.barred ? 'hold' : i.action === 'accept' || i.action === 'answer' || (i.action === 'open' && i.state === 'open') ? 'send' : 'hold'),
+        // The rule as #3347 built it: a doubt about blocks held Accept and answer too (the phone's `once` never let go).
+        'barred holds an Accept and an answer too (before S5 part 2)': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.barred ? 'hold' : i.action === 'accept' || i.action === 'answer' || (i.action === 'open' && i.state === 'open') ? 'send' : 'hold'),
+        'a block not forgotten': (i) => (i.blocked ? 'hold' : i.action === 'accept' || i.action === 'answer' ? 'send' : i.barred ? 'hold' : i.action === 'open' && i.state === 'open' ? 'send' : 'hold'),
+        'blocked now ignored (only the Block step forgets)': (i) => (i.action === 'block' ? 'forget' : i.action === 'accept' || i.action === 'answer' ? 'send' : i.barred ? 'hold' : i.action === 'open' && i.state === 'open' ? 'send' : 'hold'),
         'a doubt about blocks not held': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.action === 'accept' || i.action === 'answer' || (i.action === 'open' && i.state === 'open') ? 'send' : 'hold'),
-        'a request opened sends': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.barred ? 'hold' : i.action === 'accept' || i.action === 'answer' || i.action === 'open' ? 'send' : 'hold'),
-        'an answer holds': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.barred ? 'hold' : i.action === 'accept' || (i.action === 'open' && i.state === 'open') ? 'send' : 'hold'),
-        'accept holds': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.barred ? 'hold' : i.action === 'answer' || (i.action === 'open' && i.state === 'open') ? 'send' : 'hold'),
-        'open never sends': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.barred ? 'hold' : i.action === 'accept' || i.action === 'answer' ? 'send' : 'hold'),
-        'decline sends': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.barred ? 'hold' : i.action === 'accept' || i.action === 'answer' || i.action === 'decline' || (i.action === 'open' && i.state === 'open') ? 'send' : 'hold'),
-        'decline forgets': (i) => (i.action === 'block' || i.blocked || i.action === 'decline' ? 'forget' : i.barred ? 'hold' : i.action === 'accept' || i.action === 'answer' || (i.action === 'open' && i.state === 'open') ? 'send' : 'hold'),
+        'a request opened sends': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.action === 'accept' || i.action === 'answer' ? 'send' : i.barred ? 'hold' : i.action === 'open' ? 'send' : 'hold'),
+        'an answer holds': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.action === 'accept' ? 'send' : i.barred ? 'hold' : i.action === 'open' && i.state === 'open' ? 'send' : 'hold'),
+        'accept holds': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.action === 'answer' ? 'send' : i.barred ? 'hold' : i.action === 'open' && i.state === 'open' ? 'send' : 'hold'),
+        'open never sends': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.action === 'accept' || i.action === 'answer' ? 'send' : 'hold'),
+        'decline sends': (i) => (i.action === 'block' || i.blocked ? 'forget' : i.action === 'accept' || i.action === 'answer' || i.action === 'decline' ? 'send' : i.barred ? 'hold' : i.action === 'open' && i.state === 'open' ? 'send' : 'hold'),
+        'decline forgets': (i) => (i.action === 'block' || i.blocked || i.action === 'decline' ? 'forget' : i.action === 'accept' || i.action === 'answer' ? 'send' : i.barred ? 'hold' : i.action === 'open' && i.state === 'open' ? 'send' : 'hold'),
     };
     for (const [name, mutant] of Object.entries(MUTANTS)) {
         it(`without the rule: ${name}, gets rows wrong`, () => {

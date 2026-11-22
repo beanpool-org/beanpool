@@ -44,6 +44,17 @@ vi.mock('../lib/outside-mail', async (importOriginal) => {
     };
 });
 
+// What the community says of its own addresses (its info): as this page read it, and as it answers now (left out: the same; null: no answer).
+const said = vi.hoisted(() => ({ info: {} as Record<string, unknown>, now: undefined as Record<string, unknown> | null | undefined }));
+vi.mock('../lib/api', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/api')>()),
+    getCommunityInfo: async () => { if (said.now === null) throw new Error('no answer'); return said.now ?? said.info; },
+}));
+vi.mock('../lib/visitor-lobby-gate', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/visitor-lobby-gate')>()),
+    communityInfoOnce: async () => said.info,
+}));
+
 import { outsideChatStore, clearOutsideChats } from '../lib/outside-chat-store';
 import { doorOpen } from '../lib/outside-mail';
 import { AddressCardPanel } from './AddressCardPanel';
@@ -55,6 +66,8 @@ beforeEach(async () => {
     here.findable = false;
     here.found = null;
     here.refuse = null;
+    said.info = {};
+    said.now = undefined;
     calls.setFindMe = [];
     calls.findByName = [];
     here.ctx = {
@@ -106,6 +119,43 @@ describe('find by name: the look-up', () => {
         expect(await screen.findByTestId('first-message')).toBeTruthy();
         expect(screen.getByText('Wren Tallowmere')).toBeTruthy();
         expect(screen.getByText('riverside.example · name not confirmed here')).toBeTruthy();
+    });
+
+    // #3354 review, round 4: by any of this community's addresses (lib/community-homes.ts, Message's rule), never one spelling.
+    // Its server refuses every line across to each of them. Mutation (PR body): myHome's one home only -> the last two open a box.
+    for (const home of ['b.example', 'oldb.example', 'formerb.example']) {
+        it(`a card at ${home}, one of this community's own addresses: they are in this community, and no box opens`, async () => {
+            said.info = { addresses: ['b.example', 'oldb.example'], primaryAddress: 'b.example', formerAddresses: ['formerb.example'] };
+            here.found = await signAddressCard({ key: WREN.key, home, name: 'Wren Tallowmere' }, ed25519Signer(hexToBytes(WREN.seed)));
+            render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);
+            await find(home, 'wren tallowmere');
+            expect(await screen.findByText('Wren Tallowmere is in this community: write to them here.')).toBeTruthy();
+            expect(screen.queryByTestId('first-message')).toBeNull();
+        });
+    }
+
+    // #3354 review, round 6: a name this page read as its own that it answers now it isn't (lost), and one it doesn't answer for:
+    // the card's own box, as ever. Mutation (PR body): what the page read decides -> no box opens.
+    for (const [why, now] of [['it answers without it now', { addresses: ['b.example'], primaryAddress: 'b.example' }], ['it does not answer', null]] as const) {
+        it(`a card at a name this page read as this community's own, and ${why}: on to the box`, async () => {
+            said.info = { addresses: ['b.example', 'oldb.example'], primaryAddress: 'b.example' };
+            said.now = now;
+            here.found = await signAddressCard({ key: WREN.key, home: 'oldb.example', name: 'Wren Tallowmere' }, ed25519Signer(hexToBytes(WREN.seed)));
+            render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);
+            await find('oldb.example', 'wren tallowmere');
+            expect(await screen.findByTestId('first-message')).toBeTruthy();
+            expect(screen.queryByText('Wren Tallowmere is in this community: write to them here.')).toBeNull();
+        });
+    }
+
+    // #3354 review, round 5: the rule Message keeps. Mutation (PR body): without the check -> a box opens whose line can't go.
+    it('this community knows no address of its own: its server sends no line, so it says so and no box opens', async () => {
+        said.info = { features: { outsideMessages: true }, addresses: [], primaryAddress: null, formerAddresses: [] };
+        here.found = await signAddressCard({ key: WREN.key, home: 'riverside.example', name: 'Wren Tallowmere' }, ed25519Signer(hexToBytes(WREN.seed)));
+        render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);
+        await find('riverside.example', 'wren tallowmere');
+        expect(await screen.findByText("This community's server knows none of its own names yet, so it can't send to another community.")).toBeTruthy();
+        expect(screen.queryByTestId('first-message')).toBeNull();
     });
 
     it('a refusal reads in core\'s words by its code, never the server\'s English', async () => {

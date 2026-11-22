@@ -29,7 +29,7 @@
  * Real SQLite files on disk (node:sqlite, in a directory of this test's own), the real database module, real sealing and
  * signing between real keys; the mailbox is a stand-in that answers as routes/relay.ts does.
  */
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll, afterEach } from 'vitest';
 import Module from 'node:module';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -54,6 +54,8 @@ const h = vi.hoisted(() => ({
     once: new Set<string>(),
     listsRead: false,
     profile: { features: { outsideMessages: true } } as { features: Record<string, unknown> },
+    /** What each community says of its own names (slice S5 part 2, round 6): kept and asked now alike, by its address. */
+    says: {} as Record<string, { addresses: string[]; primaryAddress?: string }>,
 }));
 
 vi.mock('react-native', () => ({
@@ -133,8 +135,8 @@ vi.mock('../blocklist', () => ({
 // Every community here takes messages from other communities (the profile this phone keeps; slice S5 changes what else it says).
 vi.mock('../node-profile', async (orig) => ({
     ...(await orig<any>()),
-    getCachedNodeProfile: vi.fn(async () => h.profile),
-    fetchNodeProfile: vi.fn(async () => h.profile),
+    getCachedNodeProfile: vi.fn(async (url: string) => ({ ...h.profile, ...h.says[url] })),
+    fetchNodeProfile: vi.fn(async (url: string) => ({ ...h.profile, ...h.says[url] })),
 }));
 // The member's statements as core signs them, without the phone's native modules.
 vi.mock('../member-statements', async () => {
@@ -212,6 +214,8 @@ import { getDatabaseFilenameForNode } from '../nodes';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { heldChatsInView, heldOutsideChatsShown, outsideChatHref } from '../held-chats';
+import { makeCommunityRecord, resetCommunityIndexForTests, setCommunityIndex } from '../community-index';
+import { messagePathOnPhone, openAcrossChat } from '../message-anyone';
 import { mailAfterBackgroundSync, outsideContext, roundOnRing, roundWhereMailWaits, syncHeldMailNow, syncOutsideMailNow } from '../outside-chat-live';
 import { chatsShown, outsideQuiet, sendFromBox, sendOutsideChange, setOutsideQuiet } from '../outside-mail';
 
@@ -308,6 +312,7 @@ async function phone(setTo: string): Promise<void> {
     h.once.clear();
     h.listsRead = false;
     h.profile = { features: { outsideMessages: true } };
+    h.says = {};
     chatId = relayConversationId(me.publicKey, peer.publicKey);
 
     // Made while set to A, as today: the chat lives in A's file, A's mailbox is its home.
@@ -747,4 +752,108 @@ describe("S5: a fellow member's first line across, through the phone's own round
             if (setTo === B) expect(chatIn(B_FILE, fellow.publicKey)).toBeUndefined();
         });
     }
+});
+
+/**
+ * Message over the real files (slice S5 part 2, #3354 review round 4; the exhaustive table is message-target-table.test.ts):
+ * a chat across kept in a real file with the home of a community this phone shares, by an older main address of it, is never
+ * where Message goes, and none is made there; one to another community still is, unless the community that carries it takes
+ * none. Set to the carrying community (A), and elsewhere (B, A held: the chat read through A's held, read-only handle).
+ */
+describe('Message over the real files: never a chat no line can go from', () => {
+    const OLD_A = 'https://oldriver.example';
+    afterEach(() => resetCommunityIndexForTests());
+    /** A moved to its main address once, and the phone's record of it holds the older one too (addresses S4); A says it is its own still. */
+    const movedOnce = () => {
+        setCommunityIndex([{ ...makeCommunityRecord(A), proved: { [OLD_A]: { at: 1 } } }]);
+        h.says[A] = { addresses: [new URL(A).host, 'oldriver.example'], primaryAddress: new URL(A).host };
+    };
+    const rehome = (file: string, home: string) => {
+        const sql = new DatabaseSync(fileOn(file));
+        sql.prepare('UPDATE outside_chats SET peer_home = ? WHERE id = ?').run(home, chatId);
+        sql.close();
+    };
+    const pathFor = (community: string, held: string[]) => messagePathOnPhone(me.publicKey, [{ community, key: peer.publicKey, name: 'Pia' }], held);
+
+    for (const link of [A, OLD_A]) {
+        it(`set to A, a chat across whose home is A's older main: the direct chat here (the contact at ${link === A ? 'its main' : 'its older main'})`, async () => {
+            await phone(A);
+            movedOnce();
+            rehome(A_FILE, 'oldriver.example');
+            rehome(B_FILE, 'oldriver.example');
+            expect(await pathFor(link, [B, C])).toEqual({ open: 'shared', community: A, key: peer.publicKey });
+        });
+        it(`set to B, the same chat in A's held file: the direct chat in A, in place (the contact at ${link === A ? 'its main' : 'its older main'})`, async () => {
+            await phone(B);
+            movedOnce();
+            rehome(A_FILE, 'oldriver.example');
+            rehome(B_FILE, 'oldriver.example');
+            expect(await pathFor(link, [A, C])).toEqual({ open: 'shared', community: A, key: peer.publicKey });
+        });
+    }
+
+    it("set to A: no chat across is made to an older main of A (the direct chat here instead), and A's file is as it was", async () => {
+        await phone(A);
+        movedOnce();
+        const before = acrossRowsOf(A_FILE);
+        expect(await openAcrossChat({ key: peer.publicKey, home: 'oldriver.example', name: 'Pia' })).toEqual({ here: peer.publicKey });
+        expect(acrossRowsOf(A_FILE)).toEqual(before);
+    });
+
+    it('set to A, a chat across to another community: that chat while A takes messages across; where A takes none, the community shared, else refused', async () => {
+        await phone(A);
+        expect(await pathFor('https://faraway.example', [B, C])).toMatchObject({ open: 'existing', chat: { kind: 'across', community: null, id: chatId, home: PEER_HOME } });
+        h.profile = { features: { outsideMessages: false } };
+        expect(await pathFor(A, [B, C])).toEqual({ open: 'shared', community: A, key: peer.publicKey });
+        expect(await pathFor('https://faraway.example', [B, C])).toMatchObject({ open: 'across' });
+        expect(await openAcrossChat({ key: peer.publicKey, home: PEER_HOME, name: 'Pia' })).toEqual({ refused: 'off' });
+    });
+
+    // Rounds 5 and 6: an address the record holds, which A says now it goes by no more, is a name A lost: never A's. Whether the
+    // person is still in A is in doubt while A's copy on this phone has a row for them, the members row of the real file, in use
+    // and through the held handle: it says a member and a visitor alike. Then nothing opens.
+    for (const [set, held] of [[A, [B, C]], [B, [A, C]]] as const) {
+        it(`set to ${set === A ? 'A' : 'B'}: an address A goes by no more, by whether A's copy has a row for the person`, async () => {
+            await phone(set);
+            movedOnce();
+            h.says[A] = { addresses: [new URL(A).host], primaryAddress: new URL(A).host };
+            const sql = new DatabaseSync(fileOn(A_FILE));
+            sql.prepare('DELETE FROM outside_chats').run();
+            sql.prepare('DELETE FROM members WHERE public_key = ?').run(peer.publicKey);
+            sql.close();
+            const other = new DatabaseSync(fileOn(B_FILE));
+            other.prepare('DELETE FROM outside_chats').run();
+            other.close();
+            expect(await pathFor(OLD_A, [...held])).toEqual({ open: 'across', key: peer.publicKey, home: 'oldriver.example', name: 'Pia' });
+            const row = (status: string) => {
+                const w = new DatabaseSync(fileOn(A_FILE));
+                w.prepare('INSERT OR REPLACE INTO members (public_key, callsign, status) VALUES (?, ?, ?)').run(peer.publicKey, 'pia', status);
+                w.close();
+            };
+            row('active');
+            expect(await pathFor(OLD_A, [...held])).toEqual({ open: 'switch', community: OLD_A });
+            row('pruned');
+            expect(await pathFor(OLD_A, [...held])).toMatchObject({ open: 'across' });
+        });
+        it(`set to ${set === A ? 'A' : 'B'}: an address only A's record holds, A saying nothing of its names: nothing opens`, async () => {
+            await phone(set);
+            movedOnce();
+            h.says = {};
+            for (const file of [A_FILE, B_FILE]) {
+                const sql = new DatabaseSync(fileOn(file));
+                sql.prepare('DELETE FROM outside_chats').run();
+                sql.close();
+            }
+            expect(await pathFor(OLD_A, [...held])).toEqual({ open: 'switch', community: OLD_A });
+        });
+    }
+
+    it("set to B as a guest's look, the chat in A's held file: that chat, in A's file; the copy of it in the guest's file never is", async () => {
+        await phone(B);
+        h.store.set('beanpool_guest_nodes', JSON.stringify([B]));
+        expect(await pathFor('https://faraway.example', [A, C])).toMatchObject({ open: 'existing', chat: { kind: 'across', community: A, id: chatId } });
+        setChatState(A_FILE, 'declined');
+        expect(await pathFor('https://faraway.example', [A, C])).toMatchObject({ open: 'across' });
+        expect(await openAcrossChat({ key: peer.publicKey, home: PEER_HOME, name: 'Pia' })).toEqual({ refused: 'no-community' });
+    });
 });

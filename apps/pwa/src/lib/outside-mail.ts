@@ -53,7 +53,7 @@ import {
 import { nodeAddress, signAddressCardFor, signedMailFetch, signRelayEnvelopeFor } from './api';
 import { accountEpoch, accountEpochHolds, onAccountEpochEnd } from './account-epoch';
 import { communityInfoOnce } from './visitor-lobby-gate';
-import { getBlocklistStatus, isUserBlocked, loadBlocklist } from './blocklist';
+import { getBlocklistStatus, isUserBlocked, loadBlocklist, unblockedInThisPage } from './blocklist';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { outsideChatStore, outsideCommunityOf, type OutsideChat, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
 
@@ -80,6 +80,8 @@ export interface OutsideMailContext {
     store: OutsideChatStore;
     /** Whether the account blocked this key. Throws when that can't be known: the item then waits, unconfirmed. */
     isBlocked: (key: string) => Promise<boolean>;
+    /** Whether the member unblocked this key in this page (lib/blocklist.ts unblockedInThisPage): a doubt, as the phone's `once`. Left out: never. */
+    unblocked?: (key: string) => boolean;
     signal?: AbortSignal;
     /**
      * Whether this still acts for the account and the community it was made for ({@link outsideContext}): false once the
@@ -226,7 +228,7 @@ export async function chatsShown(ctx: Pick<OutsideMailContext, 'identity' | 'sto
  * A chat begun from someone's card (components/AddressCardPanel.tsx): opened here, a declined one too, and its id. Null, with
  * nothing changed, when the account blocked them. The phone's openChatFromCard.
  */
-export async function openChatFromCard(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, card: Pick<AddressCard, 'key' | 'home' | 'name'>): Promise<string | null> {
+export async function openChatFromCard(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, card: Pick<AddressCard, 'key' | 'home'> & { name: string | null }): Promise<string | null> {
     if (await ctx.isBlocked(card.key)) return null;
     const chatId = relayConversationId(ctx.identity.publicKey, card.key);
     await ctx.store.openChat(ctx.identity.publicKey, chatId, { key: card.key, home: card.home, name: card.name });
@@ -631,9 +633,10 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
  * What the member just did in chat `chatId` (open it, accept it, answer it, decline it, block them), for the receipts it
  * holds (core outsideHeldReceipts, Marty 22 Nov 2026): let go, to be sent at the next round, once (the chat's mark goes with
  * them, so later lines are receipted as any other); kept held; or forgotten, never to be sent. A block that can't be read
- * (`isBlocked` throws) holds them, to be asked again at the next step. Nothing when the chat holds none. The phone's rule.
+ * (`isBlocked` throws), or one undone in this page (`unblocked`), is a doubt: it holds an open, to be asked again at the
+ * next step, never an Accept or an answer (S5 part 2). Nothing when the chat holds none. The phone's rule.
  */
-export async function heldReceiptsOn(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked'>, chatId: string, action: OutsideReceiptAction): Promise<'send' | 'hold' | 'forget' | null> {
+export async function heldReceiptsOn(ctx: Pick<OutsideMailContext, 'identity' | 'store' | 'isBlocked' | 'unblocked'>, chatId: string, action: OutsideReceiptAction): Promise<'send' | 'hold' | 'forget' | null> {
     const me = ctx.identity.publicKey;
     const chat = await ctx.store.chat(me, chatId);
     if (!chat || !(await ctx.store.receiptsHeld(me, chat.peerKey))) return null;
@@ -641,6 +644,8 @@ export async function heldReceiptsOn(ctx: Pick<OutsideMailContext, 'identity' | 
     let barred = false;
     if (!blocked) {
         try { blocked = await ctx.isBlocked(chat.peerKey); } catch { barred = true; }
+        // A block undone in this page is a doubt too (S5 part 2: `once` lined up with the phone): it holds an open, never an Accept or an answer.
+        if (!blocked && ctx.unblocked?.(chat.peerKey)) barred = true;
     }
     const what = outsideHeldReceipts({ action, state: chat.state, blocked, barred });
     if (what === 'send') await ctx.store.releaseReceipts(me, chat.peerKey);
@@ -755,7 +760,7 @@ function standingNow(): Standing {
 export async function outsideContext(here: Standing = standingNow()): Promise<OutsideMailContext | null> {
     const identity = await loadIdentity().catch(() => null);
     if (!identity?.privateKey || !here.holds()) return null;
-    return { nodeUrl: here.nodeUrl, identity, store: outsideChatStore(here.nodeUrl, here.holds), isBlocked: blockedHere, holds: here.holds };
+    return { nodeUrl: here.nodeUrl, identity, store: outsideChatStore(here.nodeUrl, here.holds), isBlocked: blockedHere, unblocked: (k) => unblockedInThisPage(k), holds: here.holds };
 }
 
 /**

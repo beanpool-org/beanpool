@@ -739,9 +739,10 @@ router.get('/api/community/info', async (ctx) => {
         pollOther: true,
         requestSigning: REQUEST_SIGNING_VERSION,
         addresses: publishedAddresses(),
-        // Lost-name L4: where the community lives now (one of `addresses`, or null), and the BeanPool names it had
-        // before, still accepted but never an address to send an app to. The web app opened at one of those says the
-        // community has moved, with a plain link to `primaryAddress`.
+        // Lost-name L4: where the community lives now (one of `addresses`, or null: it can send nothing to another
+        // community then), and the BeanPool names it had before, still accepted (so never a lost one) but never an
+        // address to send an app to. The web app opened at one of those says the community has moved, with a plain link
+        // to `primaryAddress`.
         primaryAddress: primaryAddress(),
         formerAddresses: formerAddresses(),
         // Where the 🏘️ Local community sheet's Start a community leads (config/start-community.ts): beanpool.org's page

@@ -567,17 +567,20 @@ export type OutsideReceiptAction = 'none' | 'open' | 'accept' | 'answer' | 'decl
  *
  * - A block, or the sender `blocked` now (a block made anywhere, seen by a round or at the step): forget. A line later
  *   blocked is never receipted, whatever the member does after (an unblock included: its receipt is gone).
+ * - Accept, or an answer (a line of mine in that chat): send, even while `barred`. Each is the member's own explicit step
+ *   towards this person (an answer reaches them anyway, and tells them more than a Delivered), so a block once made and
+ *   since undone no longer holds them (S5 part 2: `once` lined up on the phone and the web).
  * - Not sure no block bars them (`barred`: the phone's block lists, a block once made and since undone among them, or a
- *   list that can't be read): hold, and ask again at the next step.
- * - Accept, or an answer (a line of mine in that chat): send.
+ *   list that can't be read; the web's, a block undone in this page, or a list that can't be read): an open holds, and
+ *   the next step asks again. Only an open: looking is no step towards them.
  * - Open: send for a chat that is open (the line came straight in). A request opened is still held: its screen says "They
  *   will not know you saw this unless you accept", in both apps, and a Delivered would tell them.
  * - Decline, or nothing yet: hold. A decline reads as a request left unanswered, as inside.
  */
 export function outsideHeldReceipts(input: { action: OutsideReceiptAction; state: OutsideChatState; blocked: boolean; barred: boolean }): 'send' | 'hold' | 'forget' {
     if (input.action === 'block' || input.blocked) return 'forget';
-    if (input.barred) return 'hold';
     if (input.action === 'accept' || input.action === 'answer') return 'send';
+    if (input.barred) return 'hold';
     if (input.action === 'open') return input.state === 'open' ? 'send' : 'hold';
     return 'hold';
 }

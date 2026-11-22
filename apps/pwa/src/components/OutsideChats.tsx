@@ -11,7 +11,8 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-    OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, outsideLineActions, outsideLineShown, t, type OutsideChange, type OutsideChangeKind,
+    ACROSS_FIRST_LINE_NOTE, OUTSIDE_LINE_TEXT_MAX, OUTSIDE_REACTIONS, OUTSIDE_WRITES_STAY_THERE, acrossFirstLineNoteUnder, outsideLineActions, outsideLineShown, t,
+    type OutsideChange, type OutsideChangeKind,
 } from '@beanpool/core';
 import { blockUser } from '../lib/blocklist';
 import { ChatConfirmDialog } from './ChatConfirmDialog';
@@ -24,7 +25,7 @@ import {
 import type { OutsideChat, OutsideLine, OutsideLineState } from '../lib/outside-chat-store';
 
 /** Core's sentence, the phone's too (@beanpool/core outside-devices.ts): my own lines stay where I wrote them (X2b). */
-const LINES = { writesStayThere: OUTSIDE_WRITES_STAY_THERE };
+const LINES = { writesStayThere: OUTSIDE_WRITES_STAY_THERE, firstLineNote: ACROSS_FIRST_LINE_NOTE };
 
 /** How often an open chat asks for what waits, while it is on screen. */
 const POLL_MS = 15_000;
@@ -338,7 +339,9 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                         )}
                     </div>
                     <div role="log" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                        {lines.map((l) => {
+                        {lines.map((l, _i, all) => {
+                            // Under my first line while they have written nothing here (slice S5 part 2: core acrossFirstLineNoteUnder).
+                            const noteHere = me !== null && acrossFirstLineNoteUnder(all, me, chat.restored) === l.id;
                             const mine = l.author === me;
                             // The line with its changes applied (X6): its writer's newest edit, each person's newest reaction, or deleted.
                             const shown = outsideLineShown(l, changes, me ?? '');
@@ -366,6 +369,7 @@ export function OutsideChatThread({ chatId, onBack, onAccepted }: { chatId: stri
                                         {tick && <span data-testid="outside-line-state" style={{ display: 'block', fontSize: '0.75rem', textAlign: 'right', opacity: 0.9 }}>{tick}</span>}
                                         {why && <span data-testid="outside-line-why" style={{ display: 'block', fontSize: '0.75rem', opacity: 0.9, ...wrap }}>{why}</span>}
                                     </div>
+                                    {noteHere && <span data-testid="outside-first-line-note" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'right', ...wrap }}>{t(LINES.firstLineNote)}</span>}
                                     {shown.reactions.length > 0 && (
                                         <div data-testid="outside-line-reactions" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
                                             {shown.reactions.map((r) => (

@@ -29,7 +29,9 @@ Then someone in another community who types your exact name, as you use it here,
 
 ## Writing to someone
 
-In **Chat**, open **New Message** (the pencil button; in the web app **✉️ New DM**), then **Someone in another community**.
+If they are in your contacts, you need no card: in **Contacts**, tap **Message** beside their name. A chat you have with them opens, or, if you share no community, a new chat across communities. Under your first message it says **They will see this if they take messages from other communities.**
+
+Otherwise, in **Chat**, open **New Message** (the pencil button; in the web app **✉️ New DM**), then **Someone in another community**.
 
 - **Their card:** tap **Scan a card** and point the camera at their card's QR code, or paste the link they sent you under **Paste a card link**, then tap **Read the card**. In the web app, **Scan a card** shows only where the browser can read a QR code.
 - **Their name:** under **Someone in another community**, type **Their community's address**, then **Their exact name**, and tap **Find them**. Only people who said yes can be found.

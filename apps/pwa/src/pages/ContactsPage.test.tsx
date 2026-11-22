@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { readContactsCopy, toEd25519Pkcs8, type ContactsCopyWire } from '@beanpool/core';
+import { newContactId, putContact, readContactsCopy, toEd25519Pkcs8, type ContactsCopyWire } from '@beanpool/core';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { importIdentity, type BeanPoolIdentity } from '../lib/identity';
-import { contactsSnapshot, resetContactsStoreForTest, saveContactsNow } from '../lib/contacts-store';
+import { changeContacts, contactsSnapshot, resetContactsStoreForTest, saveContactsNow } from '../lib/contacts-store';
 import { ContactsPage } from './ContactsPage';
 import { AddToContacts } from '../components/AddToContacts';
 import { ContactsSignOutNote } from '../components/ContactsSignOutNote';
@@ -226,6 +226,75 @@ describe('Contacts on the web', () => {
         expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Message' }));
         expect(onMessage).toHaveBeenCalledWith(sam);
+    });
+
+    // S5 part 2 (DESIGN-no-switch-messaging-fable.md §3): the web holds one community, so a contact in any other gets Message,
+    // which MessagesPage opens across from their link (lib/message-anyone.ts), never an "Open {community} ›" link out.
+    it('a linked member in another community: Message, handed on with their link and name; no Open {community} ›', async () => {
+        const dee = 'cd'.repeat(32);
+        await changeContacts(me, (l) => putContact(l, {
+            id: newContactId(), name: 'Dée Walker', phones: [], emails: [], note: '', invite: null,
+            links: [{ key: dee, community: 'https://faraway.example', callsign: 'dee', how: 'profile', at: '2026-11-12T01:00:00.000Z' }],
+        }));
+        const onMessage = vi.fn();
+        const onMessageAcross = vi.fn(async () => null);
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={onMessage} onMessageAcross={onMessageAcross} />);
+        expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /Open faraway\.example/ })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Message' }));
+        expect(onMessageAcross).toHaveBeenCalledWith([{ key: dee, community: 'https://faraway.example' }], 'Dée Walker');
+        expect(onMessage).not.toHaveBeenCalled();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Message' })).toBeEnabled());
+        expect(screen.queryByRole('link', { name: /Open faraway\.example/ })).toBeNull();
+    });
+
+    // #3354 review, round 6: whose the address is can't be said for certain, so nothing opens; the row then has the link it had
+    // before this slice, beside Message. And no second Message starts while one is under way (round 4's finding 3).
+    it('a Message that could not place the address: the row links to it; every Message waits while one is under way', async () => {
+        const [dee, ana] = ['cd'.repeat(32), 'ce'.repeat(32)];
+        for (const [name, key, community] of [['Dée Walker', dee, 'https://old.faraway.example'], ['Ana Li', ana, 'https://hillside.example']] as const) {
+            await changeContacts(me, (l) => putContact(l, {
+                id: newContactId(), name, phones: [], emails: [], note: '', invite: null,
+                links: [{ key, community, callsign: 'x', how: 'profile', at: '2026-11-12T01:00:00.000Z' }],
+            }));
+        }
+        let answer: (address: string | null) => void = () => {};
+        const onMessageAcross = vi.fn(() => new Promise<string | null>((resolve) => { answer = resolve; }));
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} onMessageAcross={onMessageAcross} />);
+        expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
+        const buttons = () => screen.getAllByRole('button', { name: 'Message' });
+        fireEvent.click(buttons()[1]);
+        await waitFor(() => buttons().forEach((b) => expect(b).toBeDisabled()));
+        fireEvent.click(buttons()[0]);
+        expect(onMessageAcross).toHaveBeenCalledTimes(1);
+        await act(async () => { answer('https://old.faraway.example'); });
+        buttons().forEach((b) => expect(b).toBeEnabled());
+        const link = screen.getByRole('link', { name: 'Open old.faraway.example ›' });
+        expect(link).toHaveAttribute('href', 'https://old.faraway.example');
+        expect(within(screen.getAllByTestId('contact-row')[1]).getByRole('link')).toBe(link);
+        expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(1);
+    });
+
+    // #3354 review, round 3: the block is asked by every key the contact's links name (as the phone asks), so Message hands
+    // on every link, the one the row shows first (a chat across is made from it). Mutation: only the shown link -> red.
+    it('a member linked in two other communities: Message hands on both links, the one shown first', async () => {
+        const dee = 'cd'.repeat(32);
+        const deeThere = 'ce'.repeat(32);
+        await changeContacts(me, (l) => putContact(l, {
+            id: newContactId(), name: 'Dée Walker', phones: [], emails: [], note: '', invite: null,
+            links: [
+                { key: dee, community: 'https://faraway.example', callsign: 'dee', how: 'profile', at: '2026-11-12T01:00:00.000Z' },
+                { key: deeThere, community: 'https://hillside.example', callsign: 'dee', how: 'profile', at: '2026-11-12T01:00:00.000Z' },
+            ],
+        }));
+        const onMessageAcross = vi.fn(async () => null);
+        render(<ContactsPage identity={me} onBack={vi.fn()} onMessage={vi.fn()} onMessageAcross={onMessageAcross} />);
+        expect(await screen.findByText('On BeanPool')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Message' }));
+        expect(onMessageAcross).toHaveBeenCalledWith([
+            { key: dee, community: 'https://faraway.example' },
+            { key: deeThere, community: 'https://hillside.example' },
+        ], 'Dée Walker');
     });
 
     it('sign-out says when the community does not hold the latest copy yet, and Save now saves it', async () => {

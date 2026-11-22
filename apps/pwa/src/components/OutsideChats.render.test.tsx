@@ -17,7 +17,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
-    OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_DOOR_SWITCH_BROWSER, OUTSIDE_WRITES_STAY_THERE, addressCardLink, ed25519Signer, relayConversationId,
+    ACROSS_FIRST_LINE_NOTE, OUTSIDE_DOOR_EACH_DEVICE, OUTSIDE_DOOR_SWITCH_BROWSER, OUTSIDE_WRITES_STAY_THERE, addressCardLink, ed25519Signer, relayConversationId,
     signAddressCard,
 } from '@beanpool/core';
 import { MemoryIDBKeyRange, memoryIndexedDB } from '../lib/memory-indexeddb';
@@ -104,6 +104,43 @@ describe('the address card and its door (AddressCardPanel)', () => {
         fireEvent.click(screen.getByTestId('read-card'));
         expect(await screen.findByTestId('first-message')).toBeTruthy();
         expect(screen.getByText('a.example · name not confirmed here')).toBeTruthy();
+    });
+});
+
+/**
+ * The note under a first line across (slice S5 part 2, DESIGN-no-switch-messaging-fable.md §3 "Member-facing words"; core
+ * ACROSS_FIRST_LINE_NOTE, acrossFirstLineNoteUnder): under my first line only, while they have written nothing; gone once
+ * they write; never in a chat brought back. Drawn in the theme's secondary text colour (a token both themes define, so it
+ * reads in light and dark), and it wraps anywhere (a 320 px screen at 130 % text never scrolls sideways).
+ */
+describe('the note under a first line across (S5 part 2)', () => {
+    const NOTE = 'They will see this if they take messages from other communities.';
+    const mine = (id: string, text: string, at: number) => here.ctx.store.addMine(BEN.key, { id, chatId, author: BEN.key, text, replyTo: null, at, item: '{}' });
+
+    it('under my first line only, while they have written nothing; in both themes\' secondary text, wrapping anywhere', async () => {
+        expect(ACROSS_FIRST_LINE_NOTE).toBe(NOTE);
+        await here.ctx.store.openChat(BEN.key, chatId, { key: SOL.key, home: SOL_HOME, name: 'Sol' });
+        const at = Date.now() - 10_000;
+        await mine('m1', 'Hello from my community', at);
+        await mine('m2', 'A second line', at + 1);
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        const note = await screen.findByTestId('outside-first-line-note');
+        expect(screen.getAllByTestId('outside-first-line-note')).toHaveLength(1);
+        expect(note.textContent).toBe(NOTE);
+        expect(note.parentElement?.textContent).toContain('Hello from my community');
+        expect(note.parentElement?.textContent).not.toContain('A second line');
+        expect(note.style.color).toBe('var(--text-secondary)');
+        expect(note.style.overflowWrap).toBe('anywhere');
+    });
+
+    it('gone once they write', async () => {
+        await here.ctx.store.openChat(BEN.key, chatId, { key: SOL.key, home: SOL_HOME, name: 'Sol' });
+        const at = Date.now() - 10_000;
+        await mine('m1', 'Hello from my community', at);
+        await here.ctx.store.writeTheirs(BEN.key, { id: 't1', chatId, author: SOL.key, text: 'Hi back', replyTo: null, at: at + 1, sealed: '{}' }, { home: SOL_HOME, name: 'Sol' }, 'line');
+        render(<OutsideChatThread chatId={chatId} onBack={() => {}} />);
+        await screen.findByText('Hi back');
+        expect(screen.queryByTestId('outside-first-line-note')).toBeNull();
     });
 });
 

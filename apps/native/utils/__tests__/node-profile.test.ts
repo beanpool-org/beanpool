@@ -33,6 +33,7 @@ import {
     pollsInformal,
     INFORMAL_POLL_NOTE,
     effectiveFeatures,
+    noteMembersOnDemand,
     readReaderFeatures,
 } from '../node-profile';
 import { communityShapeLines } from '@beanpool/core';
@@ -206,19 +207,44 @@ describe('readNodeProfile', () => {
         ])('lost names left out of the former ones: $name -> not said', ({ says }) => {
             expect(readNodeProfile({ ...INFO, formerExcludesLost: says })!.ownNames).not.toHaveProperty('formerExcludesLost');
         });
-        it('no list of addresses, or more names than are kept: says nothing of its names, and neither does the copy', async () => {
-            expect(readNodeProfile({ primaryAddress: 'beans.example.org' })!).not.toHaveProperty('ownNames');
+        it('no list of addresses, or more names than are kept: heard, and says nothing of its names (null), and neither does the copy', async () => {
+            expect(readNodeProfile({ primaryAddress: 'beans.example.org' })!.ownNames).toBeNull();
             const many = { addresses: Array.from({ length: 60 }, (_, i) => `n${i}.example`), formerAddresses: Array.from({ length: 5 }, (_, i) => `f${i}.example`) };
             expect(readNodeProfile({ ...many, formerAddresses: many.formerAddresses.slice(1) })!.ownNames!.addresses).toHaveLength(60);
-            expect(readNodeProfile(many)!).not.toHaveProperty('ownNames');
+            expect(readNodeProfile(many)!.ownNames).toBeNull();
             vi.stubGlobal('fetch', async () => new Response(JSON.stringify(many), { status: 200 }));
             try {
                 await fetchNodeProfile('https://many.example', fetch);
                 expect((await getCachedNodeProfile('https://many.example'))!.addresses).toHaveLength(32);
-                expect(await getCachedNodeProfile('https://many.example')).not.toHaveProperty('ownNames');
+                expect((await getCachedNodeProfile('https://many.example'))!.ownNames).toBeNull();
+                // Written back with a feature marked (a refused directory read): heard still, and it says nothing still.
+                await noteMembersOnDemand('https://many.example', async () => { throw new Error('no answer'); });
+                expect(await getCachedNodeProfile('https://many.example')).toMatchObject({ features: { membersOnDemand: true }, ownNames: null });
             } finally {
                 vi.unstubAllGlobals();
             }
+        });
+
+        // An update finds the copies the build before it kept (#3359 review): the hosts a link can be, and no `ownNames`. They
+        // are names that community said, and only add doubt (utils/community-homes.ts).
+        const OLDER = { profile: 'local', features: { outsideMessages: true }, checkedAt: '2026-11-20T00:00:00.000Z', recoveryCopies: 'vault' };
+        const HOSTS = (of: string) => Array.from({ length: 32 }, (_, i) => `${of}${i}.example`);
+        it.each([
+            { name: 'its addresses and its main', kept: { addresses: ['beans.example.org', 'two.example.org:8443'], primaryAddress: 'beans.example.org' },
+                ownNames: { addresses: ['beans.example.org', 'two.example.org:8443'], primaryAddress: 'beans.example.org', formerAddresses: [] } },
+            { name: 'the names it had before too, which it never said leave the lost ones out', kept: { addresses: ['beans.example.org'], formerAddresses: ['old.example.org'] },
+                ownNames: { addresses: ['beans.example.org'], formerAddresses: ['old.example.org'] } },
+            { name: 'as many as such a copy holds', kept: { addresses: HOSTS('n'), formerAddresses: HOSTS('f') }, ownNames: { addresses: HOSTS('n'), formerAddresses: HOSTS('f') } },
+            { name: 'a list, none of it a host a link can be', kept: { addresses: [] }, ownNames: { addresses: [], formerAddresses: [] } },
+            { name: 'no list', kept: {}, ownNames: null },
+        ])('a copy an older build kept ($name): the names are the hosts it kept, and the lost ones may be among the former', async ({ kept, ownNames }) => {
+            store.set('beanpool_node_profiles', JSON.stringify({ 'https://kept.example': { ...OLDER, ...kept } }));
+            const read = (await getCachedNodeProfile('https://kept.example'))!;
+            expect(read.ownNames).toEqual(ownNames);
+            expect(read.ownNames ?? {}).not.toHaveProperty('formerExcludesLost');
+            // Written back with a feature marked, it is an older build's still.
+            await noteMembersOnDemand('https://kept.example', async () => { throw new Error('no answer'); });
+            expect(await getCachedNodeProfile('https://kept.example')).toMatchObject({ features: { membersOnDemand: true }, ownNames });
         });
     });
 

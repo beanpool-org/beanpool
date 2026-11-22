@@ -245,9 +245,10 @@ export interface NodeProfile {
     formerAddresses?: string[];
     /**
      * What it says of its own names, whole, as @beanpool/core reads an address ({@link OwnNames}): what utils/community-homes.ts
-     * weighs. `addresses` above are the hosts a link can be. Absent: it says nothing of them, or a copy from before this.
+     * weighs. `addresses` above are the hosts a link can be. Null: heard, and it says nothing of them, or more than are kept.
+     * Absent only from a copy an older build kept, and read from its hosts (getCachedNodeProfile).
      */
-    ownNames?: OwnNames;
+    ownNames?: OwnNames | null;
     /**
      * It said it knows no address of its own now (core saysNoHome: none published, or `primaryAddress` null), so its server
      * sends nothing to another community (utils/message-anyone.ts). Absent: it has one, or doesn't say.
@@ -370,14 +371,13 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
     }
     const startCommunityUrl = openableStartUrl(b.startCommunityUrl);
     const language = typeof b.language === 'string' ? normaliseLang(b.language) : null;
-    const ownNames = readOwnNames(b.ownNames && typeof b.ownNames === 'object' ? b.ownNames as SaidAddresses : b);
     return {
         profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString(),
         ...(startCommunityUrl ? { startCommunityUrl } : {}),
         ...(language ? { language } : {}),
         recoveryCopies: readRecoveryCopiesRule(b.recoveryCopies),
         ...ownAddresses(b.addresses, b.primaryAddress, b.formerAddresses),
-        ...(ownNames ? { ownNames } : {}),
+        ownNames: readOwnNames(b.ownNames && typeof b.ownNames === 'object' ? b.ownNames as SaidAddresses : b),
         ...(b.noHome === true || saysNoHome(b) ? { noHome: true as const } : {}),
     };
 }
@@ -416,7 +416,9 @@ export async function getCachedNodeProfile(url: string | null | undefined): Prom
     if (profile && !('recoveryCopies' in cached)) delete profile.recoveryCopies;
     // Said by the node, never worked out from the copy: the addresses kept leave out one no link can be (ownHosts).
     if (profile && cached.noHome !== true) delete profile.noHome;
-    if (profile && !cached.ownNames) delete profile.ownNames;
+    // Heard by this build, and it says nothing of its names, whole: none are worked out from the hosts kept, which may be a list
+    // cut short. A copy an older build kept has no `ownNames`: its hosts are names it said, and only add doubt (community-homes.ts).
+    if (profile && 'ownNames' in cached && !cached.ownNames) profile.ownNames = null;
     return profile;
 }
 

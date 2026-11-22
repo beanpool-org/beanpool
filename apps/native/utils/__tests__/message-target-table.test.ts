@@ -19,7 +19,8 @@
  * what this phone KEEPS of it are three tables, each written out (round 5: the names a server answers as were made from the
  * list it publishes; round 6: no lost name was ever on the kept signed list, so the list was a way in that no row asked).
  * Then rows for what the table's fixed world can't hold: info heard only now, a saved row of the same community, a community
- * that claims another's address.
+ * that claims another's address, the info an older build kept (its own table: the copy x where else the name is held x the
+ * chats x answered or not).
  *
  * Real: message-anyone, community-homes, community-index, held-chats, outside-chat-live, outside-mail's list and card, dm-blocked,
  * node-profile, nodes, core. In memory: the database module's reads, the phone's storage, and the info a server answers.
@@ -867,6 +868,93 @@ describe('Message on the phone: what the table\'s fixed world cannot hold', () =
         // The record and the signed list hold the one; the list alone holds the other.
         expect(word(await message(at('https://oldriver.example')))).toBe('here');
         expect(word(await message(at('https://river.example')))).toBe('switch');
+        expect(made()).toEqual([]);
+    });
+
+    // ── the info an older build kept: every install of this one that is an update has them (#3359 review) ──
+    /** A copy as the release before this build wrote it: the hosts a link can be and the main, nothing of `ownNames`, nor the names it had before. */
+    const OLDER_BUILD = ({ profile, features, checkedAt, addresses, primaryAddress }: ReturnType<typeof infoOf>) => ({ profile, features, checkedAt, recoveryCopies: 'vault', addresses, primaryAddress });
+    /** What this phone keeps of both, heard by `build`; `more`: names beyond the table's own KEPT that each copy of `side`'s holds. */
+    const keptBy = (build: 'this build' | 'an older build', side: 'riverside' | 'hillside', more: string[]) => {
+        const infos = (['riverside', 'hillside'] as const).map((s) => infoOf(s, s === side ? { ...KEPT[s], addresses: [...KEPT[s].addresses, ...more] } : KEPT[s]));
+        if (build === 'this build') keep([[RIVERSIDE, infos[0]], [HILLSIDE, infos[1]]]);
+        else phone.store.set('beanpool_node_profiles', JSON.stringify({ [RIVERSIDE]: OLDER_BUILD(infos[0]), [HILLSIDE]: OLDER_BUILD(infos[1]) }));
+    };
+    const SIDES = {
+        riverside: { host: 'saidriver.example', main: RIVERSIDE, at: 'here', direct: () => { phone.directHere = [dm('d-here')]; } },
+        hillside: { host: 'saidhill.example', main: HILLSIDE, at: 'held', direct: () => { phone.directHeld = [dm('d-held')]; } },
+    } as const;
+    /** The other copies that hold the name, and where Message goes with no answer: its info kept `holds` it, or `lacks` it (null: nothing claims it, so not these rows). */
+    const ELSEWHERE = {
+        'no other copy': { list: false, record: false, quiet: { holds: 'switch', lacks: null } },
+        'its signed list': { list: true, record: false, quiet: { holds: 'switch', lacks: 'switch' } },
+        'its record': { list: false, record: true, quiet: { holds: 'switch', lacks: 'switch' } },
+        'both': { list: true, record: true, quiet: { holds: 'own', lacks: 'switch' } },
+    } as const;
+    const holdElsewhere = (side: 'riverside' | 'hillside', { list, record: proved }: { list: boolean; record: boolean }) => setCommunityIndex(RECORDS().map((r) => (r.peerId !== `peer-${side}` ? r
+        : record(r.id, r.using, r.peerId!, list ? [...LISTS[side], SIDES[side].host] : LISTS[side], proved ? [...PROVED[side], SIDES[side].host] : PROVED[side]))));
+    /** The chats there are with them: none, one across (open) whose home is that name, in either file, or the direct one. */
+    const NAMED_CHATS = { 'no chat': null, 'a chat across in the file in use': RIVERSIDE, 'a chat across in the held file': HILLSIDE, 'the direct chat': 'direct' } as const;
+    const KEPT_COPIES = [
+        { copy: 'kept by this build', build: 'this build', holds: true }, { copy: 'kept by an older build', build: 'an older build', holds: true },
+        { copy: 'kept by an older build, from before it had the name', build: 'an older build', holds: false },
+    ] as const;
+    const NAMED = (['riverside', 'hillside'] as const).flatMap((side) => KEPT_COPIES.flatMap((k) => Object.entries(ELSEWHERE).flatMap(([elsewhere, e]) => (!k.holds && !e.quiet.lacks ? []
+        : Object.entries(NAMED_CHATS).flatMap(([chats, chat]) => [true, false].flatMap((answers) => [true, false].map((atName) => {
+            const quiet = k.holds ? e.quiet.holds : e.quiet.lacks;
+            const want = answers || !atName || chat === 'direct' || quiet === 'own' ? SIDES[side].at : 'switch';
+            return { row: `${side}, its info ${k.copy}, the name on ${elsewhere} besides, ${chats}, ${answers ? 'both answer' : 'neither answers'}, the contact at ${atName ? 'that name' : 'its main'}`, side, k, e, chat, answers, atName, want };
+        })))))));
+    it('every copy, every other place the name is held, every chat, answered or not', () => {
+        expect(NAMED).toHaveLength(2 * (4 + 4 + 3) * 4 * 2 * 2);
+    });
+    // The review's four are the rows of an older build's copy where both answer; each made or opened a chat across at 7601493d.
+    for (const { row, side, k, e, chat, answers, atName, want } of NAMED) it(`one of its own names: ${row}`, async () => {
+        const { host, main, direct } = SIDES[side];
+        SERVERS[side].names.push(host); SERVERS[side].members.add(K);
+        holdElsewhere(side, e);
+        keptBy(k.build, side, k.holds ? [host] : []);
+        TOLD[side].addresses.push(host);
+        if (answers) saysNow();
+        if (chat === 'direct') direct(); else if (chat) across(chat, host)();
+        const before = onDisk();
+        const got = await message(at(atName ? `https://${host}` : main));
+        expect(word(got)).toBe(want);
+        expect(nowhere(got)).toBeNull();
+        if (got.at === 'held' && !got.existing) expect(got.route).toBe(main);
+        if (got.at === 'switch') expect(got.address).toBe(`https://${host}`);
+        expect(onDisk()).toEqual(before);
+    });
+
+    it.each((['riverside', 'hillside'] as const).flatMap((side) => (['this build', 'an older build'] as const).flatMap((build) => Object.entries(ELSEWHERE).map(([elsewhere, e]) => ({ side, build, elsewhere, e })))))(
+        'a name $side lost since $build heard its info, on $elsewhere besides: asked, so across to the one that has it now; with no answer it opens nothing, but where every copy agrees', async ({ side, build, e }) => {
+            const { host } = SIDES[side];
+            SERVERS.lakeside.names.push(host); SERVERS.lakeside.members.add(K);
+            holdElsewhere(side, e);
+            keptBy(build, side, [host]);
+            if (e.quiet.holds === 'switch') expect(await message(at(`https://${host}`))).toEqual({ at: 'switch', address: `https://${host}` });
+            expect(made()).toEqual([]);
+            saysNow();
+            const got = await message(at(`https://${host}`));
+            expect(word(got)).toBe('new');
+            expect(nowhere(got)).toBeNull();
+        });
+
+    it.each([
+        { side: 'riverside', url: 'https://beforeriver.example', want: 'here' },
+        { side: 'hillside', url: 'https://beforehill.example', want: 'held' },
+    ] as const)('a name $side had before, on an older build\'s copy that kept those ones too, its signed list and its record: it never said the lost ones are left out, so unsure until it answers', async ({ side, url, want }) => {
+        SERVERS[side].members.add(K);
+        setCommunityIndex(RECORDS().map((r) => (r.peerId === `peer-${side}` ? record(r.id, r.using, r.peerId!, [...LISTS[side], hostOf(url)], PROVED[side]) : r)));
+        phone.store.set('beanpool_node_profiles', JSON.stringify({
+            [RIVERSIDE]: { ...OLDER_BUILD(infoOf('riverside', KEPT.riverside)), formerAddresses: KEPT.riverside.formerAddresses },
+            [HILLSIDE]: { ...OLDER_BUILD(infoOf('hillside', KEPT.hillside)), formerAddresses: KEPT.hillside.formerAddresses },
+        }));
+        expect(await message(at(url))).toEqual({ at: 'switch', address: url });
+        saysNow();
+        const got = await message(at(url));
+        expect(word(got)).toBe(want);
+        expect(nowhere(got)).toBeNull();
         expect(made()).toEqual([]);
     });
 

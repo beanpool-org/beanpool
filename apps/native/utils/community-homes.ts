@@ -7,9 +7,10 @@
  * - **What the phone keeps** ({@link keptNames}, no network): the address it reaches the community at (the one it is set to,
  *   or the saved row's: where its requests go) and the ones its record holds (community-index.ts: where it met it, each proved
  *   one; `refused`: each that answered as something else), its signed list as last seen, and its info as last heard
- *   (node-profile.ts `ownNames`: the names as core reads them, never the hosts a link can be). Each is as old as it is: the
- *   list of a community the phone isn't set to has no age limit at all. The record's `using` is one of the record's addresses
- *   here and no more: a member's own switch to another address of the community leaves it behind, and it may be lost since.
+ *   (node-profile.ts `ownNames`: the names as core reads them, never the hosts a link can be, which are all an older build kept:
+ *   that copy's names only add doubt). Each is as old as it is: the list of a community the phone isn't set to has no age limit
+ *   at all. The record's `using` is one of the record's addresses here and no more: a member's own switch to another address of
+ *   the community leaves it behind, and it may be lost since.
  * - **What the community answers now** ({@link askedNow}): its info, asked within a deadline, and only where a copy kept makes
  *   the address one of its names. At the address it is reached at nothing is asked.
  * - **Who the copy has there** ({@link doubted}): where the community says now that an address this phone knew as its own isn't,

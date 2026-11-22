@@ -723,6 +723,13 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
         /** What a community says, as this phone keeps it (node-profile.ts). */
         const keptOf = (more: Record<string, unknown>) => readNodeProfile({ profile: 'local', features: { outsideMessages: true }, ...more });
         const SAYS = (more: Record<string, unknown>, community = RIVERSIDE) => mem.store.set('beanpool_node_profiles', JSON.stringify({ [community]: keptOf(more) }));
+        /** Each answers with its older name, which the copies an older build kept hold too: hosts alone, nothing of `ownNames`. */
+        const OLDER_BUILD_KEPT = () => {
+            MOVED_AND_SAYS_SO();
+            setCommunityIndex([]);
+            const copy = (said: Record<string, unknown>) => ({ profile: 'local', features: { outsideMessages: true }, checkedAt: '2026-11-20T00:00:00.000Z', recoveryCopies: 'vault', ...said });
+            mem.store.set('beanpool_node_profiles', JSON.stringify({ [RIVERSIDE]: copy(mem.saysNow), [RIVERBEND]: copy(mem.saysThere[RIVERBEND]) }));
+        };
         const OFF = () => { SAYS({ features: { outsideMessages: false } }); mem.outsideOn = false; };
         const DIRECT_HERE = { pushed: '/chat/conv-1', started: [['dm', [ME.publicKey, ANA], ME.publicKey]] };
         const IN_PLACE = { pushed: { pathname: '/chat/[id]', params: { id: 'conv-1', community: RIVERBEND, communityName: 'Riverbend' } }, started: [['dm', [ME.publicKey, ANA], ME.publicKey, undefined, undefined, RIVERBEND]] };
@@ -743,6 +750,12 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
                 set: () => { OFF(); mem.acrossHere = [{ id: 'x-open', peerKey: ANA, peerHome: 'faraway.example', state: 'open' }]; }, ...DIRECT_HERE },
             { name: 'the same, with no community shared: refused, and says why', link: FARAWAY,
                 set: () => { OFF(); mem.acrossHere = [{ id: 'x-open', peerKey: ANA, peerHome: 'faraway.example', state: 'open' }]; }, alert: "This community doesn't take messages from other communities." },
+            // The copy an older build kept (#3359 review): no record, no signed list, the name on that copy alone.
+            { name: 'a dead chat across kept with a name only the info an older build kept holds: the direct chat here, never that chat', link: RIVERSIDE,
+                set: () => { OLDER_BUILD_KEPT(); mem.acrossHere = [{ id: 'x-dead', peerKey: ANA, peerHome: 'oldriver.example', state: 'open' }]; }, ...DIRECT_HERE },
+            { name: 'the same of a held community, in its file: the direct chat there, in place', link: RIVERBEND,
+                set: () => { HELD(); OLDER_BUILD_KEPT(); mem.heldAcross[RIVERBEND] = [{ id: 'x-dead', peerKey: ANA, peerHome: 'oldbend.example', state: 'open' }]; }, ...IN_PLACE },
+            { name: 'a contact at such a name of a held community, no chat: the direct chat there, in place', link: HELD_OLD, set: () => { HELD(); OLDER_BUILD_KEPT(); }, ...IN_PLACE },
             { name: 'on a guest\'s look, a direct chat the member already has there opens', link: RIVERSIDE,
                 set: () => { HELD(); mem.store.set('beanpool_guest_nodes', JSON.stringify([RIVERSIDE])); mem.chatsHere = [hereDm('d-guest', ANA)]; }, pushed: '/chat/d-guest' },
             { name: 'on a guest\'s look, no chat there: none is started or made', link: RIVERSIDE,

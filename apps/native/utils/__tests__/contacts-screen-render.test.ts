@@ -584,7 +584,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
      * none). Blocked on this phone's own list is refused on every path in the same words (a block seen only on another
      * community's list is not: Marty 22 Nov, S7 Q2), and
      * nothing opens, starts or is made; unblocked since and none open what the path opens. Mutations (PR body): no block asked
-     * -> the blocked rows open; the phone's list only (isUserBlocked) -> the "another held community" rows open; `once` asked
+     * -> the blocked rows open; seenThere counted too (blockedAnywhere) -> the "only on another community's own list" rows are refused; `once` asked
      * (neverLetInQuietly) -> the "unblocked since" rows are refused; existing chats from the raw stores, not Chat's list ->
      * with the block left out too, the hidden chats reopen.
      */

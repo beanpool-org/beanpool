@@ -10,8 +10,8 @@
  * chats (held-chats.ts heldChatsWith), and the across chats in the community in use's file (outside-mail.ts chatsShown). So
  * nothing a block hid is reopened. A read that fails counts as no chat there: the next rule then decides.
  *
- * A block is asked first, on every path ({@link blockedForMessage}): someone the account blocked anywhere the phone holds
- * is refused, with the words the across path already said, and nothing opens or is made.
+ * A block is asked first, on every path ({@link blockedForMessage}): someone blocked on this phone's own list (the list
+ * Chat reads; Marty 22 Nov, the S7 rule) is refused, with the words the across path already said, and nothing opens or is made.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';

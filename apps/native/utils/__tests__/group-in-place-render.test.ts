@@ -115,7 +115,7 @@ vi.mock('../group-history-unlock', async (orig) => {
     return { ...real, collapseLockedHistory: (lines: any[], o: any) => (changedPhone.locked ? [o.row(3), ...lines] : real.collapseLockedHistory(lines, o)) };
 });
 /** Every call the screen makes of utils/db, in order: its name and what it was handed. */
-const calls = vi.hoisted(() => ({ list: [] as Array<[string, any[]]>, refuse: new Map<string, string>() }));
+const calls = vi.hoisted(() => ({ list: [] as Array<[string, any[]]>, refuse: new Map<string, string | Error>(), answer: new Map<string, unknown>() }));
 vi.mock('../db', () => {
     const answers: Record<string, unknown> = {
         getGroupChat: {
@@ -132,8 +132,9 @@ vi.mock('../db', () => {
     const fn = (name: string) => (...args: any[]) => {
         calls.list.push([name, args]);
         if (name === 'whileChatInPlace') return args[1]();
-        if (calls.refuse.has(name)) return Promise.reject(new Error(calls.refuse.get(name)));
-        return Promise.resolve(answers[name] ?? { success: true });
+        const refusal = calls.refuse.get(name);
+        if (refusal !== undefined) return Promise.reject(typeof refusal === 'string' ? new Error(refusal) : refusal);
+        return Promise.resolve(calls.answer.get(name) ?? answers[name] ?? { success: true });
     };
     const names = ['getGroupChat', 'postGroupChatMessage', 'postGroupChatPhoto', 'getDecryptedGroupPhoto', 'postGroupChatVoice', 'getDecryptedGroupVoice', 'getEnterpriseChat', 'postEnterpriseChatMessage', 'muteChatApi',
         'fetchGroupDetails', 'markThreadReadOnNode', 'toggleMessageReactionApi', 'editThreadMessage', 'deleteMessageApi', 'removeGroupChatMessage', 'groupScreenKeyringFor', 'noteLockedHistoryRow', 'reportGroupChatLine',
@@ -143,6 +144,8 @@ vi.mock('../db', () => {
 vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: (u: string | null) => `community_${String(u).replace(/^https?:\/\//, '').toLowerCase()}.db`, isGuestCopy: async () => false }));
 
 import { GroupChatView } from '../../components/GroupChatView';
+import { GroupChatKeyError, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
+import { GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_OLD_NODE_NOTICE } from '../group-chat-lines';
 import { YourGroupsRows } from '../../components/YourGroupsPane';
 import { groupsListed, heldGroups, HELD_GROUP, type HeldGroup } from '../held-groups';
 import { groupsUnreadTotal, type YourChat } from '../your-groups';
@@ -163,6 +166,7 @@ beforeEach(() => {
     root = createRoot(host);
     calls.list.length = 0;
     calls.refuse.clear();
+    calls.answer.clear();
     bits.rows.length = 0;
     bits.composer = bits.menu = bits.report = null;
     changedPhone.locked = false;
@@ -325,6 +329,27 @@ describe('a group\'s chat in place (GroupChatView inPlace)', () => {
         expect(of('whileChatInPlace').every((a) => a[0] === A)).toBe(true);
         expect(of('whileChatInPlace').length).toBe(3);
         expect([inUse.markRead.mock.calls, inUse.setMute.mock.calls, inUse.noteSent.mock.calls]).toEqual([[], [], []]);
+    });
+
+    it('what this phone keeps of its keys can\'t be read, and the node says it isn\'t locked: taken as locked, said as it is; read again, as it was (second review of #3358, R3, R4)', async () => {
+        const unlocked = { messages: [{ id: 'm3', authorPubkey: 'd'.repeat(64), type: 'text', nonce: 'plaintext-v1', ciphertext: btoa('the node\'s words'), metadata: null, timestamp: '2026-11-22T00:02:00.000Z' }], group: { name: 'Garden Crew' }, canPost: true, isConvenor: false };
+        const ring = (seen: boolean) => ({ seenLocked: async () => seen, noteShownRoster: () => { }, serveMissing: async () => { }, sync: async () => null });
+        calls.answer.set('getGroupChat', unlocked);
+        calls.refuse.set('groupScreenKeyringFor', new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store'));
+        await open();
+        expect(bits.composer.notice).toBe(GROUP_KEY_STORE_UNREAD_TEXT);
+        expect(host.textContent, 'a readable line in a member\'s name is nobody\'s').not.toContain('the node\'s words');
+        await act(async () => { await bits.composer.onSend('a line'); });
+        await settle();
+        expect(of('postGroupChatMessage')[0][4], 'asked as a locked chat\'s').toBeTruthy();
+        // It reads again: a chat never seen locked, on an older node, is as it was; one seen locked says so.
+        for (const [seen, notice] of [[false, GROUP_CHAT_OLD_NODE_NOTICE], [true, GROUP_CHAT_LOCK_LOST_TEXT]] as const) {
+            await act(async () => { root.render(null); });
+            calls.refuse.clear();
+            calls.answer.set('groupScreenKeyringFor', ring(seen));
+            await open();
+            expect(bits.composer.notice).toBe(notice);
+        }
     });
 
     it('the menu: what is done here, Leave Group, and the rest as "Open Riverside ›"', async () => {

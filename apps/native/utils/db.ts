@@ -12009,8 +12009,10 @@ export async function getGroupChat(groupId: string, limit = 50, offset = 0, comm
         throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
     }
     if (chatIsLocked(body)) {
-        noteAnsweredLocked(groupId);
-        if (!asked) throw new Error('No identity found. You must be logged in.');
+        if (!asked) {
+            noteAnsweredLocked(groupId);
+            throw new Error('No identity found. You must be logged in.');
+        }
         await noteGroupLocked(asked, groupId, community);
     }
     forgetRemovedGroupPhotos(groupId, body?.messages);

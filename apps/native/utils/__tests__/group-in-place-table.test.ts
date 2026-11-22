@@ -1491,7 +1491,8 @@ describe('the mark goes to the file of the community that answered, never to the
             seen.push(how);
         }
         expect(seen).toContain('shown');
-    });
+        // 24 phones in one row: more than the 5 s a row has by itself on a busy Mac (the suite gives every row 30).
+    }, 30_000);
 
     it.each([[1, 1], [1, 2], [2, 1], [2, 2], [3, 1], [3, 2], [4, 1]])('in use, the phone on B just as the mark is put, and on A again as it is asked where it is (reads of the address %i, %i): A\'s file is marked, not B\'s', async (from, times) => {
         await switchPhoneTo(A);
@@ -1763,7 +1764,8 @@ describe('a readable line goes only when this phone positively knows the chat wa
             expect(wordsOut(), said.join(' | ')).toEqual(NOTHING);
             expect(said, 'refused in words').not.toContain('no words');
         }
-        expect([marked(B_FILE), marked(C_FILE)], 'no other community\'s file').toEqual([false, false]);
+        // Once SQLite takes it the file has the mark, so a restart knows it; no other community's file does.
+        expect([marked(A_FILE), marked(B_FILE), marked(C_FILE)]).toEqual([true, false, false]);
         if (where === 'in place') await db.leaveChatInPlace(A);
     });
 
@@ -1938,6 +1940,7 @@ describe('a readable line goes only when this phone positively knows the chat wa
     const LANDS: Array<[string, () => unknown]> = [
         ['its chat\'s answer, locked', async () => { void (await db.groupKeyringFor(g)).noteLocked().catch(() => {}); }],
         ['another community\'s answer for the id, locked', () => noteAnsweredLocked(g.toUpperCase())],
+        ['its file\'s mark, read by another line of the chat: locked', async () => { mark(A_FILE); expect(await (await db.groupKeyringFor(g)).neverLocked()).toBe(null); }],
         ['the rings dropped', () => forgetGroupKeys()],
         ['Force Resync', () => { moving = db.clearDB(); }],
     ];

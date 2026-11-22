@@ -187,7 +187,7 @@ export function _resetGroupKeySessionForTests(): void {
     lockedRings.clear();
 }
 
-/** What {@link GroupKeyring.neverLocked} answered, and whether it still holds: asked again, with no await, as the request leaves. */
+/** What {@link GroupKeyring.neverLocked} answered, and whether it still holds: asked as it ends, and again, with no await, as the request leaves. */
 export interface NeverLocked { still(): 'never' | 'locked' | 'unread' }
 
 const HOLE_REFETCH_MS = 60_000;
@@ -383,15 +383,13 @@ export class GroupKeyring {
     /**
      * The one answer readable words go on (utils/db.ts readableLineTo, the last thing asked): this phone positively knows
      * the chat was never locked here. Not what the file said once: it is read again for this line, after every other ask,
-     * and has nothing of a lock; and nothing this run knows says otherwise, as the read ends and, by `still`, as the request
-     * leaves. Null: locked. Throws ('store') when the file can't be read in time, or this ring was put away meanwhile.
+     * and has nothing of a lock (null: it has, or this run knows of one); and by `still` nothing learned since says
+     * otherwise, and this ring was not put away. Throws ('store') when the file can't be read in time.
      */
     async neverLocked(): Promise<NeverLocked | null> {
         if (await this.locksSends()) return null;
         if ((await this.readFile()).ofALock) { this.lockedHere(); return null; }
-        if (this.putAway) throw storeRefused(new Error('this group\'s keys were put away'));
-        const nothingKnown = () => !this.knownLockedHere && !answeredLocked.has(this.groupId);
-        return nothingKnown() ? { still: () => (!nothingKnown() ? 'locked' : this.putAway ? 'unread' : 'never') } : null;
+        return { still: () => (this.knownLockedHere || answeredLocked.has(this.groupId) ? 'locked' : this.putAway ? 'unread' : 'never') };
     }
 
     /**

@@ -14,8 +14,9 @@
  *      loopback too;
  *   4. a host-level tunnel (Docker's bridge gateway naming a beanpool.org host) is served as before; the same source
  *      naming any other host is redirected, and a public source naming a beanpool.org host is redirected; a proxy of the
- *      operator's own (a private source saying X-Forwarded-Proto: https or Forwarded: proto=https) is served, a public
- *      source sending the same headers is redirected;
+ *      operator's own (a private source saying X-Forwarded-Proto: https, or Forwarded: proto=https with no X-Forwarded-Proto)
+ *      is served, a public source sending the same headers is redirected, and a visitor's Forwarded: proto=https never
+ *      overrules the proxy's X-Forwarded-Proto: http; 4c. saysHttpsBefore's answer for each header combination;
  *   5. IPv6: a public source is redirected, a unique-local one naming a beanpool.org host is served;
  *   6. the ACME challenge route answers from the Internet on a node with a certificate, unknown tokens 404, never a
  *      redirect;
@@ -218,6 +219,51 @@ console.log('\n4b. A web server or proxy of the operator\'s own in front, saying
         + `Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${Buffer.from('0123456789abcdef').toString('base64')}\r\n\r\n`,
         '127.0.0.1', true);
     check('a live-updates socket through the proxy saying https is upgraded', wsProxy.status === 101, `${wsProxy.status}`);
+    // Cloudflare passes a visitor's own Forwarded header on untouched and sets X-Forwarded-Proto itself, so the proxy's
+    // X-Forwarded-Proto: http is the answer and a Forwarded: proto=https beside it is never read (saysHttpsBefore).
+    const both = await via('172.18.0.1', 'X-Forwarded-Proto: http\r\nForwarded: for=198.51.100.2;proto=https');
+    check('X-Forwarded-Proto: http with a visitor\'s Forwarded: proto=https is redirected', redirected(both, `https://${OWN}/api/version`), `${both.status}`);
+    const wsBoth = await raw('172.18.0.1', `GET /ws HTTP/1.1\r\nHost: ${OWN}\r\nX-Forwarded-Proto: http\r\nForwarded: proto=https\r\n`
+        + `Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${Buffer.from('0123456789abcdef').toString('base64')}\r\n\r\n`,
+        '127.0.0.1', true);
+    check('… and so is a live-updates socket with the same two headers', wsBoth.status === 301, `${wsBoth.status}`);
+}
+
+console.log('\n4c. saysHttpsBefore: each header combination and its answer');
+{
+    // [X-Forwarded-Proto, Forwarded, the answer]. undefined = the header was not sent.
+    const rows: Array<[string | undefined, string | undefined, boolean]> = [
+        [undefined, undefined, false],
+        ['https', undefined, true],
+        ['HTTPS', undefined, true],
+        [' https ', undefined, true],
+        ['http', undefined, false],
+        ['https, http', undefined, true],
+        ['http, https', undefined, false],
+        ['httpsx', undefined, false],
+        [undefined, 'proto=https', true],
+        [undefined, 'for=198.51.100.2;proto=https;host=beans.example.org', true],
+        [undefined, 'proto="https"', true],
+        [undefined, 'PROTO=HTTPS', true],
+        [undefined, 'proto=http', false],
+        [undefined, 'proto=https, proto=http', true],
+        [undefined, 'proto=http, proto=https', false],
+        [undefined, 'proto=httpsx', false],
+        [undefined, '', false],
+        ['', 'proto=https', true],
+        ['  ', 'proto=https', true],
+        ['http', 'proto=https', false],
+        ['http', 'for=198.51.100.2;proto=https', false],
+        ['HTTP', 'proto="https"', false],
+        ['http, https', 'proto=https', false],
+        ['ws', 'proto=https', false],
+        ['https', 'proto=http', true],
+        ['https', 'proto=https', true],
+        ['https', undefined, true],
+    ];
+    const wrong = rows.filter(([xfp, fwd, want]) => gate.saysHttpsBefore({ forwardedProto: xfp, forwarded: fwd }) !== want);
+    check(`all ${rows.length} rows give their answer`, wrong.length === 0,
+        wrong.map(([xfp, fwd, want]) => `X-Forwarded-Proto ${JSON.stringify(xfp)} + Forwarded ${JSON.stringify(fwd)} should be ${want}`).join('; '));
 }
 
 console.log('\n5. IPv6');

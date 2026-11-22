@@ -18,7 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, oldestUnreadAt, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, oldestUnreadAt, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, isLockedGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
 import { ChatScrollPage } from '../../components/chat/ChatScrollPage';
@@ -103,12 +103,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promi
 }
 
 /** What the route asks the phone (utils/chat-route.ts tests these wirings). */
-const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isLockedGroupChat, knownDmConversationId, getConversationKind };
 
 /**
  * `/chat/:id` serves several kinds of conversation, and utils/chat-route.ts decides which screen, in this order: a group
- * whose keys this phone has held (its group chat, sealed or refused), a known DM (the DM screen), an event chat, a group's
- * or an enterprise's thread, else a DM. An event chat is its own screen (docs/events-on-the-map.md §2.2): node-readable
+ * whose keys this phone has held (its group chat, sealed or refused), a known DM (the DM screen), a chat this phone has seen
+ * locked (its group chat), an event chat, a group's or an enterprise's thread, else a DM. An event chat is its own screen (docs/events-on-the-map.md §2.2): node-readable
  * `plaintext-v1`, members that follow the RSVPs, a host who can remove a message, read-only once the event ends — none of
  * which the DM pipeline below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
  *

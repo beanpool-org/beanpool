@@ -202,6 +202,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     voiceHereRef.current = voiceHere;
     // This phone has held a key of this group, or seen it locked: the chat is locked here whatever the node says (group-chat-lines).
     const [seenLocked, setSeenLocked] = useState(false);
+    // What this phone keeps of the group's keys couldn't be read (or never answered): taken as locked until it can be.
+    const [keysUnread, setKeysUnread] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [invitedCount, setInvitedCount] = useState(0);
@@ -385,6 +387,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
             .then(async ring => {
                 const held = await ring.seenLocked();
                 setSeenLocked(held);
+                setKeysUnread(false);
                 let answer = served;
                 if (!chatIsLocked(served)) {
                     // The node says the chat isn't locked. A phone that never held its key, nor saw it locked, believes it (an old node);
@@ -405,7 +408,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
                     ring.serveMissing().catch(() => { });
                 }
             })
-            .catch(e => console.warn('[GroupChat] could not open the chat\'s keys:', e?.message || e));
+            .catch(e => {
+                if (e instanceof GroupChatKeyError && e.code === 'store') setKeysUnread(true);
+                console.warn('[GroupChat] could not open the chat\'s keys:', e?.message || e);
+            });
     };
     // A roster that arrives after the lines re-names them (a former member, an earlier key).
     useEffect(() => {
@@ -427,7 +433,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     const isConvenor = !!view?.isConvenor;
     const canPost = !!view?.canPost && !!me;
     // Locked by what this phone keeps, not by the node's word now: once it held a key or saw it locked, always (finding 4).
-    const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
+    const locked = kind === 'group' && (chatIsLocked(view) || seenLocked || keysUnread);
     // Photos are sealed on this phone: a locked group chat only, and not while a line is being edited.
     // Not in place (slice S6): a photo is sent from its own community.
     const photoButton = kind === 'group' && locked && !editingMessage && !at;
@@ -1179,7 +1185,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
                     busy={sending}
                     maxLength={GROUP_MESSAGE_MAX}
                     // The phone's own words for what it decided, never the node's notice (finding 4).
-                    notice={kind === 'group' ? chatLineWords(groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked })) : t(CHAT_NOTICE.enterprise)}
+                    notice={kind === 'group' ? chatLineWords(groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked, keysUnread: keysUnread && !seenLocked })) : t(CHAT_NOTICE.enterprise)}
                     // A long name wrapped the placeholder to three lines at 320dp; short ones read better named. Beside the photo
                     // button the box is 48 dp narrower and at 1.3× text even "Message the group…" wraps: the header names the chat.
                     placeholder={photoButton ? t('Message…') : name.length <= 18 ? t('Message {name}…', { name }) : (kind === 'group' ? t('Message the group…') : t('Message…'))}

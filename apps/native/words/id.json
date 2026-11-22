@@ -1592,7 +1592,7 @@
   "Not confirmed\u0004chat line": "Belum dikonfirmasi",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "Server komunitas ini versi lama dan dapat membaca obrolan grup ini. Obrolan akan dikunci setelah server diperbarui.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "Terenkripsi ujung-ke-ujung: hanya anggota grup ini yang dapat membacanya. Server hanya melihat siapa yang menulis, kapan, sebutan, balasan ke pesan apa, dan reaksi.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "Server ini sekarang menyatakan obrolan ini tidak dikunci. Ponsel ini menyimpan kuncinya, jadi tetap mengunci setiap pesan, dan tidak mengirim apa pun yang tidak dapat dikunci.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Server ini sekarang menyatakan obrolan ini tidak dikunci. Ponsel ini pernah melihatnya terkunci, jadi tetap mengunci setiap pesan, dan tidak mengirim apa pun yang tidak dapat dikunci.",
   "Only members of this group can open its chat": "Hanya anggota grup ini yang dapat membuka obrolannya",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "Ponsel ini mengenali percakapan ini sebagai pesan langsung, bukan obrolan grup. Tidak ada yang dikirim.",
   "This message's key isn't on this phone, so it can't be edited here.": "Kunci pesan ini tidak ada di ponsel ini, jadi tidak dapat diedit di sini.",

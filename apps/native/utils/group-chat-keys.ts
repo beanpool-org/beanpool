@@ -159,10 +159,15 @@ const HOLE_REFETCH_MS = 60_000;
  * by the close of its handle never answers (the S1 probe), and the changes after it would wait for good.
  */
 const STORE_WRITE_MS = 45_000;
+/**
+ * How long the first read of what this phone keeps of a group is waited for: a read cut the same way never answers either,
+ * and the chat's own answer waits for it (noteLocked; second review of #3358, R3). No wait for a lock is in it (WAL).
+ */
+const STORE_READ_MS = 15_000;
 
-function inTime<T>(work: Promise<T>): Promise<T> {
+function inTime<T>(work: Promise<T>, ms = STORE_WRITE_MS): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('the key store did not answer')), STORE_WRITE_MS);
+        const timer = setTimeout(() => reject(new Error('the key store did not answer')), ms);
         work.then(resolve, reject).finally(() => clearTimeout(timer));
     });
 }
@@ -222,7 +227,8 @@ export class GroupKeyring {
     }
 
     /**
-     * Read what this phone keeps of the group, once per session. A read that fails is never remembered: it throws
+     * Read what this phone keeps of the group, once per session. A read that fails, or never answers (STORE_READ_MS), is
+     * never remembered: it throws
      * GROUP_KEY_STORE_UNREAD_TEXT ('store') to the caller, so every send and edit refuses, and the next call reads again.
      * Taken for "nothing stored", one SQLite error would make a held group look never held for the rest of the session,
      * and its next line go out readable (confirmation 2 of #1788, finding 1).
@@ -234,9 +240,9 @@ export class GroupKeyring {
                 let verdicts: string[];
                 let signers: [string, string][];
                 try {
-                    saved = await this.store.load(this.storeKey);
-                    verdicts = await this.store.loadVerdicts(this.storeKey);
-                    signers = await this.store.loadSigners(this.storeKey);
+                    [saved, verdicts, signers] = await inTime((async () => [
+                        await this.store.load(this.storeKey), await this.store.loadVerdicts(this.storeKey), await this.store.loadSigners(this.storeKey),
+                    ] as const)(), STORE_READ_MS);
                 } catch (e: any) {
                     console.warn('[GroupKeys] could not read this group\'s keys on the phone:', e?.message || e);
                     throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
@@ -292,10 +298,23 @@ export class GroupKeyring {
     /**
      * True once this phone has held a key of this group, or has seen its chat answered locked (noteLocked): the chat is locked
      * here for good, whatever a node says later, and nothing readable is sent to it (review of #1788, finding 4; director's
-     * decision b; review of #3358, F1).
+     * decision b; review of #3358, F1). What this run has seen is asked first: it waits for no read (R3).
      */
     async seenLocked(): Promise<boolean> {
-        return (await this.holdsKeys()) || this.sawLocked || this.lockKept;
+        return this.sawLocked || this.lockKept || this.holdsKeys();
+    }
+
+    /**
+     * What every path that can put words in this chat asks, last, whatever the node now calls the chat (second review of
+     * #3358, R1 and R2): true, and only sealed words go. Before it answers true the lock is in this chat's own community's
+     * file (its keys, else the mark: one the file refused earlier is put now), so a restart knows it too. Throws ('store')
+     * while that file can't be read or won't take it, and nothing goes.
+     */
+    async locksSends(): Promise<boolean> {
+        if (await this.holdsKeys()) return true;
+        if (!this.sawLocked && !this.lockKept) return false;
+        await this.noteLocked();
+        return true;
     }
 
     /**

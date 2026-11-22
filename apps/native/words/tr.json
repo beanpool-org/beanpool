@@ -1677,7 +1677,7 @@
   "Not confirmed\u0004chat line": "Doğrulanmadı",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "Bu topluluğun sunucusu daha eski ve bu grubun sohbetini okuyabilir. Sunucu güncellendiğinde kilitlenecektir.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "Uçtan uca şifrelenmiş: yalnızca bu grubun üyeleri okuyabilir. Sunucu kimin yazdığını, ne zaman yazdığını, bahsetmeleri, her satırın neye yanıt verdiğini ve tepkileri görür.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "Bu sunucu artık bu sohbetin kilitli olmadığını söylüyor. Bu telefon anahtarlarını sakladığından, her mesajı kilitlemeye devam eder ve kilitleyemediği hiçbir şeyi göndermez.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Bu sunucu artık bu sohbetin kilitli olmadığını söylüyor. Bu telefon sohbeti kilitli olarak gördüğünden, her mesajı kilitlemeye devam eder ve kilitleyemediği hiçbir şeyi göndermez.",
   "Only members of this group can open its chat": "Yalnızca bu grubun üyeleri sohbetini açabilir",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "Bu telefon bu konuşmayı grup sohbeti olarak değil, doğrudan mesaj olarak tanıyor. Hiçbir şey gönderilmedi.",
   "This message's key isn't on this phone, so it can't be edited here.": "Bu mesajın anahtarı bu telefonda değil, bu nedenle burada düzenlenemez.",

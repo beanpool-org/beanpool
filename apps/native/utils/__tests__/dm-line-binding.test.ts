@@ -101,7 +101,7 @@ vi.mock('../crypto', async (orig) => ({
 import { dmLineSigOf, dmLineSigVerifies } from '@beanpool/core';
 // Old chat's photos and cards: the frozen 1.2.36 lines (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
 import { DM_OLD_LINES, DM_OLD_LINE_TIMES, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '@beanpool/core/dm-line-vectors';
-import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer, markDmPeerVerified, removeDmPeerVerification } from '../db';
+import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, isLockedGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer, markDmPeerVerified, removeDmPeerVerification } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE, DM_UNPLACED_LINE } from '../dm-lock';
 import { dmKeyChangeCopy } from '../dm-key-change';
@@ -1338,7 +1338,7 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
     // Beside Ana and Ben's DM the node lists a "DM" under the same id in other capitals, with Ana and a puppet of its own,
     // and lists it first. Ana's phone holds both. Tapping Ben's row (or any link to that very id) opens Ben's thread, and
     // the line Ana sends from it opens for Ben, never for the puppet. ChatRoute's asks are app/chat/[id].tsx's.
-    const ROUTE_ASKS = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+    const ROUTE_ASKS = { isHeldGroupChat, isLockedGroupChat, knownDmConversationId, getConversationKind };
     /** The DM guard's list for Ana in this community's file (§3.4 amendment 7 §3: one per account and file). */
     const DM_SEEN = () => `beanpool_dm_conversations_seen:${ana.publicKey.toLowerCase()}:${FILE_A}`;
     let puppet: Person;
@@ -1546,7 +1546,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
             rowsWritten: rowsOf(id) - rows,
         };
     }
-    const ROUTE_ASKS = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+    const ROUTE_ASKS = { isHeldGroupChat, isLockedGroupChat, knownDmConversationId, getConversationKind };
 
     it('P1 (T5 replayed): the node drops the DM, then lists it again with PUPPET: Ben\'s lines still read, and the send is refused before anything is written or sent', async () => {
         await aQuestionAndAnAnswer();
@@ -5339,7 +5339,7 @@ describe('the DM guard list: one bounded list per community file, never read as 
             }, 180_000);
         }
     }
-    const ROUTE_ASKS_GX = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+    const ROUTE_ASKS_GX = { isHeldGroupChat, isLockedGroupChat, knownDmConversationId, getConversationKind };
 
     // GXD (#1938 confirmation 7, finding 2): the two vote forms (GroupDetailModal's GroupDecisions, treasury-detail's
     // EnterpriseDecisions) post a title, a why and a pay-out's memo the node reads, for the id the screen was opened on. From

@@ -6,9 +6,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { chatRouteView, askHeldGroup, askKnownDm, askRouteKind, screenIdOf, routeChat, type ChatRouteFacts, type ChatRouteAsks } from '../chat-route';
+import { chatRouteView, askHeldGroup, askSeenLocked, askKnownDm, askRouteKind, screenIdOf, routeChat, type ChatRouteFacts, type ChatRouteAsks } from '../chat-route';
 
-const facts = (f: Partial<ChatRouteFacts>): ChatRouteFacts => ({ held: false, knownDm: false, isEventChat: false, threadKind: null, ...f });
+const facts = (f: Partial<ChatRouteFacts>): ChatRouteFacts => ({ held: false, seenLocked: false, knownDm: false, isEventChat: false, threadKind: null, ...f });
 
 describe('chatRouteView', () => {
     it('draws nothing until the key memory has answered, a known DM included', () => {
@@ -42,6 +42,19 @@ describe('chatRouteView', () => {
         expect(chatRouteView(facts({ held: 'error' }))).toBe('dm');
     });
 
+    // Second review of #3358, R2: its server relabels a chat this phone has seen locked; those screens post readable words.
+    it('a chat only seen locked opens in its group chat whatever its kind is now said to be; after the DM guard, which a node\'s word never lifts', () => {
+        for (const f of [{}, { isEventChat: true }, { threadKind: 'enterprise' }, { threadKind: 'group' }] as const) {
+            expect(chatRouteView(facts({ seenLocked: true, ...f })), JSON.stringify(f)).toBe('group');
+            expect(chatRouteView(facts({ seenLocked: true, knownDm: true, ...f })), JSON.stringify(f)).toBe('dm');
+            expect(chatRouteView(facts({ seenLocked: true, knownDm: null, ...f })), JSON.stringify(f)).toBe('wait');
+        }
+        // Unreadable, as the held check is: never the event chat or the enterprise thread.
+        expect(chatRouteView(facts({ seenLocked: 'error', isEventChat: true }))).toBe('dm');
+        expect(chatRouteView(facts({ seenLocked: 'error', threadKind: 'enterprise' }))).toBe('dm');
+        expect(chatRouteView(facts({ seenLocked: 'error', threadKind: 'group' }))).toBe('group_thread');
+    });
+
     it('otherwise: an event chat, a group\'s or an enterprise\'s thread, else a DM', () => {
         expect(chatRouteView(facts({ isEventChat: true }))).toBe('event');
         expect(chatRouteView(facts({ threadKind: 'group' }))).toBe('group_thread');
@@ -53,7 +66,7 @@ describe('chatRouteView', () => {
 /** ChatRoute's three wirings to utils/db.ts (#1815 review, finding 3: M21–M23). */
 describe('ChatRoute asks', () => {
     const asks = (o: Partial<ChatRouteAsks>): ChatRouteAsks => ({
-        isHeldGroupChat: vi.fn(async () => false), knownDmConversationId: vi.fn(async () => null), getConversationKind: vi.fn(async () => null), ...o,
+        isHeldGroupChat: vi.fn(async () => false), isLockedGroupChat: vi.fn(async () => false), knownDmConversationId: vi.fn(async () => null), getConversationKind: vi.fn(async () => null), ...o,
     });
 
     it('a held check that throws (the key memory unread) is \'error\', never "not held"; the route then draws no event chat or enterprise thread', async () => {
@@ -64,6 +77,15 @@ describe('ChatRoute asks', () => {
         expect(chatRouteView(facts({ held, threadKind: 'enterprise' }))).toBe('dm');
         expect(await askHeldGroup(asks({ isHeldGroupChat: vi.fn(async () => true) }), 'g')).toBe(true);
         expect(await askHeldGroup(asks({}), 'g')).toBe(false);
+    });
+
+    it('a seen-locked check that throws is \'error\' too, and the route is asked it of the id lower-cased', async () => {
+        const a = asks({ isLockedGroupChat: vi.fn(async () => { throw new Error('unread'); }) });
+        expect(await askSeenLocked(a, 'g')).toBe('error');
+        expect((await routeChat(a, 'G', { event: true })).view).toBe('dm');
+        expect(a.isLockedGroupChat).toHaveBeenLastCalledWith('g');
+        expect(await routeChat(asks({ isLockedGroupChat: vi.fn(async () => true) }), 'G', { event: true })).toEqual({ view: 'group', screenId: 'g' });
+        expect(await askSeenLocked(asks({}), 'g')).toBe(false);
     });
 
     it('a known-DM check that throws is no known DM; a known DM answers the spelling the phone keeps it under', async () => {
@@ -92,7 +114,7 @@ describe('routeChat', () => {
     const G = '3F2B9C1E-7A4D-4E8B-9C0D-1A2B3C4D5E6F';
     const g = G.toLowerCase();
     const asks = (o: Partial<ChatRouteAsks>): ChatRouteAsks => ({
-        isHeldGroupChat: vi.fn(async () => false), knownDmConversationId: vi.fn(async () => null), getConversationKind: vi.fn(async () => null), ...o,
+        isHeldGroupChat: vi.fn(async () => false), isLockedGroupChat: vi.fn(async () => false), knownDmConversationId: vi.fn(async () => null), getConversationKind: vi.fn(async () => null), ...o,
     });
 
     it('asks the held check and the kind of the id lower-cased, and the DM guard (which folds case itself) of the link\'s own spelling', async () => {
@@ -157,8 +179,8 @@ describe('the screens\' wiring', () => {
 
     it('ChatRoute asks routeChat once, with the link\'s kind, and asks no fact itself', () => {
         expect(chatRoute).toMatch(/routeChat\(ROUTE_ASKS, String\(id\), \{ event: event === '1', thread: group === '1' \? 'group' : enterprise === '1' \? 'enterprise' : null \}\)/);
-        expect(route).toMatch(/const ROUTE_ASKS: ChatRouteAsks = \{ isHeldGroupChat, knownDmConversationId, getConversationKind \};/);
-        expect(chatRoute).not.toMatch(/isHeldGroupChat\(|isKnownDmConversation\(|knownDmConversationId\(|getConversationKind\(|askHeldGroup|askKnownDm|askRouteKind/);
+        expect(route).toMatch(/const ROUTE_ASKS: ChatRouteAsks = \{ isHeldGroupChat, isLockedGroupChat, knownDmConversationId, getConversationKind \};/);
+        expect(chatRoute).not.toMatch(/isHeldGroupChat\(|isLockedGroupChat\(|isKnownDmConversation\(|knownDmConversationId\(|getConversationKind\(|askHeldGroup|askKnownDm|askRouteKind/);
     });
 
     /**

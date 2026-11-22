@@ -6,8 +6,7 @@
  * topic's own read says which (canReply, sectionArchived; review of #3339).
  *
  * Table, each row red without its line: (topic: open / closed / archived section / reads only) x (browser) x (the rule's
- * state) -> the line or none, the
- * browser's prompt never at the follow. Then: unfollow, a refused follow, another topic opened in its place; 320 px at 130%,
+ * state) -> the line or none, the browser's prompt never at the follow. Then: unfollow, a refused follow, another topic opened in its place; 320 px at 130%,
  * light and dark. The ForumPage over a stand-in node, as ForumPage.test.tsx stands one in.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';

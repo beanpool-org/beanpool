@@ -175,7 +175,7 @@ export function ForumTopicView({ topicId, at, front, me, staff = false, onBack, 
     const canReply = open && !archived && topic?.canReply !== false;
     // Why no reply goes: the topic is closed or its section archived (the closed line), or this member only reads here.
     const readsOnly = open && !archived && !canReply;
-    const writer =!!topic && topic.writer.publicKey === me;
+    const writer = !!topic && topic.writer.publicKey === me;
     // What the node showed this member of the topic's links (a placeholder has no id, so nothing of it can be taken off).
     const shownLinks: LinkPick[] = (topic?.links ?? []).flatMap((l) => (l.shown ? [{ kind: l.kind, id: l.id, title: l.title }] : []));
     /** Links (or takes off) one thing; the node's answer is the topic as it now reads for this member, chips and all. */

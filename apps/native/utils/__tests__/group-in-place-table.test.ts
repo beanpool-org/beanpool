@@ -1919,6 +1919,21 @@ describe('a readable line goes only when this phone positively knows the chat wa
         expect(wordsOut()).toEqual({ ...NOTHING, [A]: [WORDS] });
     });
 
+    it('Sign Out wipes what its files kept of a locked chat (no file is owed its mark, as on a new phone); nothing readable goes to that id until a restart all the same', async () => {
+        await stand('in use', true);
+        await db.getGroupChat(g);
+        expect(marked(A_FILE)).toBe(true);
+        await db.clearDB({ identityLeaves: true });
+        await backAt('in use');
+        servers[A].unlocked = true;
+        expect([await (await db.groupKeyringFor(g)).seenLocked(), marked(A_FILE)]).toEqual([false, false]);
+        await sendAll('in use');
+        expect([wordsOut(), marked(A_FILE)]).toEqual([NOTHING, false]);
+        await restart(A);
+        await sendAll('in use');
+        expect(wordsOut()).toEqual(readable('in use'));
+    });
+
     /** What lands after the line's last guard read its file. */
     const LANDS: Array<[string, () => unknown]> = [
         ['its chat\'s answer, locked', async () => { void (await db.groupKeyringFor(g)).noteLocked().catch(() => {}); }],
@@ -1926,20 +1941,22 @@ describe('a readable line goes only when this phone positively knows the chat wa
         ['the rings dropped', () => forgetGroupKeys()],
         ['Force Resync', () => { moving = db.clearDB(); }],
     ];
-    it.each(READABLE.flatMap((x) => LANDS.map(([what, land]) => [x.name, what, x, land] as const)))('%s, and as its file is read for it: %s: refused', async (_n, _w, send, land) => {
+    it.each(READABLE.flatMap((x) => LANDS.map(([what, land]) => [x.name, what, x, land] as const)))('%s, and as its file is read for it: %s: refused', async (_n, what, send, land) => {
         await stand('in use', false);
         expect(await (await db.groupKeyringFor(g)).seenLocked()).toBe(false);
         moving = null;
         h.reads = { file: A_FILE, sql: /SELECT k FROM group_line_verdicts/, times: 1, hang: false, refuse: false, wait: true, hit: land };
-        await expect(send.run()).rejects.toBeTruthy();
+        const said: any = await send.run().then(() => null, (e) => e);
         expect(h.reads.times, 'it landed').toBe(0);
+        // What is said is true: seen locked, or this phone's own keys not read just then.
+        expect(said?.message).toBe(/locked$/.test(what) ? GROUP_CHAT_LOCK_LOST_TEXT : GROUP_KEY_STORE_UNREAD_TEXT);
         h.reads = null;
         await moving;
         await settle();
         expect(wordsOut()).toEqual(NOTHING);
     });
 
-    it.each(READABLE.flatMap((x) => LANDS.map(([what, land]) => [x.name, what, x, land] as const)))('%s, and as its request is signed, the last moment before it leaves: %s: it doesn\'t leave', async (_n, _w, send, land) => {
+    it.each(READABLE.flatMap((x) => LANDS.map(([what, land]) => [x.name, what, x, land] as const)))('%s, and as its request is signed, the last moment before it leaves: %s: it doesn\'t leave', async (_n, what, send, land) => {
         await stand('in use', false);
         moving = null;
         let landed = 0;
@@ -1950,10 +1967,11 @@ describe('a readable line goes only when this phone positively knows the chat wa
             return (real as any)(...args);
         });
         try {
-            await send.run().catch(() => null);
+            const said: any = await send.run().then(() => null, (e) => e);
             await settle();
             await moving;
             await settle();
+            if (send.fn !== 'insertMessage') expect(said?.message).toBe(/locked$/.test(what) ? GROUP_CHAT_LOCK_LOST_TEXT : GROUP_KEY_STORE_UNREAD_TEXT);
         } finally {
             sign.mockImplementation(real);
         }

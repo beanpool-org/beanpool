@@ -159,12 +159,12 @@ export function groupKeysLookUnopenable(): boolean {
 
 /**
  * This session's memory of locks. It outlives the rings: a Force Resync, a community taken off the phone or followed, and
- * every other forgetGroupKeys drops them (third review of #3358, S1). Nothing takes an entry off but a restart: not a node's
- * word, and not a file without the mark either, as that is what a mark refused, removed or resynced away looks like.
+ * every other forgetGroupKeys drops them (third review of #3358, S1). Not a node's word, and not a file without the mark
+ * either, takes an entry off: that is what a mark refused, removed or resynced away looks like.
  * - `answeredLocked`: ids (lower-cased) some community's node answered locked, or served a key of: nothing readable goes to
- *   that id, in any community, whoever is signed in.
- * - `lockedRings`: the rings (community, account, group) that is known of: each one's own file is owed the mark, and only
- *   its own (second review, R1).
+ *   that id, in any community, whoever is signed in. Nothing takes one off but a restart.
+ * - `lockedRings`: the rings (community, account, group) a lock is known of: each one's own file is owed the mark, and only
+ *   its own (second review, R1). Let go as the account leaves the phone ({@link forgetLockedRings}).
  */
 const answeredLocked = new Set<string>();
 const lockedRings = new Set<string>();
@@ -175,6 +175,11 @@ export function noteAnsweredLocked(conversationId: string): void {
     answeredLocked.add(conversationId.toLowerCase());
 }
 
+/** The account leaves the phone, and what its files kept of its groups' keys with it (utils/db.ts clearDB identityLeaves): no file is owed a mark. */
+export function forgetLockedRings(): void {
+    lockedRings.clear();
+}
+
 /** For tests: a fresh app session. */
 export function _resetGroupKeySessionForTests(): void {
     forgetGroupKeys();
@@ -183,7 +188,7 @@ export function _resetGroupKeySessionForTests(): void {
 }
 
 /** What {@link GroupKeyring.neverLocked} answered, and whether it still holds: asked again, with no await, as the request leaves. */
-export interface NeverLocked { still(): boolean }
+export interface NeverLocked { still(): 'never' | 'locked' | 'unread' }
 
 const HOLE_REFETCH_MS = 60_000;
 
@@ -386,7 +391,7 @@ export class GroupKeyring {
         if ((await this.readFile()).ofALock) { this.lockedHere(); return null; }
         if (this.putAway) throw storeRefused(new Error('this group\'s keys were put away'));
         const nothingKnown = () => !this.knownLockedHere && !answeredLocked.has(this.groupId);
-        return nothingKnown() ? { still: () => !this.putAway && nothingKnown() } : null;
+        return nothingKnown() ? { still: () => (!nothingKnown() ? 'locked' : this.putAway ? 'unread' : 'never') } : null;
     }
 
     /**

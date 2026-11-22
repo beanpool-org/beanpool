@@ -61,7 +61,7 @@ import type { GroupSuccessionData } from './group-succession';
 import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
-import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, noteAnsweredLocked, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_STORE_UNREAD_TEXT, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, forgetLockedRings, noteAnsweredLocked, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_STORE_UNREAD_TEXT, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import {
     unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
     lockedHistoryCounts, noteLockedHistoryCount, type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
@@ -1372,6 +1372,7 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
         releaseSyncLock();
     }
     await cleared;
+    if (opts.identityLeaves) forgetLockedRings();
 }
 
 /**
@@ -8361,9 +8362,13 @@ async function readableLineTo(asked: GroupContext, conversationId: string): Prom
     await refuseReadableIntoDm(conversationId, database);
     await refuseByItsFile(conversationId, database);
     const never = await ringOf(asked, conversationId).neverLocked();
-    const lost = () => new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
-    if (!never) throw lost();
-    return { address: asked.nodeUrl, leaving: () => { if (!never.still()) throw lost(); } };
+    const leaving = () => {
+        const still = never?.still() ?? 'locked';
+        if (still === 'locked') throw new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
+        if (still !== 'never') throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
+    };
+    leaving();
+    return { address: asked.nodeUrl, leaving };
 }
 
 /**
@@ -8374,8 +8379,8 @@ async function readableLineTo(asked: GroupContext, conversationId: string): Prom
 async function refuseByItsFile(conversationId: string, database: SQLite.SQLiteDatabase): Promise<void> {
     const ids = [...new Set([conversationId, conversationId.toLowerCase(), conversationId.toUpperCase()])];
     const marks = ids.map(() => '?').join(', ');
-    const other = await database.getFirstAsync<any>(`SELECT type FROM conversations WHERE id IN (${marks}) AND COALESCE(type, '') NOT IN ('group_thread', 'event_thread', 'enterprise_thread') LIMIT 1`, ids);
-    if (other && !isNodeReadableChatType(other.type)) throw new DmNotLockedError();
+    const rows = await database.getAllAsync<any>(`SELECT type FROM conversations WHERE id IN (${marks})`, ids);
+    if (rows?.some((r) => !isNodeReadableChatType(r.type))) throw new DmNotLockedError();
     const sealed = await database.getFirstAsync<any>(`SELECT nonce FROM messages WHERE conversation_id IN (${marks}) AND nonce LIKE ? LIMIT 1`, [...ids, `${GROUP_NONCE_PREFIX}%`]);
     if (String(sealed?.nonce ?? '').startsWith(GROUP_NONCE_PREFIX)) throw new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
 }

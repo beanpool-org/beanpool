@@ -43,7 +43,7 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useNodeProfile } from '../../utils/use-node-profile';
-import { beansOn } from '../../utils/node-profile';
+import { beansOn, getCachedNodeProfile, type NodeFeatures } from '../../utils/node-profile';
 import { makeChatStyles } from '../../components/chat/styles';
 import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
@@ -266,8 +266,16 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     const [postContext, setPostContext] = useState<any>(null);
     // On a community with Beans off (the worldwide one) a post has no price: the header under it says none.
     const nodeProfile = useNodeProfile();
-    // In place (slice S6c) the profile is the community in use's, and a deal of another community's says what it holds.
-    const showsBeans = !!at || beansOn(nodeProfile?.features);
+    // In place (slice S6c) that profile is the community in use's: a deal of the chat's own community shows its Beans as that
+    // community says, from what this phone last heard of it (no network; unknown counts as Beans on, as beansOn reads it).
+    const [placeFeatures, setPlaceFeatures] = useState<NodeFeatures | null>(null);
+    React.useEffect(() => {
+        if (!at) return;
+        let live = true;
+        getCachedNodeProfile(at).then(p => { if (live) setPlaceFeatures(p?.features ?? null); }, () => {});
+        return () => { live = false; };
+    }, [at]);
+    const showsBeans = at ? beansOn(placeFeatures) : beansOn(nodeProfile?.features);
     // Voice messages only where the community says it takes them (core voiceLinesOn; a live community, 14 Nov): a node from before
     // voice V2 stores one as words with a sound no one can play. Read at send time from the ref, as the recorder holds the
     // onVoice it was given while a recording waits.

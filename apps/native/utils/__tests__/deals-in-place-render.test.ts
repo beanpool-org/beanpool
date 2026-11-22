@@ -20,12 +20,15 @@ import { createRoot, type Root } from 'react-dom/client';
 
 interface Alerted { title: string; body?: string; buttons?: Array<{ text?: string; style?: string; onPress?: () => unknown }> }
 const alerts = vi.hoisted(() => ({ list: [] as any[] }));
+/** Every render of a host element, watched for some words (`watch`): whether any render, however brief, drew them. */
+const drawn = vi.hoisted(() => ({ watch: null as null | string, saw: false }));
 const events = vi.hoisted(() => ({ on: {} as Record<string, Set<() => void>> }));
 vi.mock('react-native', () => {
     const flat = (s: unknown): Record<string, any> => Object.assign({}, ...[s].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
         const { children, onPress, accessibilityLabel, accessibilityRole, testID, placeholder, numberOfLines, adjustsFontSizeToFit, disabled, value, onChangeText } = props;
         const attrs: Record<string, unknown> = { 'data-style': JSON.stringify(flat(typeof props.style === 'function' ? props.style({}) : props.style)) };
+        if (drawn.watch && [children, accessibilityLabel].flat(9).some((c) => typeof c === 'string' && c.includes(drawn.watch!))) drawn.saw = true;
         if (onPress && !disabled) attrs.onClick = (e: any) => { e.stopPropagation(); onPress({ stopPropagation() {}, nativeEvent: {} }); };
         if (disabled) attrs['data-disabled'] = '1';
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
@@ -101,7 +104,9 @@ vi.mock('../../app/ThemeContext', async () => {
 const ME = { publicKey: 'me-key', privateKey: 'me-priv', callsign: 'Ana' };
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
 vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'member' }) }));
-vi.mock('../use-node-profile', () => ({ useNodeProfile: () => ({ profile: 'global', features: {} }) }));
+/** What the community in use says of itself (the worldwide one); the chat's own community's is this phone's kept copy (store). */
+const here = vi.hoisted(() => ({ features: {} as Record<string, unknown> }));
+vi.mock('../use-node-profile', () => ({ useNodeProfile: () => ({ profile: 'global', features: here.features }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 vi.mock('../../components/CurrencyDisplay', () => ({ CurrencyDisplay: ({ amount }: any) => createElement('b', null, `${amount} B`) }));
 vi.mock('../../components/chat/ChatMessageList', () => ({
@@ -162,6 +167,7 @@ beforeEach(() => {
     store.map.clear();
     store.map.set('beanpool_anchor_url', HERE);
     store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: HERE }, { url: RIVER, name: NAME }]));
+    here.features = {};
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
 afterEach(async () => { await act(async () => { root.unmount(); }); });
@@ -208,6 +214,7 @@ for (const dark of [false, true]) describe(`${dark ? 'dark' : 'light'}, 320 dp Ã
     beforeEach(() => { theme.dark = dark; });
 
     it('one deal of mine to release: its header, what it holds (the community in use has Beans off), Release and Cancel, whole at 320', async () => {
+        here.features = { beans: false };
         await open([HELD], all(HELD));
         expect(host.textContent).toContain(NAME);
         expect(host.textContent).toContain('Borrow a long ladder');
@@ -220,6 +227,13 @@ for (const dark of [false, true]) describe(`${dark ? 'dark' : 'light'}, 320 dp Ã
         expect([words.getAttribute('data-lines'), styleOf(words).flexShrink]).toEqual(['1', 1]);
         expect(reading('Cancel')).not.toBeNull();
         expect(host.querySelector('[data-testid="deals-unread"]')).toBeNull();
+    });
+
+    it('the chat\'s own community has Beans off, as this phone last heard it: its header names no Beans, whatever the one in use says', async () => {
+        store.map.set('beanpool_node_profiles', JSON.stringify({ [RIVER]: { profile: 'local', features: { beans: false }, checkedAt: '2026-11-22T00:00:00.000Z' } }));
+        await open([HELD], all(HELD));
+        expect(host.textContent).toContain('Borrow a long ladder');
+        expect(host.textContent).not.toContain('12.50 Beans');
     });
 
     it('two to release and one to be paid: a card each, its buttons wrap in the 200 dp card', async () => {
@@ -449,6 +463,47 @@ describe('a step shows only on that community\'s word, from this visit', () => {
         await settle();
         expect(host.textContent).toContain('Action needed');
         expect(waiting.length).toBe(2);
+    });
+
+    it('only a standing deal known with them, and no answer: said too', async () => {
+        await open([STANDING], null);
+        expect(host.querySelector('[data-testid="deals-unread"]')).not.toBeNull();
+        expect(host.querySelector('[data-testid="standing-panel-tx-veg"]')).toBeNull();
+    });
+
+    it('one screen per chat and community: no deal of one shows in the next one opened, whatever its own read does', async () => {
+        await open([HELD, EGGS], all(HELD, EGGS));
+        expect(labelled('Release Beans for Duck eggs')).not.toBeNull();
+        calls.answer.getDealsBetween = () => new Promise(() => {});
+        calls.answer.syncDealsBetween = () => new Promise(() => {});
+        params.now = { id: 'dm1' };
+        await act(async () => { root.render(createElement(ChatRoute) as any); });
+        await settle();
+        expect(host.textContent).toContain('Kofi');
+        expect(host.textContent).not.toContain(NAME);
+        expect(host.textContent).not.toContain('Duck eggs');
+        expect(labelled('Release Beans for Duck eggs')).toBeNull();
+    });
+
+    it('one screen per chat and community: from the community in use to the chat in place and back, not one render of its deals there', async () => {
+        // The chat in the community in use first, so its route is known when the phone comes back to it.
+        await open([], null, { inPlace: false });
+        await open([HELD, EGGS], all(HELD, EGGS));
+        expect(labelled('Release Beans for Duck eggs')).not.toBeNull();
+        calls.answer.getDealsBetween = () => new Promise(() => {});
+        calls.answer.syncDealsBetween = () => new Promise(() => {});
+        drawn.watch = 'Duck eggs';
+        drawn.saw = false;
+        try {
+            params.now = { id: 'dm1' };
+            await act(async () => { root.render(createElement(ChatRoute) as any); });
+            await settle();
+            expect(host.textContent).toContain('Kofi');
+            expect(host.textContent).not.toContain(NAME);
+            expect(drawn.saw, 'a deal of that community drawn under the community in use').toBe(false);
+        } finally {
+            drawn.watch = null;
+        }
     });
 
     it('no deal known with them: nothing is said of one, answered or not', async () => {

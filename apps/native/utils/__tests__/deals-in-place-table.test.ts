@@ -366,6 +366,8 @@ const STANDS: Stand[] = [
     { name: 'a held member, the community taken off the phone before its answer', named: A, holds: true, asAnswered: takenOff, keptNowhere: true },
     { name: 'a held member, the chat left as it is signed, nothing holding it', named: A, holds: true, asSigned: () => db.leaveChatInPlace(A), refused: SWITCHED },
     { name: 'a held member, another account on the phone since the chat opened', first: accountChanges, named: A, holds: true, refused: OTHER_ACCOUNT },
+    // Said as what it is, before that copy is looked in: the copy holding no such deal of the member's is not why.
+    { name: 'a held member, another account on the phone since, whose copy there holds the deal as the other account\'s', first: () => { accountChanges(); into(A_FILE, (sql) => { sql.prepare('UPDATE marketplace_transactions SET buyer_pubkey = ?').run(other.publicKey); }); }, named: A, holds: true, refused: OTHER_ACCOUNT },
     { name: 'a held member, another account on the phone as it is signed', named: A, holds: true, asSigned: () => { accountChanges(); accountLeaves(); accountGoing(); }, refused: OTHER_ACCOUNT },
     { name: 'a held member, an account leaving the phone as it is signed', named: A, holds: true, asSigned: accountLeaves, refused: OTHER_ACCOUNT },
     { name: 'a held member, an account leaving the phone before its answer', named: A, holds: true, asAnswered: accountLeaves, keptNowhere: true },
@@ -438,9 +440,9 @@ describe('every step on a deal goes to the deal\'s own community, signed for it 
         expect(db.heldCopyFiles(), 'left, the copy open in place closes').not.toContain(A_FILE);
     });
 
-    it(`every step and every stand is in the table (${7 * 24} rows)`, () => {
-        expect(cases.length).toBe(7 * 24);
-        expect(new Set(STANDS.map((s) => s.name)).size).toBe(24);
+    it(`every step and every stand is in the table (${7 * 25} rows)`, () => {
+        expect(cases.length).toBe(7 * 25);
+        expect(new Set(STANDS.map((s) => s.name)).size).toBe(25);
     });
 
     it('a refusal reads in the member\'s language: both sentences are in the words table, and in every catalog', () => {
@@ -470,6 +472,8 @@ describe('every step on a deal goes to the deal\'s own community, signed for it 
     });
 
     it('that community asking for a profile photo: its words come back, and the community in use is asked to publish nothing', async () => {
+        // A name waits to be published in the community in use: the next publish there would send it.
+        into(B_FILE, (sql) => { sql.prepare("INSERT OR REPLACE INTO members (public_key, callsign, bio) VALUES (?, 'Me', 'a bio of mine')").run(me.publicKey); });
         db.enterChatInPlace(A);
         const real = fetchMock.getMockImplementation()!;
         fetchMock.mockImplementationOnce(async (url: string, init: any) => { asked.push({ method: init.method, url, origin: new URL(url).origin, path: new URL(url).pathname, signed: null, signer: null, body: null }); return answer(400, { error: 'Please set a profile photo before using the marketplace. Tap your profile to add one.' }); });
@@ -560,7 +564,16 @@ describe('a double tap and a retry never move Beans twice', () => {
 
     it('the same deal id in two communities is two deals: a release in each goes to each, once', async () => {
         db.enterChatInPlace(A);
-        await Promise.all([db.completeMarketplaceTransaction(tx, me.publicKey, undefined, A), db.completeMarketplaceTransaction(tx, me.publicKey)]);
+        let go!: () => void;
+        let sawIt!: () => void;
+        const seen = new Promise<void>((r) => { sawIt = r; });
+        hold = { path: '/api/marketplace/transactions/complete', seen: () => sawIt(), go: new Promise((r) => { go = r; }), used: false };
+        const there = db.completeMarketplaceTransaction(tx, me.publicKey, undefined, A);
+        await seen;
+        // A's is still on its way: the one in the community in use is its own, never A's answer.
+        await db.completeMarketplaceTransaction(tx, me.publicKey);
+        go();
+        await there;
         expect(servers[A].paid).toEqual({ [tx]: 1 });
         expect(servers[B].paid).toEqual({ [tx]: 1 });
         await db.leaveChatInPlace(A);
@@ -628,20 +641,21 @@ describe('a deal\'s state in place is its own community\'s word, kept in that co
         await db.leaveChatInPlace(A);
     });
 
-    const UNREAD: Array<[string, () => unknown, boolean]> = [
-        ['that community doesn\'t answer', () => { servers[A].listStatus = 503; }, true],
-        ['it refuses', () => { servers[A].listStatus = 403; }, true],
-        ['it answers something else', () => { servers[A].listBody = { error: 'x' }; }, true],
-        ['a guest\'s look', () => { h.store.set('beanpool_guest_nodes', JSON.stringify([A])); }, true],
-        ['the community taken off the phone', takenOff, true],
-        ['the chat left', async () => { db.enterChatInPlace(A); await db.leaveChatInPlace(A); }, false],
-        ['another account on the phone', accountChanges, true],
-        ['the phone switching to a third community as it is signed', () => { h.signing = async () => { h.signing = null; await switchPhoneTo(C); }; }, true],
-        ['the chat left as it is signed', () => { h.signing = async () => { h.signing = null; await db.leaveChatInPlace(A); }; }, true],
-        ['an account leaving the phone as it is signed', () => { h.signing = () => { h.signing = null; accountLeaves(); }; }, true],
-        ['its file refuses the rows', () => { h.cut = { file: A_FILE, sql: /INTO marketplace_transactions/, times: 99 }; }, true],
+    /** `asks`: whether that community is asked at all (a read on its way as things change is; one that begins after isn't). */
+    const UNREAD: Array<[string, () => unknown, boolean, boolean]> = [
+        ['that community doesn\'t answer', () => { servers[A].listStatus = 503; }, true, true],
+        ['it refuses', () => { servers[A].listStatus = 403; }, true, true],
+        ['it answers something else', () => { servers[A].listBody = { error: 'x' }; }, true, true],
+        ['a guest\'s look', () => { h.store.set('beanpool_guest_nodes', JSON.stringify([A])); }, true, false],
+        ['the community taken off the phone', takenOff, true, false],
+        ['the chat left', async () => { db.enterChatInPlace(A); await db.leaveChatInPlace(A); }, false, false],
+        ['another account on the phone', accountChanges, true, false],
+        ['the phone switching to a third community as it is signed', () => { h.signing = async () => { h.signing = null; await switchPhoneTo(C); }; }, true, true],
+        ['the chat left as it is signed', () => { h.signing = async () => { h.signing = null; await db.leaveChatInPlace(A); }; }, true, true],
+        ['an account leaving the phone as it is signed', () => { h.signing = () => { h.signing = null; accountLeaves(); }; }, true, true],
+        ['its file refuses the rows', () => { h.cut = { file: A_FILE, sql: /INTO marketplace_transactions/, times: 99 }; }, true, true],
     ];
-    it.each(UNREAD)('%s: nothing is taken for that community\'s word, nothing is written anywhere, the community in use is asked nothing', async (_n, first, holds) => {
+    it.each(UNREAD)('%s: nothing is taken for that community\'s word, nothing is written anywhere, the community in use is asked nothing', async (_n, first, holds, asks) => {
         await first();
         const before = [rowsOf(A_FILE), rowsOf(B_FILE), rowsOf(C_FILE)];
         if (holds) db.enterChatInPlace(A);
@@ -649,6 +663,7 @@ describe('a deal\'s state in place is its own community\'s word, kept in that co
         expect(await read()).toBeNull();
         accountGoing();
         expect(asked.filter((r) => r.origin !== A && r.path.startsWith('/api/marketplace'))).toEqual([]);
+        expect(asked.some((r) => r.origin === A && r.path.startsWith('/api/marketplace'))).toBe(asks);
         h.cut = null;
         expect([rowsOf(A_FILE), rowsOf(B_FILE), rowsOf(C_FILE)]).toEqual(before);
     });

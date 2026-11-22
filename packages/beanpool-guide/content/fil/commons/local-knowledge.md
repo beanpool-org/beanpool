@@ -72,7 +72,7 @@ Kapag may naghihintay sa iyo, nagpapakita ang Alamin ng linyang tulad ng **1 sa 
 
 ## May nagbago ba?
 
-Sa anumang pahina, i-tap ang **May nagbago ba? Magmungkahi ng ayos**. Sabihin sa ilalim ng **Ano ang nagbago?** kung ano ang iba na ngayon, tulad ng "Sarado ang tapunan tuwing Lunes mula noong Marso", at baguhin ang mga salita kung gusto mo, o ipadala lang ang tala. Sinusuri muna ito ng may-ari o admin: mananatiling ganoon ang pahina hanggang noon. Maaari kang magkaroon ng isang ayos na naghihintay sa bawat pahina. Malalaman mo ang sagot bilang **Pumasok na ang ayos mo** o **Hindi nagamit ang ayos mo**.
+Sa anumang pahina, i-tap ang **May nagbago ba? Magmungkahi ng ayos**. Sabihin sa ilalim ng **Ano ang nagbago?** kung ano ang iba na ngayon, tulad ng "Sarado ang tapunan tuwing Lunes mula noong Marso", at baguhin ang mga salita kung gusto mo, o ipadala lang ang tala. Sinusuri muna ito ng may-ari o admin: mananatiling ganoon ang pahina hanggang noon. Maaari kang magkaroon ng isang ayos na naghihintay sa bawat pahina. Malalaman mo ang sagot bilang **Pasok na ang iyong pagtatama** o **Hindi ginamit ang iyong pagtatama**.
 
 Maaari ring i-tap ng sumulat ng pahina ang **Markahang luma na** at sabihin kung bakit. Ilalagay nito ang kahong amber sa pahina hanggang alisin ng may-ari o admin ang marka.
 

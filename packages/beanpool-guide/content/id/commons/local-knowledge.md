@@ -72,7 +72,7 @@ Saat ada yang menunggu, Belajar menampilkan baris seperti **1 usulanmu menunggu 
 
 ## Ada yang berubah?
 
-Di halaman mana pun, ketuk **Ada yang berubah? Usulkan perbaikan**. Tulis di bawah **Apa yang berubah?** apa yang berbeda sekarang, seperti "Tempat sampah tutup pada hari Senin sejak Maret", dan ubah kata-katanya jika mau, atau kirim catatannya saja. Pemilik atau admin memeriksanya lebih dulu: halaman tetap seperti semula sampai saat itu. Kamu bisa punya satu perbaikan yang menunggu untuk setiap halaman. Kamu mendapat kabar sebagai **Perbaikanmu sudah masuk** atau **Perbaikanmu tidak dipakai**.
+Di halaman mana pun, ketuk **Ada yang berubah? Usulkan perbaikan**. Tulis di bawah **Apa yang berubah?** apa yang berbeda sekarang, seperti "Tempat sampah tutup pada hari Senin sejak Maret", dan ubah kata-katanya jika mau, atau kirim catatannya saja. Pemilik atau admin memeriksanya lebih dulu: halaman tetap seperti semula sampai saat itu. Kamu bisa punya satu perbaikan yang menunggu untuk setiap halaman. Kamu mendapat kabar sebagai **Koreksimu sudah masuk** atau **Koreksimu tidak dipakai**.
 
 Penulis halaman juga bisa mengetuk **Tandai sudah usang** dan menyebutkan alasannya. Itu memasang kotak kuning di halaman sampai pemilik atau admin menghapus tandanya.
 

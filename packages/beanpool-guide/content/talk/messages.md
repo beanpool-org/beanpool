@@ -35,6 +35,8 @@ When you and the other person have a deal, it is pinned above the messages, on t
 - **When a deal is finished** and you haven't rated it, the card has **⭐ Review**.
 - **If the other person has asked for your listing,** the card says **Waiting on you: answer**. No Beans are held yet, so it has no buttons of its own: tap it to open the listing and answer there.
 
+On the phone, a chat with someone in another community you have joined on it shows the deals you have there too, once that community has answered about them. **Release**, **Cancel**, **⭐ Review** and a standing deal's **Stop** all happen in that community: your phone stays where it is, and nothing is sent to the community you are in. To open the listing, or to answer someone who has asked for yours, tap the card, or **Open** with that community's name on it: your phone switches there.
+
 When you are paying for just one deal in the chat, it is in the bar above the messages instead of a card: **⚠️ Action needed: release the Beans** with **Release** and **Cancel** on the phone, **🔒 Trust Hold** with **✅ Release Beans** and **Cancel** in the web app. If you are paying for several, the bar has the newest and the cards have the rest.
 
 ## Starting a chat

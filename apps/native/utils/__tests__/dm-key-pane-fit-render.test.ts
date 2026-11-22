@@ -386,10 +386,14 @@ describe('the DM screen\'s column holds the page and the keyboard view, nothing 
         expect(kids.slice(header + 1, kav).map((k) => tagOf(k) ?? k.getText().slice(0, 40))).toEqual(['DmKeyChangedPane']);
         const pane = kids[header + 1] as ts.JsxElement;
         const inPane = jsxChildren(pane).map((k) => k.getText());
-        expect(inPane).toHaveLength(3);
-        expect(inPane[0]).toMatch(/^\{visibleDeals\.length > 0 && \(\s*<View style=\{styles\.dealStrip\}>/);
-        expect(inPane[1]).toMatch(/^\{postContext && \(\s*<Pressable [^\n]*style=\{styles\.stickyHeader\}>/);
-        expect(inPane[2]).toMatch(/^\{showInlineBar && pendingTx && \(\s*<View style=\{\[styles\.inlineActionBar/);
+        // In place (slice S6c) the standing deals' panels and the one line that their community didn't answer sit over them,
+        // in the same page: neither is drawn in an ordinary chat.
+        expect(inPane).toHaveLength(5);
+        expect(inPane[0]).toMatch(/^\{standingThere\.map\(d => \(\s*<View key=\{`standing-\$\{d\.txId\}`\} style=\{styles\.standingThere\}>/);
+        expect(inPane[1]).toMatch(/^\{!!inPlace && dealsThere\.state === 'failed' && [^\n]* && \(\s*<View style=\{styles\.dealsUnread\}/);
+        expect(inPane[2]).toMatch(/^\{visibleDeals\.length > 0 && \(\s*<View style=\{styles\.dealStrip\}>/);
+        expect(inPane[3]).toMatch(/^\{postContext && \(\s*<Pressable [^\n]*style=\{styles\.stickyHeader\}>/);
+        expect(inPane[4]).toMatch(/^\{showInlineBar && pendingTx && \(\s*<View style=\{\[styles\.inlineActionBar/);
     });
     it('the keyboard view holds the thread and the box measured whole, nothing else', () => {
         const kids = jsxChildren(element('KeyboardAvoidingView'));

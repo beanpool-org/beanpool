@@ -856,7 +856,7 @@ describe('a chat in place, left while its poll, a push or a read is on its way (
     });
 });
 
-describe('a chat in place opens nothing of the community in use: no listing, profile or deal of its (slice S2, #3305 review)', () => {
+describe('a chat in place opens nothing of the community in use: no listing, profile or deal of its (slice S2, #3305 review; deals in place, S6c)', () => {
     const RIVER = 'https://riverside.example';
     const KOFI_THERE = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: null, listed: 1 };
     /** A deal's notice, as the node posts it into the pair's own chat: it names the listing (metadata.postId). */
@@ -881,16 +881,26 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
     const STRIP_DEAL = { txId: 'tx-eggs', postId: 'p-eggs', postTitle: 'Duck eggs', status: 'pending', buyerPubkey: 'kofi-key', sellerPubkey: ME.publicKey, iAmBuyer: false, amount_c: 300 };
 
     let went: Array<[string, unknown]>;
+    /** Every read of deals, as it was handed: the member, the person, the community. */
+    let dealReads: unknown[][];
+    let moves: unknown[][];
     beforeEach(() => {
         went = [];
+        dealReads = [];
+        moves = [];
+        moveTo.run = (...args: unknown[]) => { moves.push(args); return Promise.resolve('switched'); };
         for (const how of ['push', 'replace', 'navigate'] as const) vi.spyOn(router, how).mockImplementation(((to: unknown) => { went.push([how, to]); }) as never);
     });
-    afterEach(() => { vi.restoreAllMocks(); });
+    afterEach(() => { vi.restoreAllMocks(); moveTo.run = null; });
 
     async function openChat(inPlace: boolean, over: Answers): Promise<void> {
         params.now = inPlace ? { id: 'dm1', community: RIVER, communityName: 'Riverside' } : { id: 'dm1' };
         if (inPlace) holdsCommunity(RIVER, 'Riverside');
-        standIn({ getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true, ...over });
+        const rows = (over.getDealsBetween as any[]) ?? [];
+        standIn({
+            getConversation: KOFI_THERE, getMessages: [], markConversationRead: true, syncSingleConversation: true, ...over,
+            getDealsBetween: (...args: unknown[]) => { dealReads.push(args); return Promise.resolve(rows); },
+        });
         await open();
         expect(host.textContent).toContain('Kofi');
     }
@@ -904,16 +914,20 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
      * Every tap target of the DM screen that opens a listing, a profile, a deal or a route of a community (the class closed
      * after #3305's deciding review of 465fb8f9). `goes`: where it leads in an ordinary chat, the community in use's (null:
      * no move; `asks`, what it reads of that community's copy). In place it is not there (`absent`), or there with a tap that
-     * opens nothing (`inert`), or it goes where it does named by the chat's own community (`named`, `inPlaceGoes`).
+     * opens nothing (`inert`), or it goes where it does named by the chat's own community (`named`, `inPlaceGoes`), or it says
+     * where its listing is and offers to open that community (`offers`: what it names; S6c), or it asks before a step on a deal
+     * as it does at home (`confirms`; S6c: where that step goes is deals-in-place-table's and deals-in-place-render's).
      */
     interface Row {
         name: string; over: Answers; open?: () => Promise<void>; find: () => HTMLElement | null;
-        goes: [string, unknown] | null; asks?: string; inPlace: 'absent' | 'inert' | 'named'; inPlaceGoes?: [string, unknown];
+        goes: [string, unknown] | null; asks?: string; inPlace: 'absent' | 'inert' | 'named' | 'offers' | 'confirms'; inPlaceGoes?: [string, unknown]; says?: string;
     }
+    /** What the chat's own community answers of these deals (S6c): every deal of the row, by id. */
+    const answered = (over: Answers): Answers => ({ syncDealsBetween: new Map(((over.getDealsBetween as any[]) ?? []).map((d) => [d.txId, {}])) });
     const ROWS: Row[] = [
         ...[FUNDED, RELEASED, CANCELLED].map((line): Row => ({
             name: `View Post on a deal's notice (${line.systemType})`, over: { getMessages: [line] }, find: buttonReading('View Post'),
-            goes: ['push', '/post/p-ladder'], inPlace: 'absent',
+            goes: ['push', '/post/p-ladder'], inPlace: 'offers', says: 'Deal is in Riverside. Opens that community.',
         })),
         {
             name: "Rate your partner on a deal's notice (ESCROW_RELEASED)", over: { getMessages: [RELEASED] }, find: buttonReading('Rate your partner'),
@@ -921,7 +935,7 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
         },
         {
             name: "a listing's card on a line", over: { getMessages: [ABOUT_LINE] }, find: () => host.querySelector<HTMLElement>('[data-testid="chat-about-card"]'),
-            goes: ['push', '/post/p-ladder'], inPlace: 'inert',
+            goes: ['push', '/post/p-ladder'], inPlace: 'offers', says: 'Borrow a long ladder is in Riverside. Opens that community.',
         },
         {
             name: "the person's name at the top (their profile)", over: {}, find: buttonHolding('End-to-end encrypted'),
@@ -933,18 +947,18 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
         },
         {
             name: "the listing's header over the chat", over: { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL] },
-            find: buttonHolding('Borrow a long ladder'), goes: ['push', '/post/p-ladder'], inPlace: 'absent',
+            find: buttonHolding('Borrow a long ladder'), goes: ['push', '/post/p-ladder'], inPlace: 'offers', says: 'Borrow a long ladder is in Riverside. Opens that community.',
         },
         {
             name: 'Release on the bar under it', over: { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL] },
             find: () => (host.textContent?.includes('Action needed: release the Beans')
                 ? Array.from(host.querySelectorAll<HTMLElement>('button')).find((b) => b.textContent?.startsWith('Release')) ?? null
                 : null),
-            goes: null, inPlace: 'absent',
+            goes: null, inPlace: 'confirms', says: 'Release 5 Beans to the provider? This action cannot be undone.',
         },
         {
             name: "a deal's card on the strip", over: { getDealsBetween: [STRIP_DEAL] }, find: buttonHolding('Duck eggs'),
-            goes: ['push', { pathname: '/post/[id]', params: { id: 'p-eggs', txId: 'tx-eggs' } }], inPlace: 'absent',
+            goes: ['push', { pathname: '/post/[id]', params: { id: 'p-eggs', txId: 'tx-eggs' } }], inPlace: 'offers', says: 'Duck eggs is in Riverside. Opens that community.',
         },
         {
             name: 'Key code in the menu', over: {}, open: openMenu, find: buttonReading('Key code'),
@@ -966,7 +980,7 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
     });
 
     for (const row of ROWS) it(`${row.name}: in place it opens nothing of the community in use`, async () => {
-        await openChat(true, row.over);
+        await openChat(true, { ...answered(row.over), ...row.over });
         await row.open?.();
         const target = row.find();
         if (row.inPlace === 'absent') expect(target, 'not offered in place').toBeNull();
@@ -976,9 +990,16 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
             await settle();
         }
         expect(went).toEqual(row.inPlace === 'named' ? [row.inPlaceGoes] : []);
-        // Nothing of a deal or a listing is read in place, from the copy in use or any other.
-        expect(net.calls.filter((c) => ['db.getDealsBetween', 'db.getDb', 'db.lookupAboutListing'].includes(c))).toEqual([]);
-        // Mutation: drop `!at &&` from the notice's View Post -> its three rows find View Post in place.
+        // Said, with the move offered or the step to confirm, and nothing done by the tap alone.
+        if (row.inPlace === 'offers') expect(alerts.said).toEqual(['Riverside', row.says, 'Cancel', 'Open Riverside ›']);
+        else if (row.inPlace === 'confirms') expect(alerts.said.slice(0, 2)).toEqual(['Release Beans', row.says]);
+        else expect(alerts.said).toEqual([]);
+        expect(moves, 'nothing moves until the member says so').toEqual([]);
+        // Nothing of a listing is read in place, nor anything of the copy in use: the deals are that community's, by name.
+        expect(net.calls.filter((c) => ['db.getDb', 'db.lookupAboutListing', 'db.completeMarketplaceTransaction', 'db.cancelMarketplaceTransaction'].includes(c))).toEqual([]);
+        expect(dealReads.every(([, , place]) => place === RIVER), 'every read of deals names the chat\'s own community').toBe(true);
+        // Mutation: openListing's `at` dropped -> View Post, the listing's card, its header and the strip's card go to the
+        // community in use's listing (went).
     });
 
     /** Taps every button the screen shows: the menu's (opened again as each row closes it) and each line's actions included. */
@@ -1003,14 +1024,18 @@ describe('a chat in place opens nothing of the community in use: no listing, pro
     }
     const EVERYTHING: Answers = { getConversation: ON_A_LISTING, getDealsBetween: [HELD_DEAL, STRIP_DEAL], getMessages: [FUNDED, RELEASED, CANCELLED, ABOUT_LINE] };
 
-    it('every button of a chat in place, with all of these there to show: the one move is Key code, named by its community', async () => {
-        await openChat(true, EVERYTHING);
+    it('every button of a chat in place, with all of these there to show: the one move is Key code, named by its community; a step on a deal only ever asks first', async () => {
+        await openChat(true, { ...answered(EVERYTHING), ...EVERYTHING });
         const tapped = await tapEverything();
         expect(tapped).toEqual(expect.arrayContaining(['More options', 'Key code', 'Back']));
         expect(tapped.length).toBeGreaterThan(8);
         expect(went).toEqual([['push', { pathname: '/chat/key-code', params: { id: 'dm1', community: RIVER } }]]);
-        expect(net.calls.filter((c) => ['db.getDealsBetween', 'db.getDb', 'db.lookupAboutListing', 'db.completeMarketplaceTransaction', 'db.cancelMarketplaceTransaction', 'db.reportDmLine'].includes(c))).toEqual([]);
-        // Mutation: drop `!at &&` from the notice's View Post -> went holds ['push', '/post/p-ladder'].
+        expect(moves, 'no tap alone moves the phone').toEqual([]);
+        expect(alerts.said).toEqual(expect.arrayContaining(['Open Riverside ›', 'Release Beans', 'Cancel Hold']));
+        expect(net.calls.filter((c) => ['db.getDb', 'db.lookupAboutListing', 'db.completeMarketplaceTransaction', 'db.cancelMarketplaceTransaction', 'db.reportDmLine', 'db.submitRating'].includes(c))).toEqual([]);
+        expect(dealReads.length).toBeGreaterThan(0);
+        expect(dealReads.every(([, , place]) => place === RIVER)).toBe(true);
+        // Mutation: openListing's `at` dropped -> went holds ['push', '/post/p-ladder'].
     });
 
     it('control: the same taps in an ordinary chat open the listing, the person and the deal (so the sweep above would see them)', async () => {

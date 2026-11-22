@@ -133,11 +133,12 @@ vi.mock('../blocklist', () => ({
         keys.some((k) => lists.onPhone.has(k) || lists.seenThere.has(k) || lists.once.has(k)),
 }));
 // Every community here takes messages from other communities (the profile this phone keeps; slice S5 changes what else it says).
-vi.mock('../node-profile', async (orig) => ({
-    ...(await orig<any>()),
-    getCachedNodeProfile: vi.fn(async (url: string) => ({ ...h.profile, ...h.says[url] })),
-    fetchNodeProfile: vi.fn(async (url: string) => ({ ...h.profile, ...h.says[url] })),
-}));
+vi.mock('../node-profile', async (orig) => {
+    const real = await orig<typeof import('../node-profile')>();
+    // What each says of its names (h.says), read as the phone reads an info.
+    const said = (url: string) => ({ ...real.readNodeProfile(h.says[url] ?? {}), ...h.profile });
+    return { ...real, getCachedNodeProfile: vi.fn(async (url: string) => said(url)), fetchNodeProfile: vi.fn(async (url: string) => said(url)) };
+});
 // The member's statements as core signs them, without the phone's native modules.
 vi.mock('../member-statements', async () => {
     const core = await import('@beanpool/core');

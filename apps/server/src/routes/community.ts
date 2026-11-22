@@ -745,6 +745,9 @@ router.get('/api/community/info', async (ctx) => {
         // to `primaryAddress`.
         primaryAddress: primaryAddress(),
         formerAddresses: formerAddresses(),
+        // Said so an app can tell this answer from an older server's, which lists a lost name among its former ones: without
+        // it an app takes no name that is only a former one as this community's (@beanpool/core community-homes.ts).
+        formerExcludesLost: true,
         // Where the 🏘️ Local community sheet's Start a community leads (config/start-community.ts): beanpool.org's page
         // unless an owner named their own.
         startCommunityUrl: getStartCommunityUrl(),

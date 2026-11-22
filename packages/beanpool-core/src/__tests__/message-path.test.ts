@@ -24,9 +24,11 @@ const HERE_FORMER = 'https://formerriver.example';
 /** A name Riverside lost, which Lakeside goes by now; and one Riverside and Hillside both say is theirs, so whose isn't certain. */
 const HERE_LOST = 'https://lostriver.example';
 const BOTH = 'https://both.example';
+/** A name Hillside lists only as one it had before. */
+const HELD_A_FORMER = 'https://formerhill.example';
 const COMMUNITIES: KnownNames[] = [
-    { community: HERE, reached: HERE, kept: {}, answer: { addresses: ['riverside.example', 'oldriver.example', 'river.example', 'both.example'], primaryAddress: 'riverside.example', formerAddresses: ['formerriver.example'] } },
-    { community: HELD_A, reached: HELD_A, kept: {}, answer: { addresses: ['hillside.example', 'oldhill.example'], formerAddresses: ['both.example'] } },
+    { community: HERE, reached: HERE, kept: {}, answer: { addresses: ['riverside.example', 'oldriver.example', 'river.example', 'both.example'], primaryAddress: 'riverside.example', formerAddresses: ['formerriver.example'], formerExcludesLost: true } },
+    { community: HELD_A, reached: HELD_A, kept: {}, answer: { addresses: ['hillside.example', 'oldhill.example'], formerAddresses: ['both.example', 'formerhill.example'], formerExcludesLost: true } },
     { community: HELD_B, reached: HELD_B, kept: {}, answer: { addresses: ['lakeside.example', 'lostriver.example'] } },
 ];
 
@@ -36,6 +38,8 @@ const phone = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): 
 /** The web holds one community; `webNoAnswer`: one that doesn't answer, so only what the page read is there. */
 const WEB: KnownNames[] = [{ ...COMMUNITIES[0], answer: { ...COMMUNITIES[0].answer, addresses: ['riverside.example', 'oldriver.example', 'river.example'] }, refused: [] }];
 const web = (links: MessageLink[], chats: KnownChat[] = [], blocked = false): Input => ({ ...base, links, chats, setTo: HERE, held: [], whose: whoseName(WEB), blocked });
+/** The same communities on a server from before `formerExcludesLost` (version skew): what they list as former may be lost. */
+const older = (communities: readonly KnownNames[]): KnownNames[] => communities.map((c) => ({ ...c, answer: { ...c.answer, formerExcludesLost: undefined } }));
 const webNoAnswer = (links: MessageLink[]): Input => ({ ...web(links), whose: whoseName([{ community: HERE, reached: HERE, answer: null, kept: { info: COMMUNITIES[0].answer } }]) });
 
 interface Row { name: string; input: Input; want: MessagePath }
@@ -123,6 +127,13 @@ const ROWS: Row[] = [
     { name: 'phone · a name the community in use had before is here', input: phone([{ community: HERE_FORMER, key: K }]), want: { open: 'shared', community: HERE, key: K } },
     { name: 'phone · a name it lost to a held community is that community', input: phone([{ community: HERE_LOST, key: K }]), want: { open: 'shared', community: HELD_B, key: K } },
     { name: 'web · a name it lost: across', input: web([{ community: HERE_LOST, key: K, name: 'Dee' }]), want: across(HERE_LOST) },
+    { name: 'phone · a name a held community had before is it', input: phone([{ community: HELD_A_FORMER, key: K }]), want: { open: 'shared', community: HELD_A, key: K } },
+    // ── version skew: a server from before `formerExcludesLost` lists a lost name among its former ones ──
+    { name: 'phone · an older server in use, a name it lists only as one it had before: to switch', input: { ...phone([{ community: HERE_FORMER, key: K }]), whose: whoseName(older(COMMUNITIES)) }, want: { open: 'switch', community: HERE_FORMER } },
+    { name: 'phone · an older server held, a name it lists only as one it had before: to switch', input: { ...phone([{ community: HELD_A_FORMER, key: K }]), whose: whoseName(older(COMMUNITIES)) }, want: { open: 'switch', community: HELD_A_FORMER } },
+    { name: 'web · an older server, a name it lists only as one it had before: to go there', input: { ...web([{ community: HERE_FORMER, key: K }]), whose: whoseName(older(WEB)) }, want: { open: 'switch', community: HERE_FORMER } },
+    { name: 'phone · an older server, a name it goes by: here, as ever', input: { ...phone([{ community: HERE_ALIAS, key: K }]), whose: whoseName(older(COMMUNITIES)) }, want: { open: 'shared', community: HERE, key: K } },
+    { name: 'phone · an older server, a chat across kept with a name it lists only as one it had before: never picked', input: { ...phone([{ community: AWAY, key: K, name: 'Dee' }], [at(xHere, 'formerriver.example')]), whose: whoseName(older(COMMUNITIES)) }, want: across(AWAY) },
     { name: 'phone · an across chat kept with a name a held community goes by now: the direct chat there', input: phone([{ community: AWAY, key: K }], [at(xHere, 'lostriver.example')]), want: { open: 'shared', community: HELD_B, key: K } },
     // ── whose isn't certain (round 6): nothing opens; to go to that address is offered ──
     { name: 'phone · a name two communities claim, no chat: to switch', input: phone([{ community: BOTH, key: K }]), want: { open: 'switch', community: BOTH } },
@@ -175,6 +186,10 @@ describe('messagePathFor: which chat Message opens', () => {
         'chats in communities no longer held count': (i) => messagePathFor({ ...i, held: [...i.held, AWAY] }),
         // ── the invariant (round 4) ──
         'a community is one spelling (the bug: a link at another of its addresses goes across)': (i) => messagePathFor({ ...i, whose: whoseName(COMMUNITIES.map(({ community, reached }) => ({ community, reached, kept: {} }))) }),
+        'a name it had before trusted from any server (the bug: an older one lists a lost name)': (i) => {
+            const got = messagePathFor(i);
+            return got.open === 'switch' && i.setTo ? messagePathFor({ ...i, whose: whoseName(i.held.length ? COMMUNITIES : WEB) }) : got;
+        },
         'a name it had before left out': (i) => messagePathFor({ ...i, whose: whoseName(COMMUNITIES.map((c) => ({ ...c, answer: { ...c.answer, formerAddresses: [] } }))) }),
         'an uncertain name is the first\'s that claims it (the bug: a chat nobody reads)': (i) => messagePathFor({ ...i, whose: (a) => {
             const name = i.whose(a);
@@ -229,21 +244,33 @@ describe('nameStanding: every state of every source', () => {
     const NAME = 'https://hill.example';
     const HOME = 'hill.example';
     const REACHED = 'https://riverside.example';
-    const OTHERS = { addresses: ['riverside.example', 'river.example'], primaryAddress: 'riverside.example', formerAddresses: ['oldriver.example'] };
+    const OTHERS = { addresses: ['riverside.example', 'river.example'], primaryAddress: 'riverside.example', formerAddresses: ['oldriver.example'], formerExcludesLost: true };
+    /** Says it had the name before: `says` that lost ones are left out, or from a server from before it said so. */
+    const HAD = (says: boolean): KnownNames['answer'] => ({ ...OTHERS, formerAddresses: [...OTHERS.formerAddresses, HOME], ...(says ? {} : { formerExcludesLost: undefined }) });
     const ANSWERS: Record<string, KnownNames['answer']> = {
         'not asked': undefined,
         'no answer': null,
-        'an answer that says nothing of names': { primaryAddress: HOME, formerAddresses: [HOME] },
+        'an answer that says nothing of names': { primaryAddress: HOME, formerAddresses: [HOME], formerExcludesLost: true },
         'an answer: no names at all': { addresses: [], primaryAddress: null },
         'an answer without it': OTHERS,
         'an answer: it goes by it': { ...OTHERS, addresses: [...OTHERS.addresses, HOME] },
         'an answer: it lives at it': { addresses: ['riverside.example'], primaryAddress: HOME },
-        'an answer: it had it before': { ...OTHERS, formerAddresses: [...OTHERS.formerAddresses, HOME] },
+        'an answer: it had it before, lost ones left out': HAD(true),
+        'an older server\'s answer: it had it before': HAD(false),
+        'an older server\'s answer: it goes by it': { ...OTHERS, addresses: [...OTHERS.addresses, HOME], formerExcludesLost: undefined },
+        'it says something else of lost ones than true': { ...HAD(true), formerExcludesLost: 'yes' },
     };
     const COPIES = { 'not kept': null, 'holds it': true, 'without it': false } as const;
-    const INFOS = { ...COPIES, 'says nothing of names': undefined } as const;
-    const infoOf = (state: keyof typeof INFOS): KnownNames['kept']['info'] => (state === 'not kept' ? null : state === 'holds it' ? { ...OTHERS, addresses: [...OTHERS.addresses, HOME] }
-        : state === 'without it' ? OTHERS : { formerAddresses: [HOME] });
+    const INFOS = { ...COPIES, 'says nothing of names': undefined, 'it had it before, lost ones left out': true, 'it had it before, an older server': true } as const;
+    const infoOf = (state: keyof typeof INFOS): KnownNames['kept']['info'] => {
+        switch (state) {
+            case 'not kept': return null;
+            case 'holds it': return { ...OTHERS, addresses: [...OTHERS.addresses, HOME] };
+            case 'without it': return OTHERS;
+            case 'says nothing of names': return { formerAddresses: [HOME], formerExcludesLost: true };
+            default: return HAD(state === 'it had it before, lost ones left out');
+        }
+    };
     const ROWS = Object.keys(ANSWERS).flatMap((answer) => (Object.keys(COPIES) as Array<keyof typeof COPIES>).flatMap((list) => (Object.keys(COPIES) as Array<keyof typeof COPIES>).flatMap((record) =>
         (Object.keys(INFOS) as Array<keyof typeof INFOS>).flatMap((info) => [false, true].map((refused) => ({ answer, list, record, info, refused }))))));
 
@@ -251,12 +278,16 @@ describe('nameStanding: every state of every source', () => {
         switch (answer) {
             // It said what its names are, and this isn't one: whatever is kept.
             case 'an answer: no names at all': case 'an answer without it': return 'not';
-            case 'an answer: it goes by it': case 'an answer: it lives at it': case 'an answer: it had it before': return refused ? 'uncertain' : 'own';
+            case 'an answer: it goes by it': case 'an answer: it lives at it': case 'an answer: it had it before, lost ones left out':
+            case 'an older server\'s answer: it goes by it': return refused ? 'uncertain' : 'own';
+            // Only a former name, of a server that doesn't say the lost ones are left out: it may be lost. Never own, never certainly not.
+            case 'an older server\'s answer: it had it before': case 'it says something else of lost ones than true': return 'uncertain';
         }
-        const states = [list, record, info];
-        if (!states.includes('holds it')) return 'not';
+        const had = info === 'it had it before, lost ones left out' || info === 'it had it before, an older server';
+        if (list !== 'holds it' && record !== 'holds it' && info !== 'holds it' && !had) return 'not';
         if (answer === 'not asked' || refused) return 'uncertain';
-        return states.every((x, i) => x === 'holds it' || (i === 2 && (x === 'not kept' || x === 'says nothing of names'))) ? 'own' : 'uncertain';
+        const infoAgrees = info === 'holds it' || info === 'it had it before, lost ones left out' || info === 'not kept' || info === 'says nothing of names';
+        return list === 'holds it' && record === 'holds it' && infoAgrees ? 'own' : 'uncertain';
     }
     const namesOf = (row: (typeof ROWS)[number]): KnownNames => ({
         community: REACHED, reached: REACHED, answer: ANSWERS[row.answer],
@@ -269,10 +300,11 @@ describe('nameStanding: every state of every source', () => {
     });
 
     it('is the whole of it, and every verdict is in it', () => {
-        expect(ROWS.length).toBe(8 * 3 * 3 * 4 * 2);
+        expect(ROWS.length).toBe(11 * 3 * 3 * 6 * 2);
         const count = (standing: NameStanding) => ROWS.filter((r) => ORACLE(r) === standing).length;
-        // own: answered (3 x 36, not refused) and the copies agreeing under two kinds of no answer (3 infos each).
-        expect([count('own'), count('not'), count('uncertain')]).toEqual([3 * 36 + 2 * 3, 2 * 72 + 3 * 2 * (2 * 2 * 3), 576 - 114 - 216]);
+        // own: answered (4 x 54, not refused) and the copies agreeing under two kinds of no answer (4 infos each). not: answered
+        // without it (2 x 108), and no copy with it (2 lists x 2 records x 3 infos, refused or not) under the three kinds of no answer.
+        expect([count('own'), count('not'), count('uncertain')]).toEqual([4 * 54 + 2 * 4, 2 * 108 + 3 * 2 * (2 * 2 * 3), 1188 - 224 - 288]);
     });
     for (const row of ROWS) it(`${row.answer} · list ${row.list} · record ${row.record} · info ${row.info}${row.refused ? ' · answered as something else' : ''}`, () => {
         expect(nameStanding(namesOf(row), NAME)).toBe(ORACLE(row));
@@ -283,6 +315,10 @@ describe('nameStanding: every state of every source', () => {
         '(a) a copy outranks an answer without it (the bug: the kept signed list)': (n, a) => (nameStanding(n, a) === 'not' && keptClaims(n, a) ? nameStanding({ ...n, answer: null }, a) : nameStanding(n, a)),
         '(a) an empty list is no answer (the bug)': (n, a) => nameStanding(saysNames(n.answer) && (n.answer.addresses as unknown[]).length === 0 ? { ...n, answer: null } : n, a),
         '(b) a name it had before is not its own': (n, a) => nameStanding(n.answer ? { ...n, answer: { ...n.answer, formerAddresses: [] } } : n, a),
+        '(b) a name it had before is own whoever says so (the bug: an older server lists a lost one)': (n, a) => nameStanding({ ...n, answer: n.answer && { ...n.answer, formerExcludesLost: true } }, a),
+        '(b) a name it had before is not its own where it doesn\'t say lost ones are left out': (n, a) => nameStanding(n.answer && n.answer.formerExcludesLost !== true ? { ...n, answer: { ...n.answer, formerAddresses: [] } } : n, a),
+        '(c) a kept info\'s former name is trusted whoever said so': (n, a) => nameStanding({ ...n, kept: { ...n.kept, info: n.kept.info && { ...n.kept.info, formerExcludesLost: true } } }, a),
+        '(c) a kept info\'s former name is no claim where it doesn\'t say so': (n, a) => nameStanding({ ...n, kept: { ...n.kept, info: n.kept.info && n.kept.info.formerExcludesLost !== true ? { ...n.kept.info, formerAddresses: [] } : n.kept.info } }, a),
         '(b) an address that answered as something else is own': (n, a) => nameStanding({ ...n, refused: [] }, a),
         '(c) one copy is enough': (n, a) => (nameStanding(n, a) === 'uncertain' && n.answer !== undefined && !n.refused?.length ? 'own' : nameStanding(n, a)),
         '(c) the list alone is enough': (n, a) => nameStanding({ ...n, kept: { ...n.kept, record: n.kept.list } }, a),
@@ -312,6 +348,12 @@ describe('nameStanding: what an address is', () => {
         { name: 'unless its signed list spells that host\'s port', names: said({ addresses: ['coop.example', 'other.example'] }, { reached: 'https://coop.example:8443', kept: { list: ['other.example:8443'] } }), address: 'https://other.example:8443', want: 'own' },
         { name: 'a list spells a port, never a name the answer leaves out', names: said({ addresses: ['coop.example'] }, { kept: { list: ['other.example:8443'] } }), address: 'https://other.example:8443', want: 'not' },
         { name: 'anything said that is no address is dropped', names: said({ addresses: [7, null, 'not an address', 'river.example'], formerAddresses: 'river2.example', primaryAddress: null }), address: 'https://river2.example', want: 'not' },
+        { name: 'an IPv6 number, however spelled', names: said({ addresses: ['[2001:db8::7]'] }), address: 'https://[2001:DB8:0:0::7]:443/', want: 'own' },
+        { name: 'a name with an underscore', names: said({ addresses: ['river_side.example'] }), address: 'https://river_side.example', want: 'own' },
+        { name: 'a former name on the port its signed list spells, from a server that says lost ones are left out', names: said({ addresses: ['coop.example'], formerAddresses: ['other.example'], formerExcludesLost: true }, { kept: { list: ['other.example:8443'] } }), address: 'https://other.example:8443', want: 'own' },
+        { name: 'the same, from an older server', names: said({ addresses: ['coop.example'], formerAddresses: ['other.example'] }, { kept: { list: ['other.example:8443'] } }), address: 'https://other.example:8443', want: 'uncertain' },
+        { name: 'one it goes by and lists as former too, from an older server', names: said({ addresses: ['river.example'], formerAddresses: ['river.example'] }), address: 'https://river.example', want: 'own' },
+        { name: 'the address reached, which an older server lists only as former', names: said({ addresses: ['river.example'], formerAddresses: ['riverside.example'] }), address: HERE, want: 'own' },
         { name: 'no address', names: said({ addresses: ['river.example'] }), address: 'not an address', want: 'not' },
         { name: 'none', names: said({ addresses: ['river.example'] }), address: null, want: 'not' },
     ] as Array<{ name: string; names: KnownNames; address: string | null; want: NameStanding }>)('$name', ({ names, address, want }) => {
@@ -347,14 +389,15 @@ describe('whoseName: one name, two communities', () => {
     const CLAIMS: Record<string, (c: string) => KnownNames> = {
         'reached at it': (c) => ({ community: c, reached: NAME, kept: {}, answer: { addresses: [] } }),
         'answers it goes by it': (c) => ({ community: c, reached: c, kept: {}, answer: { addresses: ['hill.example'] } }),
-        'answers it had it before': (c) => ({ community: c, reached: c, kept: {}, answer: { addresses: [], formerAddresses: ['hill.example'] } }),
+        'answers it had it before': (c) => ({ community: c, reached: c, kept: {}, answer: { addresses: [], formerAddresses: ['hill.example'], formerExcludesLost: true } }),
+        'answers it had it before, an older server': (c) => ({ community: c, reached: c, kept: {}, answer: { addresses: [], formerAddresses: ['hill.example'] } }),
         'no answer, its copies agree': (c) => ({ community: c, reached: c, answer: null, kept: { list: ['hill.example'], record: [NAME], info: { addresses: ['hill.example'] } } }),
         'no answer, its copies differ': (c) => ({ community: c, reached: c, answer: null, kept: { list: ['hill.example'], record: [c], info: null } }),
         'answers it is not its name, its copies say so': (c) => ({ community: c, reached: c, answer: { addresses: ['elsewhere.example'] }, kept: { list: ['hill.example'], record: [NAME], info: { addresses: ['hill.example'] } } }),
         'has nothing to do with it': (c) => ({ community: c, reached: c, answer: null, kept: { list: [], record: [c], info: { addresses: [] } } }),
     };
     /** `1`: the first's; `2`: the second's; `?`: not certain; `-`: neither's. One line a claim of the first's, one letter a claim of the second's, in CLAIMS' order. */
-    const WANT = ['1111111', '2????11', '2????11', '2????11', '2??????', '2222?--', '2222?--'];
+    const WANT = ['11111111', '2?????11', '2?????11', '2???????', '2?????11', '2???????', '222?2?--', '222?2?--'];
     const rows = Object.keys(CLAIMS).flatMap((first, i) => Object.keys(CLAIMS).map((second, j) => ({ first, second, want: WANT[i][j] })));
     it.each(rows)('the first $first; the second $second -> $want', ({ first, second, want }) => {
         const got: WhoseName = whoseName([CLAIMS[first](HERE), CLAIMS[second](HELD_A)])(NAME);
@@ -362,7 +405,7 @@ describe('whoseName: one name, two communities', () => {
     });
     it('the only one with a claim: its, if it is certain', () => {
         for (const [claim, of] of Object.entries(CLAIMS)) {
-            expect([claim, whoseName([of(HERE)])(NAME).whose]).toEqual([claim, { 'no answer, its copies differ': 'uncertain', 'answers it is not its name, its copies say so': 'none', 'has nothing to do with it': 'none' }[claim] ?? 'one']);
+            expect([claim, whoseName([of(HERE)])(NAME).whose]).toEqual([claim, { 'answers it had it before, an older server': 'uncertain', 'no answer, its copies differ': 'uncertain', 'answers it is not its name, its copies say so': 'none', 'has nothing to do with it': 'none' }[claim] ?? 'one']);
         }
         expect(whoseName([])(NAME)).toEqual({ whose: 'none' });
         for (const address of ['not an address', null, undefined]) expect(whoseName([CLAIMS['answers it goes by it'](HERE)])(address)).toEqual({ whose: 'none' });

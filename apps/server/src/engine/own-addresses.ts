@@ -565,7 +565,7 @@ export function tlsIdentifiers(): string[] {
  * published. One that is also set on the server or confirmed in Settings is one of this community's names in use
  * (published), not a former one, and isn't here. Nor is a LOST one: it is another community's now, this server answers as
  * it no more (audienceStanding `foreign`), and an app that took it as ours would write to someone there in a chat here,
- * which they would never see (#3354 review, round 5).
+ * which they would never see (#3354 review, round 5). The info says that it leaves them out (`formerExcludesLost`).
  */
 export function formerAddresses(): string[] {
     return configuredAddresses().filter((a) => a.former && !a.lost).map((a) => a.address);

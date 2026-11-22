@@ -209,6 +209,7 @@ import { MyJoinRequests } from '../../components/MyJoinRequests';
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import ChatsScreen from '../../app/(tabs)/chats';
 import NewMessageScreen from '../../app/new-message';
+import { makeCommunityRecord, resetCommunityIndexForTests, setCommunityIndex } from '../community-index';
 
 const NODE = 'https://mullum.example';
 const DAY = 24 * 60 * 60 * 1000;
@@ -565,6 +566,21 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         expect(net.calls).toContain('db.createConversationApi');
         expect(alerts.said).toEqual([pseudoLocalise('Error'), PAUSED_OPEN_WORDS]);
         expect(bypassing()).toEqual([]);
+    });
+
+    // S5 part 2 hardening: a member's own switch leaves the record's `using` behind (utils/community-homes.ts). Mutation: the result
+    // named by that address (usingOf) -> it is in doubt, nothing starts, and it says to try again.
+    it('the New message picker, its community reached at another address than its record\'s `using`: the chat starts', async () => {
+        setCommunityIndex([{ ...makeCommunityRecord(NODE), using: 'https://left.example' }]);
+        try {
+            net.answer = community({ getConversations: [] });
+            await renderIn('xx', createElement(NewMessageScreen));
+            await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
+            expect(net.calls).toContain('db.createConversationApi');
+            expect(alerts.said).not.toContain(pseudoLocalise('Please try again.'));
+        } finally {
+            resetCommunityIndexForTests();
+        }
     });
 
     it('the New message picker, offline: the phone says to connect, in the member\'s language', async () => {

@@ -2329,6 +2329,53 @@ describe('a block reaches every community this phone holds (slice S7a)', () => {
             expect(net.sent.slice(after)).toEqual([]);
         });
 
+        it('blocked while the carrying community was off the phone, then it is back: its own round sends the block, though none was ever tried there (review of #3372, N3)', async () => {
+            const app = await phoneHolding(['in use', 'held and reachable']);
+            setSaved([IN_USE]);
+            await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam');
+            await app.blockSyncsEndedForTests();
+            expect(listOf(IN_USE, ana.publicKey)).toEqual(['H']);
+            // Told nothing while it was off the phone.
+            expect(net.sent.filter((s) => s.url.startsWith(`${HELD}/`))).toEqual([]);
+            setSaved([IN_USE, HELD]);
+            expect(await app.blocksOwedAt(HELD)).toBe(true);
+            const from = net.sent.length;
+            await acrossRound(app, HELD);
+            expect(heard(HELD, from)).toEqual(['block H']);
+            // That community alone, signed by the account that blocked.
+            expect(net.sent.slice(from).map((s) => s.url.slice(0, s.url.indexOf('/api/')))).toEqual([HELD]);
+            expect(net.sent.slice(from).every((s) => s.signedBy === ana.publicKey)).toBe(true);
+            expect(listOf(HELD, ana.publicKey)).toEqual(['H']);
+            expect(await app.blocksOwedAt(HELD)).toBe(false);
+            const after = net.sent.length;
+            await acrossRound(app, HELD);
+            expect(net.sent.slice(after)).toEqual([]);
+        });
+
+        it('a community that refused a block (its limit) is owed nothing its round would send while that wait holds, and an unblock that missed it still is', async () => {
+            const app = await phoneHolding(['in use', 'held and reachable']);
+            net.refuse.set(HELD, { status: 409, code: 'block_limit', addsOnly: true });
+            await app.blockUser(HARASSER, ana.publicKey, 'Spam or scam');
+            await app.blockSyncsEndedForTests();
+            expect(heard(HELD, 0)).toEqual(['block H']);
+            expect(listOf(HELD, ana.publicKey)).toEqual([]);
+            // Its blocks wait a day: the round would send nothing, so nothing is owed.
+            expect(await app.blocksOwedAt(HELD)).toBe(false);
+            const from = net.sent.length;
+            await acrossRound(app, HELD);
+            expect(net.sent.slice(from)).toEqual([]);
+            // Unblocked while it was offline: the unblock goes at its next round, the wait for blocks notwithstanding.
+            net.down.add(HELD);
+            expect(await app.unblockUser(HARASSER)).toBe(true);
+            await app.blockSyncsEndedForTests();
+            net.down.delete(HELD);
+            expect(await app.blocksOwedAt(HELD)).toBe(true);
+            const back = net.sent.length;
+            await acrossRound(app, HELD);
+            expect(heard(HELD, back)).toEqual(['unblock H']);
+            expect(await app.blocksOwedAt(HELD)).toBe(false);
+        });
+
         it('every order of block, unblock and block, with either, both or neither community out at each tap: one round of each community\'s across chat leaves its list as the member\'s latest change says, and nothing owed after', async () => {
             const wrong: string[] = [];
             let runs = 0;
@@ -2357,6 +2404,47 @@ describe('a block reaches every community this phone holds (slice S7a)', () => {
                 }
             }
             expect(runs).toBe(2 * 16 + 4 * 64);
+            expect(wrong).toEqual([]);
+        }, 120_000);
+
+        it('every order, with the carrying community on the phone, taken off it, or offline at each tap: once it is back, its own round alone leaves its list as the latest change says, and nothing owed after (review of #3372, N3: a block never tried there is owed as much as one whose answer never came)', async () => {
+            type Held = 'on the phone' | 'off the phone' | 'offline';
+            const STATES: Held[] = ['on the phone', 'off the phone', 'offline'];
+            // A block in place is made from its chat, open on the phone: never while it is off.
+            const statesOf = (order: Step[]): Held[][] => order.reduce<Held[][]>((acc, step) =>
+                acc.flatMap((before) => STATES.filter((s) => step !== 'block in place' || s !== 'off the phone').map((s) => [...before, s])), [[]]);
+            const wrong: string[] = [];
+            let runs = 0;
+            for (const order of [['block'] as Step[], ...ORDERS]) {
+                for (const states of statesOf(order)) {
+                    runs++;
+                    const app = await phoneHolding(['in use', 'held and reachable']);
+                    for (const [i, step] of order.entries()) {
+                        net.down.clear();
+                        setSaved(states[i] === 'off the phone' ? [IN_USE] : [IN_USE, HELD]);
+                        if (states[i] === 'offline') net.down.add(HELD);
+                        const from = net.sent.length;
+                        await tap(app, step);
+                        await app.blockSyncsEndedForTests();
+                        if (states[i] === 'off the phone' && net.sent.slice(from).some((s) => s.url.startsWith(`${HELD}/`))) {
+                            wrong.push(`${order.join(' → ')} (${states.join(', ')}): told something at tap ${i + 1} while off the phone`);
+                        }
+                    }
+                    net.down.clear();
+                    setSaved([IN_USE, HELD]);
+                    const wish = order[order.length - 1] === 'unblock' ? [] : ['H'];
+                    // No round that reaches every held community runs here: the carrying community's own across round alone.
+                    await acrossRound(app, HELD);
+                    const list = listOf(HELD, ana.publicKey);
+                    const owed = await app.blocksOwedAt(HELD);
+                    if (JSON.stringify(list) !== JSON.stringify(wish) || owed) {
+                        wrong.push(`${order.join(' → ')} (${states.join(', ')}): holds [${list}], owed after its round ${owed}; latest change says [${wish}]`);
+                    }
+                    if (JSON.stringify(listOf(IN_USE, ana.publicKey)) !== JSON.stringify(wish)) wrong.push(`${order.join(' → ')} (${states.join(', ')}): the community in use holds [${listOf(IN_USE, ana.publicKey)}]`);
+                    if (!blockAndReportRequests().every((s) => s.signedBy === ana.publicKey)) wrong.push(`${order.join(' → ')} (${states.join(', ')}): a request not in Ana's name`);
+                }
+            }
+            expect(runs).toBe(3 + 9 + 6 + 27 + 18 + 18 + 12);
             expect(wrong).toEqual([]);
         }, 120_000);
     });

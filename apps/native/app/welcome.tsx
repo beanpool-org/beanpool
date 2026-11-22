@@ -435,12 +435,18 @@ export default function WelcomeScreen() {
      * of #3361).
      * - A dead code (used by someone else, expired, not recognised): a link's held invite is never offered again, or every
      *   launch would reopen this step on it. A good code at the wrong address, or at a community whose invites are off for
-     *   now, stays held. A newer one held meanwhile stays too.
+     *   now, stays held. A newer one held meanwhile stays too. And it goes with the step's ‹ ({@link goBack}): "I have an
+     *   invite" then looks for one again (the phone's held invite, the clipboard), never back at the dead code (review of #3361).
      * - An answer about the address: its box is drawn, to put it right.
      */
+    const deadCodesRef = useRef(new Set<string>());
     const inviteRefused = useCallback((code: string, reason: string | undefined) => {
         if (!reason) return;
-        if (DEAD_INVITE_REASONS.has(reason)) void forgetHeldInvite(AsyncStorage, code);
+        if (DEAD_INVITE_REASONS.has(reason)) {
+            void forgetHeldInvite(AsyncStorage, code);
+            const dead = normaliseInviteCode(code.trim());
+            if (dead) deadCodesRef.current.add(dead);
+        }
         if (ADDRESS_REASONS.has(reason)) setAddressAsked(true);
     }, []);
     /** iOS 16+ only: the phone holds copied text (`hasStringAsync`, which reads nothing): Apple's button is drawn. */
@@ -2521,6 +2527,8 @@ export default function WelcomeScreen() {
 
 
     function goBack() {
+        // A code its community called dead is not kept in hand: "I have an invite" reads the phone again (inviteRefused).
+        if (deadCodesRef.current.has(normaliseInviteCode(inviteCodeRef.current.trim()))) setInviteCode('');
         setMode('home');
         setError(null);
         setInviteNote(null);

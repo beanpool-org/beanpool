@@ -316,8 +316,8 @@ export default function NewMessageScreen() {
             const heldUrls = heldList.map((h) => h.url);
             const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
             const where = held?.community ?? anchor;
-            // Someone blocked anywhere the phone holds is refused on every path, an existing chat included (#3354 review); lists
-            // that can't be read open nothing (`nothing`), and neither falls through to a chat here.
+            // Someone blocked on this phone's own list (Marty 22 Nov, the S7 rule) is refused on every path, an existing chat
+            // included (#3354 review); lists that can't be read open nothing (`nothing`), and neither falls through to a chat here.
             const path: MessagePath = where
                 ? await messagePathOnPhone(identity.publicKey, [{ community: where, key: pubkey, name: held?.callsign ?? null }], heldUrls).catch(() => ({ open: 'nothing' as const }))
                 : { open: 'nothing' };

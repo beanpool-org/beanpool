@@ -10,7 +10,7 @@
  * community whose copy hasn't synced (or was cleared) since shows nothing (getHeldConversations).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { KnownChat } from '@beanpool/core';
+import { acrossChatListed, type KnownChat } from '@beanpool/core';
 import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
@@ -148,9 +148,10 @@ export async function heldCommunityList(): Promise<Array<{ url: string; name: st
 
 /**
  * The chats with any of `keys` that Chat lists in every other community this phone holds (Message's path rule, slice S5
- * part 2; #3354 review): direct ones ({@link heldChatsShown}) and across ones ({@link heldOutsideChatsShown}), so none a block
- * hid and none in a guest's file. A read that fails counts as no chat. The handles are Chat's: what this opened closes as it
- * ends, unless Chat is in view (#3302 review F3).
+ * part 2; #3354 review): direct ones ({@link heldChatsShown}) and across ones ({@link heldOutsideChatsShown}) while Chat
+ * lists them, open or a request (core acrossChatListed: a declined one has no composer and no Accept), so none a block hid,
+ * none declined, and none in a guest's file. A read that fails counts as no chat. The handles are Chat's: what this opened
+ * closes as it ends, unless Chat is in view (#3302 review F3).
  */
 export async function heldChatsWith(myPubkey: string, keys: readonly string[]): Promise<KnownChat[]> {
     const want = new Set(keys);
@@ -161,7 +162,7 @@ export async function heldChatsWith(myPubkey: string, keys: readonly string[]): 
             for (const key of new Set([...c.peerKeys, ...(c.peerPubkey ? [c.peerPubkey] : [])])) if (want.has(key)) out.push({ kind: 'direct', community: c.community, id: c.id, key });
         }
         for (const c of await heldOutsideChatsShown(myPubkey).catch(() => [] as HeldOutsideChat[])) {
-            if (want.has(c.peerKey)) out.push({ kind: 'across', community: c.community, id: c.id, key: c.peerKey });
+            if (want.has(c.peerKey) && acrossChatListed(c.state)) out.push({ kind: 'across', community: c.community, id: c.id, key: c.peerKey });
         }
     } finally {
         await closeUnlessInView();

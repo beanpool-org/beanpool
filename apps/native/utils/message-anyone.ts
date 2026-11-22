@@ -7,14 +7,19 @@
  *
  * The chats it weighs are the ones Chat lists, read by Chat's own readers (#3354 review): the community in use's direct chats
  * (db.ts getConversations, less any Talk hides: dm-blocked.ts talkShowsChat), each other held community's direct and across
- * chats (held-chats.ts heldChatsWith), and the across chats in the community in use's file (outside-mail.ts chatsShown). So
- * nothing a block hid is reopened. A read that fails counts as no chat there: the next rule then decides.
+ * chats (held-chats.ts heldChatsWith), and the across chats in the community in use's file (outside-mail.ts chatsShown), an
+ * across chat only while Chat lists it, open or a request (core acrossChatListed). So nothing a block hid is reopened, and a
+ * chat across the member declined (no composer, no Accept) is no existing chat: the community shared opens, or across
+ * reopens it as an address card does. A read that fails counts as no chat there: the next rule then decides.
+ *
+ * On a guest's look (the phone set to a community it only visits as a guest, nodes.ts isGuestCopy) there is no community in
+ * use (core's `setTo` null): its copy is not weighed, and no chat across is made in it ({@link openAcrossChat}).
  *
  * A block is asked first, on every path ({@link blockedForMessage}): someone blocked on this phone's own list (the list
  * Chat reads; Marty 22 Nov, the S7 rule) is refused, with the words the across path already said, and nothing opens or is made.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
+import { acrossChatListed, messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '@beanpool/core';
 import type { getConversations } from './db';
 import { sameCommunity } from './push-pins';
 
@@ -36,11 +41,12 @@ export function directChatsHere(chats: readonly HereChat[], keys: readonly strin
 
 /**
  * Every chat Chat lists with any of `keys`: direct ones in the community in use and in the other held ones, across ones in
- * any of their files. Each source is read on its own: one that fails counts as no chat there, and the others still count.
+ * any of their files while Chat lists them (open or a request). Each source is read on its own: one that fails counts as no
+ * chat there, and the others still count. On a guest's look the copy in use holds none of the member's: not read.
  */
 export async function knownChatsWith(me: string, keys: readonly string[]): Promise<KnownChat[]> {
     const want = new Set(keys);
-    const anchor = await anchorUrl();
+    const anchor = await communityInUse();
     const directHere = async (): Promise<KnownChat[]> => {
         if (!anchor) return [];
         const db = await import('./db');
@@ -53,8 +59,8 @@ export async function knownChatsWith(me: string, keys: readonly string[]): Promi
     const acrossHere = async (): Promise<KnownChat[]> => {
         const { outsideContext } = await import('./outside-chat-live');
         const { chatsShown } = await import('./outside-mail');
-        const ctx = await outsideContext();
-        return ctx ? (await chatsShown(ctx)).filter((c) => want.has(c.peerKey)).map((c) => ({ kind: 'across' as const, community: null, id: c.id, key: c.peerKey })) : [];
+        const ctx = anchor ? await outsideContext() : null;
+        return ctx ? (await chatsShown(ctx)).filter((c) => want.has(c.peerKey) && acrossChatListed(c.state)).map((c) => ({ kind: 'across' as const, community: null, id: c.id, key: c.peerKey })) : [];
     };
     const none = (): KnownChat[] => [];
     return [...await directHere().catch(none), ...await held().catch(none), ...await acrossHere().catch(none)];
@@ -76,12 +82,14 @@ export async function blockedForMessage(me: string, keys: readonly string[]): Pr
 
 /**
  * Where Message on a person goes from this phone: the block first ({@link blockedForMessage}), then core's rule over the
- * chats Chat lists ({@link knownChatsWith}). `held`: the other communities it holds as a member (never a guest's look), in
- * the order it lists them. `nothing` too when the block lists can't be read.
+ * chats Chat lists ({@link knownChatsWith}). `held`: the other communities it holds as a member, in the order it lists
+ * them (a guest's look among them is left out). On a guest's look the community in use is none (core's `setTo` null).
+ * `nothing` too when the block lists can't be read.
  */
 export async function messagePathOnPhone(me: string, links: readonly MessageLink[], held: readonly string[]): Promise<MessagePath> {
-    const setTo = await anchorUrl();
-    const others = held.filter((h) => !setTo || !sameCommunity(h, setTo));
+    const setTo = await communityInUse();
+    const others: string[] = [];
+    for (const h of held) if ((!setTo || !sameCommunity(h, setTo)) && !(await guestLook(h))) others.push(h);
     const keys = links.map((l) => l.key);
     const blocked = keys.length ? await blockedForMessage(me, keys) : false;
     if (blocked === null) return { open: 'nothing' };
@@ -94,11 +102,13 @@ export type AcrossOpened = { chatId: string } | { refused: 'no-community' | 'off
 
 /**
  * A chat across with someone in a community the phone shares none with, made from the contact's link as an address card
- * makes one (outside-mail.ts openChatFromCard: kept in the community in use's file, open, named as the link names them).
- * Refused with no community in use, where the community in use doesn't take messages from other communities, or for someone
- * the account blocked; nothing is made then.
+ * makes one (outside-mail.ts openChatFromCard: kept in the community in use's file, open, named as the link names them; a
+ * declined one there is opened again). Refused with no community in use (a guest's look included: its copy is not the
+ * member's, and its server would refuse the line), where the community in use doesn't take messages from other
+ * communities, or for someone the account blocked; nothing is made then.
  */
 export async function openAcrossChat(target: { key: string; home: string; name: string | null }): Promise<AcrossOpened> {
+    if (!(await communityInUse())) return { refused: 'no-community' };
     const live = await import('./outside-chat-live');
     const ctx = await live.outsideContext().catch(() => null);
     if (!ctx) return { refused: 'no-community' };
@@ -136,4 +146,16 @@ export function existingChatRoute(chat: KnownChat, setTo: string | null, nameOf:
 
 async function anchorUrl(): Promise<string | null> {
     return (await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null)) || null;
+}
+
+/** Whether `community` is a guest's look on this phone, however spelled (nodes.ts isGuestCopy). A mark that can't be read counts as one: nothing is weighed or made on a guess. */
+async function guestLook(community: string): Promise<boolean> {
+    const { isGuestCopy } = await import('./nodes');
+    return isGuestCopy(community).catch(() => true);
+}
+
+/** The community the phone is set to as a member: null with none set, or on a guest's look (core's `setTo` contract). */
+async function communityInUse(): Promise<string | null> {
+    const anchor = await anchorUrl();
+    return anchor && !(await guestLook(anchor)) ? anchor : null;
 }

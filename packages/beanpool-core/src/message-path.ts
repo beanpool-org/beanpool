@@ -14,10 +14,21 @@
  *
  * A block is asked first, before any of these (#3354 review): someone the account blocked is refused on every path, an
  * existing chat included, with the same words on both apps. Each app reads its own lists (`blocked`) and hands in only the
- * chats its chat list shows, so nothing a block hid is reopened.
+ * chats its chat list shows ({@link acrossChatListed} for a chat across), so nothing a block hid is reopened, and no chat
+ * across the member declined is opened as "the existing chat": its thread has no composer and no Accept.
  */
 import { nodeHomeOf } from './node-request-signing.js';
+import type { OutsideChatState } from './outside-chat.js';
 import { word } from './words.js';
+
+/**
+ * Whether Chat lists a chat across, so Message may open it as the existing chat (#3354 review, round 3): an open one among
+ * the chats, a request behind the Requests row. A declined one is listed nowhere and its thread can't be written in, so it
+ * is no existing chat: Message goes on to the community shared, or across, which reopens it as an address card does.
+ */
+export function acrossChatListed(state: OutsideChatState): boolean {
+    return state === 'open' || state === 'request';
+}
 
 /** A person as Message knows them: each community they are a member of, as the contact or result names it, with their key there. */
 export interface MessageLink {
@@ -42,11 +53,11 @@ export type MessagePath =
 /**
  * Where Message on a person goes ({@link MessagePath}). `setTo`: the community the device is set to (null: none, a guest's
  * look). `held`: the other communities it holds as a member, in the order it lists them (the web: none). `same`: whether
- * two spellings name one community (the apps' own rule). `chats`: every chat the device has that may be with this person;
- * only those under one of `links`' keys count, and a direct one only in `setTo` or a community in `held`. `blocked`: the
- * app's block rule for this person, by any of `links`' keys (the phone: blocked anywhere it holds; the web: on this
- * community's list); asked before anything, so no path opens. `nothing`: no link (not on BeanPool yet), or across to an
- * address that isn't one.
+ * two spellings name one community (the apps' own rule). `chats`: every chat the device's chat list shows that may be with
+ * this person (a chat across only when {@link acrossChatListed}); only those under one of `links`' keys count, and a direct
+ * one only in `setTo` or a community in `held`. `blocked`: the app's block rule for this person, by any of `links`' keys
+ * (the phone: on its own list, Marty 22 Nov, the S7 rule; the web: on this community's list); asked before anything, so no
+ * path opens. `nothing`: no link (not on BeanPool yet), or across to an address that isn't one.
  */
 export function messagePathFor(input: {
     links: readonly MessageLink[];

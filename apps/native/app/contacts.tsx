@@ -428,7 +428,8 @@ function ListScreen({ view, list, busy, me, messageAsked, onOpen, onAdd, onImpor
     // Message on a contact (slice S5 part 2, utils/message-anyone.ts; DESIGN-no-switch-messaging-fable.md §3): an existing
     // chat with them wins (here, in a held community in place, or across), else the community the phone shares with them
     // (the one in use first, then one it holds), else a chat across from their link. A refusal says why: someone blocked
-    // anywhere the phone holds is refused on every path, an existing chat included (#3354 review), in the across path's words.
+    // on this phone's own list (Marty 22 Nov, the S7 rule) is refused on every path, an existing chat included (#3354
+    // review), in the across path's words. A chat across they declined is no existing chat (its thread can't be written in).
     const messageAnyone = async (c: Contact) => {
         if (opening) return;
         const links = c.links.map((l) => ({ community: l.community, key: l.key, name: c.name }));

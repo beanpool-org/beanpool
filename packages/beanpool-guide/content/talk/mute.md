@@ -1,33 +1,33 @@
 ---
 slug: mute
 title: Muting a chat
-summary: Silence a chat — one person's, a group's or an enterprise's — for 8 hours, a week, or for good.
+summary: Silence a chat — one person's, a group's, an event's or an enterprise's — for 8 hours, a week, or for good.
 related: notifications, blocking, groups, mentions, messages
 ---
 
 ## Muting a chat
 
-In any chat with a person or a group, and in an enterprise's chat if you are one of its keepers:
+In any chat with a person or a group, in an event's chat, and in an enterprise's chat if you are one of its keepers:
 
 - Tap **⋮** at the top right (**⋯** in a chat with one person), then **Mute notifications**.
 - Choose **For 8 hours**, **For a week** or **Always**.
 
 To undo it, tap the same button, then **Unmute**.
 
-Muting a one-to-one chat is on the phone only for now; group chats can be muted in both apps.
+Muting a one-to-one chat or an event's chat is on the phone only for now; group chats can be muted in both apps.
 
 ## What muting does
 
 - It stops that chat's alerts. In a group's chat, someone who @mentions you still reaches you. See "Mentions".
-- An enterprise's chat sends no alerts, so there are none to stop. Muting it keeps it out of the numbers below.
+- An enterprise's chat and an event's send no alerts, so there are none to stop. Muting one keeps it out of the numbers below.
 - The chat still shows new messages.
 - In **Chat**, under **Groups**, a muted chat shows a bell with a line through it. Its unread number is grey, and it is not added to the number on **Groups**.
 - In a group's or an enterprise's chat, the top bar stays quiet about it too. A muted chat with one person still counts there.
-- The mute stays when you leave the chat. When you open a group's or an enterprise's chat again, the top says **muted**.
+- The mute stays when you leave the chat. When you open a group's, an event's or an enterprise's chat again, the top says **muted**. In a chat of another community, the top says that community's name instead: tap **⋮** to see whether it is muted.
 
 ## Other chats
 
-Event chats cannot be muted yet. You can:
+You can also:
 
 - turn off whole kinds of alerts in **Settings**, under **Notification Preferences**. See "Notifications";
 - block someone who is bothering you. See "Blocking someone".

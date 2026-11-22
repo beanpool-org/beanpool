@@ -191,10 +191,11 @@ describe('the screens\' wiring', () => {
      * F2: utils/held-chats.ts chatInPlaceRoute; a link can name any id and any spelling). Anything else named with a
      * community draws the screen that opens nothing (ChatNotInPlace), which reads nothing of any copy. Slice S6: a group's
      * chat that community's copy or list holds draws the group's screen in place the same way, its id as the node makes it
-     * (screenIdOf), never the link's spelling.
+     * (screenIdOf), never the link's spelling; an event's chat the event's screen, the same.
      */
     const IN_PLACE_BRANCH = "if (id && placedNow?.open === 'in-place') return <ChatScreen id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;";
     const IN_PLACE_GROUP_BRANCH = "if (id && placedNow?.open === 'in-place' && placedNow.kind === 'group') return <GroupChatView kind=\"group\" id={screenIdOf(String(id))} initialName={name} inPlace={{ community: placedNow.community, name: placedNow.name }} />;";
+    const IN_PLACE_EVENT_BRANCH = "if (id && placedNow?.open === 'in-place' && placedNow.kind === 'event') return <EventChatView eventId={screenIdOf(String(id))} inPlace={{ community: placedNow.community, name: placedNow.name }} />;";
     const NOT_IN_PLACE_BRANCH = "if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;";
     const WAITS_FOR_THE_ANSWER = 'if (id && community && !placedNow) return null;';
 
@@ -207,7 +208,8 @@ describe('the screens\' wiring', () => {
         expect(chatRoute.split(IN_PLACE_BRANCH).length).toBe(2);
         expect(chatRoute.split(NOT_IN_PLACE_BRANCH).length).toBe(2);
         expect(chatRoute.split(IN_PLACE_GROUP_BRANCH).length).toBe(2);
-        expect(chatRoute.replace(IN_PLACE_BRANCH, '').replace(IN_PLACE_GROUP_BRANCH, '').replace(NOT_IN_PLACE_BRANCH, '')).not.toMatch(/id=\{(?!screenId\})|eventId=\{(?!screenId\})/);
+        expect(chatRoute.split(IN_PLACE_EVENT_BRANCH).length).toBe(2);
+        expect(chatRoute.replace(IN_PLACE_BRANCH, '').replace(IN_PLACE_GROUP_BRANCH, '').replace(IN_PLACE_EVENT_BRANCH, '').replace(NOT_IN_PLACE_BRANCH, '')).not.toMatch(/id=\{(?!screenId\})|eventId=\{(?!screenId\})/);
     });
 
     it('the DM screen gets routeChat\'s id too, and never reads the link\'s spelling itself; in place, only with its community, before routeChat is asked', () => {
@@ -219,6 +221,8 @@ describe('the screens\' wiring', () => {
         expect(chatRoute.indexOf(WAITS_FOR_THE_ANSWER)).toBeLessThan(chatRoute.indexOf(IN_PLACE_BRANCH));
         expect(chatRoute.indexOf(WAITS_FOR_THE_ANSWER)).toBeLessThan(chatRoute.indexOf(IN_PLACE_GROUP_BRANCH));
         expect(chatRoute.indexOf(IN_PLACE_GROUP_BRANCH)).toBeLessThan(chatRoute.indexOf(IN_PLACE_BRANCH));
+        expect(chatRoute.indexOf(WAITS_FOR_THE_ANSWER)).toBeLessThan(chatRoute.indexOf(IN_PLACE_EVENT_BRANCH));
+        expect(chatRoute.indexOf(IN_PLACE_EVENT_BRANCH)).toBeLessThan(chatRoute.indexOf(IN_PLACE_BRANCH));
         expect(chatRoute.indexOf(IN_PLACE_BRANCH)).toBeLessThan(routeNull);
         expect(chatRoute.indexOf(NOT_IN_PLACE_BRANCH)).toBeLessThan(routeNull);
         expect(chatRoute).toMatch(/const placedNow = placeKey && placed\?\.for === placeKey \? placed\.answer : null;/);
@@ -232,8 +236,8 @@ describe('the screens\' wiring', () => {
         const notInPlace = route.slice(route.indexOf('function ChatNotInPlace('), route.indexOf('function ChatScreen('));
         expect(notInPlace.length).toBeGreaterThan(0);
         expect(notInPlace).not.toMatch(/\b(getConversation|getMessages|syncSingleConversation|enterChatInPlace|markConversationRead|getDb|heldChatIsDm)\(/);
-        // No other screen in place: the group's one branch above, and no event's or enterprise's yet (slice S6's later parts).
-        expect(chatRoute.replace(IN_PLACE_GROUP_BRANCH, '')).not.toMatch(/<(GroupChatView|EventChatView)[^>]*inPlace/);
+        // No other screen in place: the group's one branch and the event's above, and no enterprise's.
+        expect(chatRoute.replace(IN_PLACE_GROUP_BRANCH, '').replace(IN_PLACE_EVENT_BRANCH, '')).not.toMatch(/<(GroupChatView|EventChatView)[^>]*inPlace/);
         const dmScreen = route.slice(route.indexOf('function ChatScreen('));
         expect(dmScreen).toMatch(/^function ChatScreen\(\{ id, inPlace \}: \{ id: string; inPlace\?: \{ community: string; name: string \} \}\) \{/);
         expect(dmScreen).not.toMatch(/useLocalSearchParams<\{ id\?|const \{ id[,\s]/);

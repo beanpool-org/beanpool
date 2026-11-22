@@ -13,6 +13,7 @@ Every event has its own chat. The host and everyone who has tapped **Going** can
 
 - Open the event and tap **Chat with people going**. When there are messages you have not read, the button says how many, such as **3 new**.
 - Once someone has written in it, it is also in **Chat**, under **Groups**, marked 📅 **Event**. In the web app it is in the **Chat** tab, with your other chats. Until then it is not in those lists: open it from the event.
+- On the phone, the event chats you can read in the other communities you have joined on it are under **Groups** too, each with its community's name under the event's. Tap one to read it and write in it: your phone stays where it is, and what you write goes to that community. You can mute it there, or report the event to that community's moderators (tap **⋮**, then **Report event**). To open the event itself, tap **⋮**, then **Open Riverside ›** (with that community's name). If you are no longer going there, or the host hasn't let you in, the chat says so, with **Open Riverside ›** under it.
 
 At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap the event's name at the very top (in the web app, **View event**) to go back to the event.
 

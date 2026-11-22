@@ -278,7 +278,7 @@ export function EventChatView({ eventId, inPlace }: Props) {
             kind="event"
             name={view?.title || t('Event chat')}
             // In place: the community's name, as its row says it (an ended event's chat says so under this).
-            detail={inPlace?.name ?? (view?.readOnly ? t('ended', undefined, 'event chat') : null)}
+            detail={inPlace?.name ?? (view?.readOnly ? t('ended', undefined, 'event chat') : muted ? t('muted', undefined, 'chat') : null)}
             onBack={goBack}
             // In place, the event's page is its community's: the ⋮ menu's Open {community} › goes there.
             onOpenOwner={at ? undefined : () => router.push(`/post/${eventId}`)}

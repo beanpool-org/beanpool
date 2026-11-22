@@ -116,7 +116,7 @@ describe('a late answer after the account left writes nothing of it back', () =>
     }
     it('the rows are whole', () => expect(rows).toBe(30));
 
-    it('signed in again without a reload: a ring made then writes again', async () => {
+    it('a ring asked for after a Sign Out writes nothing until a sign-in without a reload, then writes again', async () => {
         const store = memoryGroupLockStore();
         const node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
         endAccountEpoch('signed-out');

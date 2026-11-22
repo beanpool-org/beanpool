@@ -1485,6 +1485,8 @@ export interface DmRequest {
      * their lines (PR #2404 review 4356625513). Absent from the other person's view.
      */
     nextLineIsRequest?: boolean;
+    /** Accepted by the reader's own act (the node's RequestView): what let in once counts of a request (lib/let-in.ts). */
+    acceptedByYou?: true;
 }
 
 /** A request waiting for the reader, as their conversation list gives it apart from their chats. */

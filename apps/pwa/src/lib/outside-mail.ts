@@ -54,6 +54,7 @@ import { nodeAddress, signAddressCardFor, signedMailFetch, signRelayEnvelopeFor 
 import { accountEpoch, accountEpochHolds, onAccountEpochEnd } from './account-epoch';
 import { communityInfoOnce } from './visitor-lobby-gate';
 import { getBlocklistStatus, isUserBlocked, loadBlocklist, unblockedInThisPage } from './blocklist';
+import { letInOnWeb } from './let-in';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { outsideChatStore, outsideCommunityOf, type OutsideChat, type OutsideChatStore, type OutsideLineState } from './outside-chat-store';
 
@@ -82,6 +83,12 @@ export interface OutsideMailContext {
     isBlocked: (key: string) => Promise<boolean>;
     /** Whether the member unblocked this key in this page (lib/blocklist.ts unblockedInThisPage): a doubt, as the phone's `once`. Left out: never. */
     unblocked?: (key: string) => boolean;
+    /**
+     * Whether the member let this sender in (let in once, S5 part 3: lib/let-in.ts letInOnWeb, core's rule over this
+     * community's facts, a block first): their first line across, with no chat here, opens one, door open or not. One per
+     * round, read at its first ask. Left out: nobody is.
+     */
+    letIn?: (key: string) => Promise<boolean>;
     signal?: AbortSignal;
     /**
      * Whether this still acts for the account and the community it was made for ({@link outsideContext}): false once the
@@ -161,7 +168,7 @@ function boundedBySignal(ctx: OutsideMailContext): OutsideMailContext {
     };
     const store = Object.fromEntries(Object.entries(ctx.store).map(([k, v]) =>
         [k, typeof v === 'function' ? bound((...a: unknown[]) => (v as (...a: unknown[]) => Promise<unknown>).apply(ctx.store, a)) : v]));
-    return { ...ctx, store: store as OutsideChatStore, isBlocked: bound(ctx.isBlocked) };
+    return { ...ctx, store: store as OutsideChatStore, isBlocked: bound(ctx.isBlocked), ...(ctx.letIn ? { letIn: bound(ctx.letIn) } : {}) };
 }
 
 /**
@@ -572,11 +579,15 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 // From a member here (slice S5): my own server's mark beside the item, never the envelope's; this community's
                 // own rule then decides, as on the phone (core gateOutsideItem).
                 const memberHere = heldFromMemberHere(h);
+                const blocked = await ctx.isBlocked(env.senderKey);
+                // Let in once (S5 part 3): asked only for a first line with no chat here, from someone not blocked, as on the phone.
+                const letIn = !chat && !blocked && env.kind === 'dm-line' && !!ctx.letIn && await ctx.letIn(env.senderKey);
                 const verdict = gateOutsideItem({
                     kind: env.kind,
                     chat: chat ? { state: chat.state, theirLines: await ctx.store.theirLines(me, chatId, env.senderKey) } : null,
                     doorOpen: open,
-                    blocked: await ctx.isBlocked(env.senderKey),
+                    blocked,
+                    letIn,
                     memberHere,
                     requestsHere,
                 });
@@ -604,7 +615,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 // Its Delivered (core outsideReceiptWhen, Marty 22 Nov 2026): a line the mark let in marks its chat held, before the
                 // line is written; a chat marked held sends none of its receipts (later lines' too) until the member accepts,
                 // answers or opens it (heldReceiptsOn).
-                if (outsideReceiptWhen({ verdict, chat, memberHere }) === 'held') await ctx.store.holdReceipts(me, env.senderKey, chatId);
+                if (outsideReceiptWhen({ verdict, chat, letIn, memberHere }) === 'held') await ctx.store.holdReceipts(me, env.senderKey, chatId);
                 await ctx.store.writeTheirs(me, {
                     id: env.itemId, chatId, author: env.senderKey, text: opened.text, replyTo: opened.replyToId, at: env.at,
                     sealed: JSON.stringify({ envelope: env, payload: h.payload }),
@@ -760,7 +771,12 @@ function standingNow(): Standing {
 export async function outsideContext(here: Standing = standingNow()): Promise<OutsideMailContext | null> {
     const identity = await loadIdentity().catch(() => null);
     if (!identity?.privateKey || !here.holds()) return null;
-    return { nodeUrl: here.nodeUrl, identity, store: outsideChatStore(here.nodeUrl, here.holds), isBlocked: blockedHere, unblocked: (k) => unblockedInThisPage(k), holds: here.holds };
+    const unblocked = (k: string) => unblockedInThisPage(k);
+    return {
+        nodeUrl: here.nodeUrl, identity, store: outsideChatStore(here.nodeUrl, here.holds), isBlocked: blockedHere, unblocked, holds: here.holds,
+        // Let in once (S5 part 3): this community's list first, a block undone in this page a doubt; read at the round's first ask.
+        letIn: letInOnWeb(identity, async (k) => unblocked(k) || await blockedHere(k)),
+    };
 }
 
 /**

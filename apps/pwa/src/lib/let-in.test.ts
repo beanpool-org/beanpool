@@ -459,4 +459,15 @@ describe('through the real round: the web\'s across gate takes let in', () => {
         expect(server.pages).toBe(1);
         expect(reads.friends).toBe(1);
     });
+
+    it('a line left waiting, served again on the next page, is one line waiting', async () => {
+        server.more = true;
+        const waits = await heldLine(SOL);
+        await heldLine(CY);
+        const { out } = await roundWith({ friends: [{ publicKey: THEM }], payments: [{ from: ME, to: OTHER }] }, { friends: noAnswer });
+        // Page 1 confirms the paid line and leaves the friend's; page 2 is that one line again, which ends the round.
+        expect(server.pages).toBe(2);
+        expect(out).toMatchObject({ waiting: 1, written: 1, confirmed: 1 });
+        expect(heldIds()).toEqual([waits]);
+    });
 });

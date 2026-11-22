@@ -547,6 +547,8 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
     const device = await mailDevice(ctx);
     const tried = new Set<string>();
     const owe = (env: RelayEnvelope) => ctx.store.oweReceipt(me, { id: env.itemId, key: env.senderKey, home: env.senderHome }, now);
+    // The lines left at my server for a later round: each once, though a later page serves it again.
+    const waitingIds = new Set<string>();
     for (let page = 0; page < PAGES_MAX; page++) {
         const stop = stopOf(ctx);
         if (stop) throw stop;
@@ -567,7 +569,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         const requestsHere = requestsHereOfMail(answer);
         const done: string[] = [];
         let writeFailed = false;
-        let waiting = 0;
+        let waited = false;
         for (const h of held) {
             const env = readRelayEnvelope(h?.envelope);
             if (!env) continue;
@@ -602,7 +604,7 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 if (verdict === 'drop') {
                     // Not known this round whether they were let in (a read that failed, never a refusal): the first line the
                     // door would drop is left at my server, unconfirmed, for a later round; the round goes on (#3366 review F2).
-                    if (letInSaid === null) { waiting++; out.waiting++; continue; }
+                    if (letInSaid === null) { waitingIds.add(env.itemId); waited = true; continue; }
                     done.push(env.itemId); out.dropped++; continue;
                 }
                 if (verdict === 'change') {
@@ -649,8 +651,9 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
         // This page's receipts, and any an earlier round didn't get to post.
         await flushReceipts(ctx, now, tried);
         // A page that confirmed nothing, its lines left for a later round, would come again as it is: the round ends there.
-        if (writeFailed || !answer?.more || (waiting && !done.length)) break;
+        if (writeFailed || !answer?.more || (waited && !done.length)) break;
     }
+    out.waiting = waitingIds.size;
     return out;
 }
 

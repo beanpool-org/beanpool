@@ -4096,7 +4096,7 @@
   "This month: {trades} · +{in} in · −{out} out": "Bu ay: {trades} · +{in} giren · −{out} çıkan",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "Bu sunucu doğrudan mesajla değil, kilitli bir grubun sohbetiyle yanıt verdi, bu yüzden hiçbir şey açılmadı.",
   "This node is serving an older key than one this app already holds.": "Bu sunucu, bu uygulamanın zaten sahip olduğundan daha eski bir anahtar sunuyor.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "Bu sunucu artık bu sohbetin kilitli olmadığını söylüyor. Bu tarayıcı anahtarlarını tuttuğu için hâlâ her mesajı kilitler ve kilitleyemeyeceği hiçbir şeyi göndermez.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Bu sunucu artık bu sohbetin kilitli olmadığını söylüyor. Bu tarayıcı sohbeti kilitli gördüğü için hâlâ her mesajı kilitler ve kilitleyemeyeceği hiçbir şeyi göndermez.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "Bu sunucu, üye listesinde olmayan birinin bu sohbetin anahtarına sahip olduğunu söylüyor. Hiçbir şey gönderilmedi.",
   "This project's deadline has passed: it takes no more pledges.": "Bu projenin son tarihi geçti: artık taahhüt kabul etmiyor.",
   "This request is no longer open. You can ask again.": "Bu istek artık açık değil. Yeniden isteyebilirsin.",

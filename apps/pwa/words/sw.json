@@ -4096,7 +4096,7 @@
   "This month: {trades} · +{in} in · −{out} out": "Mwezi huu: {trades} · +{in} ndani · −{out} nje",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "Seva hii ilijibu kwa gumzo la kikundi lililofungwa, si ujumbe wa moja kwa moja, kwa hivyo hakuna kilichofunguka.",
   "This node is serving an older key than one this app already holds.": "Seva hii inatoa ufunguo wa zamani zaidi kuliko ule ambao programu hii tayari inao.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "Seva hii sasa inasema gumzo hili halijafungwa. Kivinjari hiki kimeshikilia funguo zake, kwa hivyo bado kinafunga kila ujumbe, na hakitumi chochote ambacho hakiwezi kukifunga.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Seva hii sasa inasema gumzo hili halijafungwa. Kivinjari hiki kimeliona likiwa limefungwa, kwa hivyo bado kinafunga kila ujumbe, na hakitumi chochote ambacho hakiwezi kukifunga.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "Seva hii inasema kuna mtu anayeshikilia ufunguo wa gumzo hili ambaye hayumo kwenye orodha ya wanachama wake. Hakuna kilichotumwa.",
   "This project's deadline has passed: it takes no more pledges.": "Tarehe ya mwisho ya mradi huu imepita: haikubali ahadi zaidi.",
   "This request is no longer open. You can ask again.": "Ombi hili halipo wazi tena. Unaweza kuomba tena.",

@@ -4096,7 +4096,7 @@
   "This month: {trades} · +{in} in · −{out} out": "Ngayong buwan: {trades} · +{in} pasok · −{out} labas",
   "This node answered with a locked group's chat, not a direct message, so nothing opened.": "Sumagot ang server na ito ng chat ng naka-lock na grupo, hindi direktang mensahe, kaya walang nabuksan.",
   "This node is serving an older key than one this app already holds.": "Naghahain ang server na ito ng mas lumang key kaysa sa hawak na ng app na ito.",
-  "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": "Sinasabi ng server na ito ngayon na hindi naka-lock ang chat na ito. Hawak na ng browser na ito ang mga key nito, kaya nila-lock pa rin nito ang bawat mensahe, at walang ipinapadala na hindi nito mai-lock.",
+  "This node now says this chat isn't locked. This browser has seen it locked, so it still locks every message, and sends nothing it can't lock.": "Sinasabi ng server na ito ngayon na hindi naka-lock ang chat na ito. Nakita na ng browser na ito na naka-lock ito, kaya nila-lock pa rin nito ang bawat mensahe, at walang ipinapadala na hindi nito mai-lock.",
   "This node says someone holds this chat's key who isn't in its members list. Nothing was sent.": "Sinasabi ng server na ito na may humahawak ng key ng chat na ito na wala sa listahan ng mga miyembro nito. Walang naipadala.",
   "This project's deadline has passed: it takes no more pledges.": "Lumipas na ang deadline ng proyektong ito: wala na itong tinatanggap na pangako.",
   "This request is no longer open. You can ask again.": "Hindi na bukas ang kahilingang ito. Maaari kang humiling muli.",

@@ -46,6 +46,10 @@ import { wrapLng } from './listings-near';
 import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeCommunity } from './home-cards';
 import { ringProfileSaved } from './profile-saved';
 import { refuseIfNodeTooOld } from './node-version-gate';
+import { isDmEncryptedNonce } from '@beanpool/core';
+import { noteAnsweredLocked } from './group-chat-keys';
+import { answerShowsLock } from './group-chat-lines';
+import { GROUP_HOLD_EVENT_TEXT, readableLineTo } from './group-hold';
 import { sharedFigure } from './shared-figure';
 import { rememberLastPhoto } from './last-photo';
 import type { HomeLayoutV2 } from './home-layout';
@@ -171,8 +175,8 @@ export async function signReEnrollAsk(code: string, privateKeyHex: string): Prom
     return { signature: await signReEnroll(base, code, memberSigner(privateKeyHex)), signedFor: host };
 }
 
-// Base request helper with auth
-export async function request<T>(method: string, path: string, body?: any, signal?: AbortSignal): Promise<T> {
+// Base request helper with auth. `leaving`: a readable chat line's last ask (lib/group-hold.ts readableLineTo).
+export async function request<T>(method: string, path: string, body?: any, signal?: AbortSignal, leaving?: () => void): Promise<T> {
     // One ask, signed afresh each time (a signature carries its own nonce, so an ask is never sent twice as it was).
     const send = async (): Promise<Response> => {
         const opts: RequestInit = {
@@ -209,6 +213,8 @@ export async function request<T>(method: string, path: string, body?: any, signa
 
         const baseUrl = getNodeApiUrl();
         if (baseUrl) await refuseIfNodeTooOld(baseUrl, signal);
+        // Nothing is awaited between it and the request.
+        leaving?.();
         return fetch(`${baseUrl}${path}`, opts);
     };
 
@@ -774,7 +780,11 @@ export async function getCommunityHealth(): Promise<CommunityHealth> {
     return request('GET', '/api/community/health');
 }
 
-export async function checkMembership(publicKey: string): Promise<{ isMember: boolean; callsign: string | null }> {
+/**
+ * This community's answer to the key's own membership probe. `standing`, to a member: 'suspended' while their account is
+ * suspended or paused (still a member; this community refuses their lines to other communities and a new chat), else 'member'.
+ */
+export async function checkMembership(publicKey: string): Promise<{ isMember: boolean; callsign: string | null; standing?: 'member' | 'suspended' }> {
     return request('GET', `/api/community/membership/${encodeURIComponent(publicKey)}`);
 }
 
@@ -1552,6 +1562,21 @@ export async function createConversationApi(
     return request('POST', '/api/messages/conversation', { type, participants, createdBy, name, postId });
 }
 
+/**
+ * A chat line for the DM and generic routes: sealed to a person, it goes; any other is readable, and goes only past the one
+ * check for those, whatever the screen that sends it asked (lib/group-hold.ts readableLineTo).
+ */
+async function leavingUnlessSealed(conversationId: string, nonce: string, attachment?: MessageAttachment): Promise<(() => void) | undefined> {
+    const sealed = isDmEncryptedNonce(nonce) && (!attachment || isDmEncryptedNonce(attachment.nonce));
+    return sealed ? undefined : (await readableLineTo(conversationId)).leaving;
+}
+
+/** A chat's own answer that shows it locked: noted before any screen has it, so nothing readable goes to it from this page. */
+function notedIfLocked<T>(conversationId: string, answer: T): T {
+    if (answerShowsLock(answer)) noteAnsweredLocked(conversationId);
+    return answer;
+}
+
 export async function sendMessageApi(
     conversationId: string,
     authorPubkey: string,
@@ -1565,17 +1590,23 @@ export async function sendMessageApi(
     /** The caller giving up (a voice send's 60 s, lib/voice.ts voiceSendWithin): the request is aborted. */
     signal?: AbortSignal,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id }, signal);
+    const leaving = await leavingUnlessSealed(conversationId, nonce, attachment);
+    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id }, signal, leaving);
 }
 
-/** Edit a line: a DM line's new words carry their new signature in their own ciphertext (core dm-crypto.ts, format 4). */
+/**
+ * Edit a line: a DM line's new words carry their new signature in their own ciphertext (core dm-crypto.ts, format 4). One
+ * that goes readable names its chat (`readableIn`): with none, it is refused.
+ */
 export async function editMessageApi(
     messageId: string,
     authorPubkey: string,
     ciphertext: string,
     nonce: string,
+    readableIn = '',
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce });
+    const leaving = await leavingUnlessSealed(readableIn, nonce);
+    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce }, undefined, leaving);
 }
 
 /** Report one line of a direct message with what this reporter hands over for it (core dm-line-report.ts). */
@@ -1656,7 +1687,7 @@ export interface GroupChatAnswer {
 }
 
 export async function getGroupChat(groupId: string, limit = 50): Promise<GroupChatAnswer> {
-    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}`);
+    return notedIfLocked(groupId, await request<GroupChatAnswer>('GET', `/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}`));
 }
 
 export async function deleteMessageApi(messageId: string): Promise<{ success: boolean; message?: ApiMessage }> {
@@ -1675,7 +1706,7 @@ export async function getConversationMessages(conversationId: string, limit = 50
     conversation: Conversation;
     messages: ApiMessage[];
 }> {
-    return request('GET', `/api/messages/${encodeURIComponent(conversationId)}?limit=${limit}`);
+    return notedIfLocked(conversationId, await request<{ conversation: Conversation; messages: ApiMessage[] }>('GET', `/api/messages/${encodeURIComponent(conversationId)}?limit=${limit}`));
 }
 
 // ===================== LEDGER =====================
@@ -3666,11 +3697,13 @@ export interface EnterpriseThreadMessage {
 }
 
 export async function getEnterpriseThread(treasury: string, limit = 50, offset = 0): Promise<{ conversation: any; messages: EnterpriseThreadMessage[]; readOnly: boolean }> {
-    return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/thread?limit=${limit}&offset=${offset}`);
+    return notedIfLocked(treasury, await request<{ conversation: any; messages: EnterpriseThreadMessage[]; readOnly: boolean }>('GET', `/api/treasury/${encodeURIComponent(treasury)}/thread?limit=${limit}&offset=${offset}`));
 }
 
+/** Readable by design, so never to a chat this browser has seen locked (lib/group-hold.ts readableLineTo). */
 export async function postEnterpriseThreadMessage(treasury: string, text: string, clientId?: string): Promise<{ success: boolean; message: EnterpriseThreadMessage }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
+    const { leaving } = await readableLineTo(treasury, GROUP_HOLD_EVENT_TEXT);
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/thread/message`, { text, clientId }, undefined, leaving);
 }
 
 export async function removeEnterpriseThreadMessage(treasury: string, messageId: string): Promise<{ success: boolean; message: EnterpriseThreadMessage }> {
@@ -3712,11 +3745,13 @@ export interface EventThreadView {
 
 /** The chat of one event. The host and everyone marked Going may read it; everyone else gets a 403. */
 export async function getEventChat(postId: string, limit = 50, offset = 0): Promise<EventThreadView> {
-    return request('GET', `/api/marketplace/posts/${encodeURIComponent(postId)}/chat?limit=${limit}&offset=${offset}`);
+    return notedIfLocked(postId, await request<EventThreadView>('GET', `/api/marketplace/posts/${encodeURIComponent(postId)}/chat?limit=${limit}&offset=${offset}`));
 }
 
+/** Readable by design, so never to a chat this browser has seen locked (lib/group-hold.ts readableLineTo). */
 export async function postEventChatMessage(postId: string, text: string, clientId?: string): Promise<{ success: boolean; message: EventThreadMessage }> {
-    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/chat/message`, { text, clientId });
+    const { leaving } = await readableLineTo(postId, GROUP_HOLD_EVENT_TEXT);
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/chat/message`, { text, clientId }, undefined, leaving);
 }
 
 export async function removeEventChatMessage(postId: string, messageId: string): Promise<{ success: boolean; message: EventThreadMessage }> {

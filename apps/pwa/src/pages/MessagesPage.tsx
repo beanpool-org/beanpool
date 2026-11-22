@@ -27,7 +27,7 @@ import { notSeenInThread, notSeenWords } from '@beanpool/core';
 import { useRequestsUnseen } from '../lib/requests-seen';
 import { AddressCardPanel } from '../components/AddressCardPanel';
 import { OUTSIDE_CHATS_EVENT, chatsShown, outsideContext } from '../lib/outside-mail';
-import { messageOnWeb } from '../lib/message-anyone';
+import { messageOnWeb, type HereChat } from '../lib/message-anyone';
 import type { OutsideChat } from '../lib/outside-chat-store';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { ChatImageBubble, ChatPhotoShown } from '../components/ChatImageBubble';
@@ -2318,7 +2318,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // request of theirs too, or across while it can be written in), or one is made from their link. A refusal says why, in
     // the chat page's own refusal line; never a tap that does nothing.
     const messageAcross = async (links: Array<{ key: string; community: string }>, name: string) => {
-        const done = await messageOnWeb(links, name, [...conversations, ...(requests?.conversations ?? [])]);
+        // The list as it stands; asked for when this page has none yet (a tap before its first answer).
+        const listed: HereChat[] = conversations.length || requests ? [...conversations, ...(requests?.conversations ?? [])]
+            : await getConversations(identity.publicKey).then((r) => [...(r.conversations || []), ...(r.requests?.conversations || [])], () => []);
+        const done = await messageOnWeb(links, name, listed);
         setShowContacts(null);
         if ('dm' in done) void handleStartDm(done.dm);
         else if ('across' in done) setOpenOutside(done.across);

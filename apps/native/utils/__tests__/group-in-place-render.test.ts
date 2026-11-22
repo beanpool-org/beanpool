@@ -342,12 +342,12 @@ describe('a group\'s chat in place (GroupChatView inPlace)', () => {
         await act(async () => { await bits.composer.onSend('a line'); });
         await settle();
         expect(of('postGroupChatMessage')[0][4], 'asked as a locked chat\'s').toBeTruthy();
-        // It reads again: a chat never seen locked, on an older node, is as it was; one seen locked says so.
+        // It reads again, on the same screen: a chat never seen locked, on an older node, is as it was; one seen locked says so.
         for (const [seen, notice] of [[false, GROUP_CHAT_OLD_NODE_NOTICE], [true, GROUP_CHAT_LOCK_LOST_TEXT]] as const) {
-            await act(async () => { root.render(null); });
             calls.refuse.clear();
             calls.answer.set('groupScreenKeyringFor', ring(seen));
-            await open();
+            await act(async () => { await bits.composer.onSend('again'); });
+            await settle();
             expect(bits.composer.notice).toBe(notice);
         }
     });

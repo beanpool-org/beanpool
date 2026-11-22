@@ -33,8 +33,8 @@ const h = vi.hoisted(() => ({
     dir: '', store: new Map<string, string>(), me: { publicKey: '', privateKey: '' },
     /** The next writes of `file` that read as `sql` (past the first `skip`): `hit` as each is run, and SQLite refuses it when `refuse`. */
     cut: null as null | { file: string; sql: RegExp; times: number; refuse: boolean; hit: () => void; skip?: number },
-    /** The reads of `file` that read as `sql`: each fails, or never answers (`hang`); `hit` as each is asked. */
-    reads: null as null | { file: string; sql: RegExp; times: number; hang: boolean; hit?: () => void; refuse?: boolean },
+    /** The reads of `file` that read as `sql`: each fails, or never answers (`hang`), or waits for what `hit` starts (`wait`); `hit` as each is asked. */
+    reads: null as null | { file: string; sql: RegExp; times: number; hang: boolean; hit?: () => unknown; refuse?: boolean; wait?: boolean },
 }));
 
 vi.mock('expo-sqlite', async () => {
@@ -45,7 +45,8 @@ vi.mock('expo-sqlite', async () => {
         const cut = h.reads;
         if (!cut || cut.file !== name || cut.times <= 0 || !cut.sql.test(q)) return;
         cut.times--;
-        cut.hit?.();
+        const started = cut.hit?.();
+        if (cut.wait) await started;
         if (cut.hang) await new Promise<void>(() => {});
         if (cut.refuse !== false) throw new Error('disk I/O error');
     };
@@ -1234,7 +1235,11 @@ describe('every path that can send words into a group-like chat asks the lock ma
         // A DM known there is a DM in its own screen, the mark or not (it lifts no DM guard): sealed to its pin, never readable.
         const aDmsOwn = label === 'dm' && ['insertMessage', 'editMessage', 'sendImageMessage', 'sendVoiceMessage'].includes(send.fn);
         if (!goes && !aDmsOwn) expect(thrown, 'refused in words').toBeTruthy();
-        if (!st.goes && send.readable.includes(label) && !c) expect(thrown.message).toBe(send.fn === 'editThreadMessage' ? GROUP_EDIT_NO_KEY_TEXT : GROUP_CHAT_LOCK_LOST_TEXT);
+        if (aDmsOwn && send.fn !== 'sendVoiceMessage') expect(thrown?.message ?? null).toBeNull();
+        // The sealed-only ones too: a chat its own file has seen locked is a group's, whatever its row is called.
+        if (!st.goes && !c && label !== 'dm' && send.fn !== 'editMessage' && (send.readable.includes(label) || send.readable.length === 0 || send.fn === 'insertMessage')) {
+            expect(thrown.message).toBe(send.fn === 'editThreadMessage' ? GROUP_EDIT_NO_KEY_TEXT : GROUP_CHAT_LOCK_LOST_TEXT);
+        }
         // Nothing of it went anywhere but A, sealed or not.
         expect(asked.filter((r) => r.method === 'POST' && /message|edit/.test(r.url) && !r.url.startsWith(A)).map((r) => r.url)).toEqual([]);
         expect([marked(A_FILE), marked(B_FILE)], 'the marks are as they were').toEqual([st.mark === A_FILE, st.mark === B_FILE]);
@@ -1336,6 +1341,34 @@ describe('every path that can send words into a group-like chat asks the lock ma
         h.reads = { file: A_FILE, sql: /FROM messages WHERE conversation_id IN/, times: 1_000, hang: false, refuse: false, hit: () => { (ring as any).sawLocked = true; } };
         await expect(send.run()).rejects.toThrow();
         h.reads = null;
+        expect(wordsOut()).toEqual(NOTHING);
+    });
+
+    it.each([['in use', undefined], ['in place', A]] as const)('%s: its file marked, and its keys come: a line the screen took for an old node\'s goes sealed, under its key', async (_n, c) => {
+        if (!c) await switchPhoneTo(A);
+        await neitherHolds();
+        mark(A_FILE);
+        servers[A].unlocked = false;
+        await db.getDb();
+        if (c) db.enterChatInPlace(A);
+        await db.postGroupChatMessage(g, WORDS, randomUUID(), null, undefined, c);
+        if (c) await db.leaveChatInPlace(A);
+        expect([servers[A].lines.length, servers[A].lines[1]?.metadata?.epoch, wordsOut()]).toEqual([2, 1, NOTHING]);
+        expect(JSON.stringify(servers[A].lines[1])).not.toContain(WORDS);
+    });
+
+    it('the DM screen, an edit: the phone set to B, which holds the group\'s keys, just before it is sealed: nothing sealed under B\'s keys goes to A, nor anything to B', async () => {
+        await switchPhoneTo(A);
+        await db.closeDB();
+        servers[B].epochs = [...servers[A].epochs];
+        forgetGroupKeys();
+        asked = [];
+        await db.getDb();
+        h.reads = { file: A_FILE, sql: /FROM messages WHERE id = \?/, times: 1, hang: false, refuse: false, wait: true, hit: () => switchPhoneTo(B) };
+        await expect(db.editMessage(g, mine.id, WORDS)).rejects.toThrow();
+        expect(h.reads.times, 'switched as it was asked').toBe(0);
+        h.reads = null;
+        expect(asked.filter((r) => r.method === 'POST' && /message|edit/.test(r.url)).map((r) => r.url)).toEqual([]);
         expect(wordsOut()).toEqual(NOTHING);
     });
 

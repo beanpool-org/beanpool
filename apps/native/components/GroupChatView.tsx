@@ -45,7 +45,11 @@ import {
 import { LockedHistoryRow, LockedHistorySheet, SealedNoticeLine } from './LockedHistory';
 import { anchorUrl } from '../utils/node-post';
 import { useAfterDismiss } from '../utils/screen-presented';
-import { View, Text, StyleSheet, Pressable, FlatList, Linking, TextInput, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Linking, TextInput, ScrollView, Platform, useWindowDimensions } from 'react-native';
+import { groupComposerPlaceholder } from '../utils/words-that-fit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getDatabaseFilenameForNode } from '../utils/nodes';
+import { keepUnsent, readUnsent } from '../utils/group-unsent';
 import { Alert } from '../utils/keyboard-alert';
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -165,6 +169,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     }, [at]));
     const { recheck } = useNodeStatus();
     const insets = useSafeAreaInsets();
+    const { width: windowWidth, fontScale } = useWindowDimensions();
     const { colors, theme } = useTheme();
     // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
     const screenKeyboard = useScreenKeyboardOffset();
@@ -289,6 +294,33 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
         setInvitedCount(members.filter(m => m.status === 'invited').length);
     }, [kind, id, openInfo, at]);
 
+    // A line this phone never got to the node stays not delivered across a relaunch, with Resend and Discard (walk-s6: a
+    // locked group's line waiting for its key was gone at the next relaunch, with no word): kept in this account's own
+    // record of that chat's community (utils/group-unsent.ts), read back before anything is written there.
+    const unsentFile = useRef<string | null>(null);
+    const [unsentRead, setUnsentRead] = useState(false);
+    useEffect(() => {
+        if (!me) return;
+        let alive = true;
+        setUnsentRead(false);
+        unsentFile.current = null;
+        (at ? Promise.resolve(at) : anchorUrl()).then(async (url) => {
+            if (!url || !alive) return;
+            const file = getDatabaseFilenameForNode(url);
+            const lines = await readUnsent(AsyncStorage, me, file, id);
+            if (!alive) return;
+            unsentFile.current = file;
+            setPending(prev => [...prev, ...lines.filter(l => !prev.some(p => p.clientId === l.clientId)).map((l): PendingMessage => ({ ...l, state: 'failed' }))]);
+            setUnsentRead(true);
+        }).catch(() => {});
+        return () => { alive = false; };
+    }, [me, id, at]);
+    useEffect(() => {
+        const file = unsentFile.current;
+        if (!unsentRead || !me || !file) return;
+        void keepUnsent(AsyncStorage, me, file, id, pending.map(({ clientId, text, replyToId, timestamp }) => ({ clientId, text, replyToId, timestamp })));
+    }, [pending, unsentRead, me, id]);
+
     // The list this chat's row is in: that community's own in place, never the community in use's.
     const row = useMemo(() => (at ? heldGroups.at(at) : yourGroupsStore), [at]);
     // Opening the chat reads it (decision 7: only Talk shows counts, so only reading clears one). The node's marker
@@ -298,8 +330,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
         if (!me || !latestId || readUpTo.current === latestId) return;
         readUpTo.current = latestId;
         row.markRead(id);
+        // In place, its lines leave that community's number once its server took the read (held-groups.ts readThere).
         markThreadReadOnNode(id, me, at)
-            .then(() => row.markRead(id))
+            .then(() => (at ? heldGroups.at(at).readThere(id) : row.markRead(id)))
             .catch(() => { readUpTo.current = null; /* offline: the next poll tries again */ });
     }, [id, me, at, row]);
 
@@ -1186,9 +1219,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
                     maxLength={GROUP_MESSAGE_MAX}
                     // The phone's own words for what it decided, never the node's notice (finding 4).
                     notice={kind === 'group' ? chatLineWords(groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked, keysUnread: keysUnread && !seenLocked })) : t(CHAT_NOTICE.enterprise)}
-                    // A long name wrapped the placeholder to three lines at 320dp; short ones read better named. Beside the photo
-                    // button the box is 48 dp narrower and at 1.3× text even "Message the group…" wraps: the header names the chat.
-                    placeholder={photoButton ? t('Message…') : name.length <= 18 ? t('Message {name}…', { name }) : (kind === 'group' ? t('Message the group…') : t('Message…'))}
+                    // On one line, whatever the screen and its text size: named only where the whole sentence fits the box
+                    // (walk-s6: "Message River Clean-up…" wrapped at 320 dp × 1.3 and the box cut its second line).
+                    placeholder={groupComposerPlaceholder(name, kind, { width: windowWidth, fontScale, photoButton: !!photoButton })}
                     accessibilityLabel={t('Message {name}', { name })}
                     bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
                     onAttach={photoButton ? pickPhoto : undefined}

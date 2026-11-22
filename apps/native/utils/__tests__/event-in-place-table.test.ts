@@ -118,7 +118,9 @@ import { buildSignedHeaders } from '../crypto';
 import { dmConversationsSeenStoreKey } from '../storage-keys';
 import { chatInPlaceRoute } from '../held-chats';
 import { routeChat } from '../chat-route';
-import { heldGroupParams, heldGroups, isHeldGroup, noticesBesideEvents, type HeldGroup } from '../held-groups';
+import { heldGroupParams, heldGroupShares, heldGroups, isHeldGroup, noticesBesideHeldChats, type HeldGroup } from '../held-groups';
+/** The "· Switch" lines beside these group and event rows (as Chat draws them, with no direct chat held). */
+const noticesBesideEvents = (notices: Parameters<typeof noticesBesideHeldChats>[0], rows: readonly HeldGroup[]) => noticesBesideHeldChats(notices, heldGroupShares(rows));
 import { noteReadInPlace, noteServerUnread, countNotice, readNoticeAlerts, readNoticeCounts } from '../notice-counts';
 import { isWaitingForHost } from '../events';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -776,25 +778,47 @@ describe('each event\'s row: its own community and unread count, on Talk → Gro
     /** Chat's "· Switch" line for A as it would draw now: A's stored number, what a push told of, and the rows as they stand. */
     const lineForA = async () => noticesBesideEvents([{ ...URL_A, count: (await readNoticeCounts(AsyncStorage))[A] ?? 0, alerts: (await readNoticeAlerts(AsyncStorage))[A] ?? 0 }], heldGroups.getState()).map((n) => n.count);
 
-    it('one read in place: its row\'s count goes as it opens; that community\'s number falls by it only once its server took the read, and only once; a group\'s read there moves no number', async () => {
+    // walk-s6 1e (23 Nov 2026): this row said "a group's read there moves no number", which kept a group's line read in place on
+    // the "· Switch" line until that community's next round (about 6 minutes on the walk). A group's lines now leave it too.
+    it('one read in place: its row\'s count goes as it opens; that community\'s number falls by it only once its server took the read, and only once; a group\'s lines go with what a push told of them', async () => {
         keep();
+        // 3 a push told of: the group's line, and 2 of another chat's; the event's 2 tell nobody.
         await noteServerUnread(AsyncStorage, A, 5, 3);
         servers[A].listed = [eventRow(2), { ...eventRow(1), kind: 'group', id: 'g1', conversationId: 'g1', name: 'Garden Crew' }];
         await heldGroups.refresh(me.publicKey);
         heldGroups.at(A).markRead('g1');
-        heldGroups.at(A).readThere('g1');
         await settle();
         expect(await readNoticeCounts(AsyncStorage)).toEqual({ [A]: 5 });
+        heldGroups.at(A).readThere('g1');
+        heldGroups.at(A).readThere('g1');
+        await settle();
+        expect([await readNoticeCounts(AsyncStorage), await readNoticeAlerts(AsyncStorage)]).toEqual([{ [A]: 4 }, { [A]: 2 }]);
         // The tap, then the screen's first lines: the row says read, A's number waits for A.
         heldGroups.at(A).markRead(ev);
         heldGroups.at(A).markRead(ev);
         await settle();
-        expect([rowsNow().map((r) => r[3]), await readNoticeCounts(AsyncStorage)]).toEqual([[0, 0], { [A]: 5 }]);
+        expect([rowsNow().map((r) => r[3]), await readNoticeCounts(AsyncStorage)]).toEqual([[0, 0], { [A]: 4 }]);
         // A took the read: the two lines its row showed leave A's number, once however often it answers.
         heldGroups.at(A).readThere(ev);
         heldGroups.at(A).readThere(ev);
         await settle();
-        expect([rowsNow().map((r) => r[3]), await readNoticeCounts(AsyncStorage), await readNoticeAlerts(AsyncStorage)]).toEqual([[0, 0], { [A]: 3 }, { [A]: 3 }]);
+        expect([rowsNow().map((r) => r[3]), await readNoticeCounts(AsyncStorage), await readNoticeAlerts(AsyncStorage), await lineForA()]).toEqual([[0, 0], { [A]: 2 }, { [A]: 2 }, [2]]);
+    });
+
+    it('an event\'s lines its last count didn\'t hold yet (Chat asks the list on open, no round): a read of them in place never takes the number below what a push told of (#3364 final review)', async () => {
+        keep();
+        // A's last count: 3 lines, every one told by a push (a person's); the event's 2 came after it, as Chat's list shows.
+        await noteServerUnread(AsyncStorage, A, 3, 3);
+        servers[A].listed = [eventRow(2)];
+        await heldGroups.refresh(me.publicKey);
+        expect(await lineForA()).toEqual([3]);
+        heldGroups.at(A).markRead(ev);
+        heldGroups.at(A).readThere(ev);
+        await settle();
+        expect([await readNoticeCounts(AsyncStorage), await lineForA()]).toEqual([{ [A]: 3 }, [3]]);
+        // Until A's next round, which says its own number.
+        await noteServerUnread(AsyncStorage, A, 1, 1);
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({ [A]: 1 });
     });
 
     it('tapped, and nothing read (backed out of, or the read or its mark refused): the list asked again brings the row\'s count back, and the "· Switch" line is as it was (review of #3364)', async () => {
@@ -843,8 +867,12 @@ describe('each event\'s row: its own community and unread count, on Talk → Gro
         ['event lines and a person\'s', notice(3, 1), [held(2)], 1],
         ['two events', notice(5, 0), [held(2), held(3)], null],
         ['an event\'s row not listed yet (its list not answered): counted as before', notice(2, 0), [], 2],
-        ['a group\'s row there takes nothing off', notice(2, 2), [held(2, { kind: 'group' })], 2],
-        ['a muted group\'s row there (no push told of it) takes nothing off either', notice(2, 0), [held(2, { kind: 'group' })], 2],
+        // walk-s6 1e (23 Nov 2026): these two said a group's row took nothing off, which drew "1 new message in Riverside Walk ·
+        // Switch" for a group's line the phone opens in place. Every chat that opens in place now takes its lines off.
+        ['a group\'s lines, all on its row (a push told of them): no line', notice(2, 2), [held(2, { kind: 'group' })], null],
+        ['a muted group\'s lines, all on its row (no push told of them): no line', notice(2, 0), [held(2, { kind: 'group', mute: { conversationId: ev, mutedUntil: null, always: true } })], null],
+        ['a group\'s line and a person\'s, both told by a push', notice(2, 2), [held(1, { kind: 'group' })], 1],
+        ['a group\'s line that came since that community\'s last count, and a person\'s it counted: the line can\'t tell them apart and shows none until the next count', notice(1, 1), [held(1, { kind: 'group' })], null],
         ['another community\'s event takes nothing off', notice(2, 0), [held(2, { community: C })], 2],
         ['its address spelled another way: the same community', notice(2, 0), [held(2, { community: 'HTTPS://Riverside.example/' })], null],
         ['an event line that came since that community\'s last count: what a push told of still shows', notice(1, 1), [held(1)], 1],
@@ -891,7 +919,8 @@ describe('each event\'s row: its own community and unread count, on Talk → Gro
 
     it('Chat draws the line from what is left (the wiring)', () => {
         const chats = fs.readFileSync(path.join(__dirname, '..', '..', 'app', '(tabs)', 'chats.tsx'), 'utf8');
-        expect(chats).toContain('const otherNotices = React.useMemo(() => noticesBesideEvents(noticesElsewhere, groupsHeld), [noticesElsewhere, groupsHeld]);');
+        expect(chats).toContain('const inPlaceShares = React.useMemo(() => [...heldChatShares(heldChats, heldFilled), ...heldGroupShares(groupsHeld)], [heldChats, heldFilled, groupsHeld]);');
+        expect(chats).toContain('const otherNotices = React.useMemo(() => noticesBesideHeldChats(noticesElsewhere, inPlaceShares), [noticesElsewhere, inPlaceShares]);');
         expect(chats).toContain('<OtherCommunityNotices notices={otherNotices}');
         expect(chats.split('useOtherCommunitiesNotices()').length).toBe(2);
     });

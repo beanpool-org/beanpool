@@ -23,11 +23,15 @@ const h = vi.hoisted(() => ({
     byId: null as null | Record<string, unknown>,
     sent: [] as Array<{ method: string; path: string; body: any }>,
     reads: [] as string[],
+    // walk-s6: the phone's system, its navigation bar's inset and its theme (an empty system: nothing is taken out of the words).
+    platform: { os: '', api: NaN },
+    insets: { top: 0, bottom: 0, left: 0, right: 0 },
+    dark: false,
 }));
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), navigate: vi.fn(), canGoBack: vi.fn(() => true) }));
 
 vi.mock('expo-router', () => ({ useRouter: () => router, useLocalSearchParams: () => ({}), router }));
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => h.insets }));
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: any) => createElement('div', null, children) }));
 vi.mock('expo-image', () => ({ Image: () => null }));
 vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
@@ -40,6 +44,7 @@ vi.mock('react-native', async () => {
         if (onPress && !disabled) attrs.onClick = () => onPress({ stopPropagation() {} });
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (testID) attrs['data-testid'] = testID;
+        if (props.contentContainerStyle) attrs['data-content-style'] = JSON.stringify(Object.assign({}, ...[props.contentContainerStyle].flat()));
         return el(tag, attrs, children);
     };
     return {
@@ -50,11 +55,13 @@ vi.mock('react-native', async () => {
         Keyboard: { dismiss: vi.fn() },
         Linking: { openURL: vi.fn(async () => {}) },
         Alert: { alert: vi.fn() },
+        Platform: { get OS() { return h.platform.os; }, get Version() { return h.platform.api; } },
     };
 });
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors } = await import('../../constants/colors');
-    return { useTheme: () => ({ theme: 'light', colors: lightColors }), useStyles: (make: any) => make({ theme: 'light', colors: lightColors }) };
+    const { lightColors, darkColors } = await import('../../constants/colors');
+    const ctx = () => ({ theme: h.dark ? 'dark' : 'light', colors: h.dark ? darkColors : lightColors });
+    return { useTheme: ctx, useStyles: (make: any) => make(ctx()) };
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: h.identity }) }));
 vi.mock('../use-learn-mode', () => ({ useLearnMode: () => h.mode }));
@@ -104,7 +111,7 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     takeSendRequest();   // nothing handed over from the case before
-    Object.assign(h, { mode: 'live', checks: false, identity: { publicKey: ME, privateKey: 'p' }, byId: null, sent: [], reads: [] });
+    Object.assign(h, { mode: 'live', checks: false, identity: { publicKey: ME, privateKey: 'p' }, byId: null, sent: [], reads: [], platform: { os: '', api: NaN }, insets: { top: 0, bottom: 0, left: 0, right: 0 }, dark: false });
     vi.clearAllMocks();
 });
 afterEach(() => {
@@ -190,5 +197,24 @@ describe('the badge on the writer\'s line', () => {
             expect(h.reads).toEqual([]);
             expect(q('author-badge')).toBeNull();
         }
+    });
+});
+
+for (const dark of [false, true]) describe(`${dark ? 'dark' : 'light'}, Android 8 at 320 dp × 1.3 (walk-s6, 23 Nov 2026)`, () => {
+    beforeEach(() => { Object.assign(h, { dark, platform: { os: 'android', api: 26 }, insets: { top: 24, bottom: 48, left: 0, right: 0 } }); });
+
+    it('"Thank Ada" without the 🫘 Android 8 draws as a box, and the page\'s last lines clear the navigation bar it is drawn under', async () => {
+        await showPage(page(), true);
+        expect(q('knowledge-thank')!.textContent).toBe('Thank Ada');
+        const content = Array.from(host.querySelectorAll('[data-content-style]')).map((e) => JSON.parse(e.getAttribute('data-content-style')!)).find((st) => 'paddingBottom' in st);
+        expect(content?.paddingBottom, 'its own 48 dp over the bar\'s 48').toBe(96);
+    });
+
+    it('Android 13 draws 🫘: the words as written; no bar under the page: its own 48 dp', async () => {
+        Object.assign(h, { platform: { os: 'android', api: 33 }, insets: { top: 0, bottom: 0, left: 0, right: 0 } });
+        await showPage(page(), true);
+        expect(q('knowledge-thank')!.textContent).toBe('🫘 Thank Ada');
+        const content = Array.from(host.querySelectorAll('[data-content-style]')).map((e) => JSON.parse(e.getAttribute('data-content-style')!)).find((st) => 'paddingBottom' in st);
+        expect(content?.paddingBottom).toBe(48);
     });
 });

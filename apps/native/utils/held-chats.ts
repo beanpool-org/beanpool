@@ -11,7 +11,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { acrossChatListed, type KnownChat } from '@beanpool/core';
-import { closeHeldCopies, getHeldConversations, getHeldLatest, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, heldChatIsEvent, heldChatIsGroup, isHeldMember, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
+import { closeHeldCopies, getHeldConversations, getHeldLatest, getKnownChatMute, getHeldLetIn, getHeldMembers, getHeldOutsideChats, getHeldPreviews, heldChatIsDm, heldChatIsEvent, heldChatIsGroup, isHeldMember, refreshHeldDms, HELD_PREVIEWS_MAX, type HeldConversation, type LetInRead } from './db';
 import { getDatabaseFilenameForNode, getSavedNodes, isGuestCopy, isGuestNode } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { communityAddress, sameCommunity } from './push-pins';
@@ -22,6 +22,8 @@ import { talkShowsChat } from './dm-blocked';
 import type { OutsideChat } from './outside-chat-store';
 import { noticeCountFor, readNoticeCounts } from './notice-counts';
 import { heldChatOpensInPlace } from './held-chat-in-place';
+import { isMuted } from './your-groups';
+import type { InPlaceShare } from './held-groups';
 
 export interface HeldChatRow extends HeldConversation {
     /** The row's key in Chat's list: never that of a chat in the community in use, nor of the same id in another. */
@@ -312,6 +314,18 @@ export interface HeldRowFill {
     /** Null: no preview (not among the newest {@link HELD_PREVIEWS_MAX}, not a direct chat, or the pins can't place it). */
     lastMessage: string | null;
     lastMessageFromApp: boolean;
+}
+
+/**
+ * The held direct chats that open in place, as their shares of their community's number (held-groups.ts
+ * noticesBesideHeldChats): each row's own unread count once read (S2b), every line of it one a push told of unless the chat
+ * is muted as this phone last heard it.
+ */
+export function heldChatShares(rows: readonly HeldChatRow[], filled: ReadonlyMap<string, HeldRowFill>, now: Date = new Date()): InPlaceShare[] {
+    return rows.filter((r) => heldChatOpensInPlace(r)).map((r) => {
+        const lines = Math.max(0, filled.get(r.key)?.unread ?? 0);
+        return { community: r.community, lines, pushed: isMuted(getKnownChatMute(r.id), now) ? 0 : lines };
+    });
 }
 
 /** Newest first: by each held row's newest line, else when the chat was made. */

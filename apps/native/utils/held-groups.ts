@@ -17,7 +17,7 @@ import { chatTimeMs, newestChatsFirst } from '@beanpool/core';
 import { getDatabaseFilenameForNode, isGuestCopy } from './nodes';
 import type { OtherCommunityNotice } from './use-notice-counts';
 import { createYourGroupsStore, TALK_GROUPS, type YourGroupsStore } from './your-groups-store';
-import type { YourChat } from './your-groups';
+import { isMuted, type YourChat } from './your-groups';
 
 /** On every row made here, and on no other: a server's list is JSON, which can't write it (review of #3358, F3). */
 export const HELD_GROUP: unique symbol = Symbol('held group');
@@ -42,8 +42,11 @@ interface Place { file: string; url: string; name: string; store: YourGroupsStor
 let owner: string | null = null;
 let places: Place[] = [];
 let rows: HeldGroup[] = [];
-/** `file:conversationId` → an event's lines its row showed as it was opened here, not yet read on that community's server. */
-const owed = new Map<string, number>();
+/**
+ * `file:conversationId` → the lines its row showed as it was opened here, not yet read on that community's server, and how
+ * many of them a push told of (a group's not muted; never an event's).
+ */
+const owed = new Map<string, { lines: number; pushed: number }>();
 const listeners = new Set<() => void>();
 /** Which communities there are, worked out one at a time: two asks at once would make each other's stores again. */
 let listing: Promise<unknown> = Promise.resolve();
@@ -97,9 +100,9 @@ export interface HeldGroupRow {
     /** Opened (tapped, or its lines shown): the row's count goes now. That community's number keeps them until {@link readThere}. */
     markRead(conversationId: string): void;
     /**
-     * That community's server took the read (its mark-read answered): the row stays read, and an event's lines the row showed
-     * when it was opened leave that community's number, once. Never on the tap alone: a read backed out of or refused leaves
-     * the number as its server counts it, so the "· Switch" line never takes those lines off twice (review of #3364).
+     * That community's server took the read (its mark-read answered): the row stays read, and the lines the row showed when it
+     * was opened (a group's or an event's) leave that community's number, once. Never on the tap alone: a read backed out of or
+     * refused leaves the number as its server counts it, so the "· Switch" line never takes those lines off twice (review of #3364).
      */
     readThere(conversationId: string): void;
     noteSent(conversationId: string): void;
@@ -126,15 +129,15 @@ export const heldGroups = {
                 const row = list()?.getState().items?.find((i) => i.conversationId === id);
                 list()?.markRead(id);
                 // What its row showed, kept for the server's answer: the newest count its list gave, never added to itself.
-                const lines = row?.kind === 'event' ? row.unreadCount : 0;
-                if (lines > 0) owed.set(`${file}:${id}`, lines);
+                const share = row ? shareOf(row) : null;
+                if (share && share.lines > 0) owed.set(`${file}:${id}`, share);
             },
             readThere: (id) => {
                 list()?.markRead(id);
-                const lines = owed.get(`${file}:${id}`) ?? 0;
+                const share = owed.get(`${file}:${id}`);
                 owed.delete(`${file}:${id}`);
                 // The "· Switch" line never counts what was read here.
-                if (lines > 0) void import('./notice-counts').then((m) => m.noteReadInPlace(AsyncStorage, community, lines)).catch(() => {});
+                if (share) void import('./notice-counts').then((m) => m.noteReadInPlace(AsyncStorage, community, share.lines, share.pushed)).catch(() => {});
             },
             noteSent: (id) => list()?.noteSent(id),
             setMute: (id, mute) => list()?.setMute(id, mute),
@@ -204,17 +207,43 @@ export function heldGroupParams(item: HeldGroup): Record<string, string> {
     return { id: item.conversationId, community: item.community, communityName: item.communityName, [item.kind === 'event' ? 'event' : 'group']: '1', name: item.name };
 }
 
+/** One chat of another community that Chat lists and opens in place: where it lives, its unread lines, and how many a push told of. */
+export interface InPlaceShare {
+    community: string;
+    lines: number;
+    pushed: number;
+}
+
+/** A group's or an event's row as its share: an event's chat tells nobody, and no push told of a muted group's lines. */
+function shareOf(row: Pick<YourChat, 'kind' | 'unreadCount' | 'mute'>, now: Date = new Date()): { lines: number; pushed: number } {
+    const lines = Math.max(0, row.unreadCount || 0);
+    return { lines, pushed: row.kind === 'group' && !isMuted(row.mute, now) ? lines : 0 };
+}
+
+/** The held communities' group and event rows as their shares ({@link noticesBesideHeldChats}). */
+export function heldGroupShares(held: readonly HeldGroup[], now: Date = new Date()): InPlaceShare[] {
+    return held.map((r) => ({ community: r.community, ...shareOf(r, now) }));
+}
+
 /**
- * Chat's "{n} new messages in {community} · Switch" lines once events have rows of their own here (DESIGN §3: "the '· Switch'
- * row goes once a community's chats are in the list"): a community's number less the unread lines its events' rows show, and
- * no line when nothing else waits. Never below the lines a push told of there (`alerts`): an event's chat tells nobody, so
- * those are never an event's, whatever came between that community's last count and its last list.
+ * Chat's "{n} new messages in {community} · Switch" lines once a community's chats have rows of their own here (DESIGN §3:
+ * "the '· Switch' row goes once a community's chats are in the list"; S6: it retires): a community's number less the unread
+ * lines of every chat of it that opens in place (its direct chats, groups and events: `shares`), and no line when nothing
+ * else waits. Never below the lines a push told of there (`alerts`) less those a push told of on these rows: an event's chat
+ * tells nobody, so an event's line that came after that community's last count never hides another chat's that a push told of.
  */
-export function noticesBesideEvents(notices: readonly OtherCommunityNotice[], held: readonly HeldGroup[]): OtherCommunityNotice[] {
+export function noticesBesideHeldChats(notices: readonly OtherCommunityNotice[], shares: readonly InPlaceShare[]): OtherCommunityNotice[] {
     return notices.flatMap((n) => {
         const file = getDatabaseFilenameForNode(n.url);
-        const onRows = held.reduce((sum, r) => sum + (r.kind === 'event' && getDatabaseFilenameForNode(r.community) === file ? Math.max(0, r.unreadCount || 0) : 0), 0);
-        const count = Math.max(n.count - onRows, Math.min(n.alerts ?? n.count, n.count));
+        let lines = 0;
+        let pushed = 0;
+        for (const s of shares) {
+            if (getDatabaseFilenameForNode(s.community) !== file) continue;
+            const on = Math.max(0, s.lines || 0);
+            lines += on;
+            pushed += Math.min(on, Math.max(0, s.pushed || 0));
+        }
+        const count = Math.max(n.count - lines, Math.min((n.alerts ?? n.count) - pushed, n.count));
         return count > 0 ? [count === n.count ? n : { ...n, count }] : [];
     });
 }

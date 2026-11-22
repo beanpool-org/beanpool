@@ -21,6 +21,11 @@
  * The file first (review of #3358, F1): what a ring has in memory and what its file has never part. Every change is put in
  * the store and only then taken into memory (GroupKeyring.commit), so a put refused on its way (a chat in place left, a
  * switch, a SQLite error) leaves both where they were, and the next sync asks for it and puts it again.
+ *
+ * Readable words fail closed (third review of #3358, S1): a line goes unsealed only on a positive answer that this chat was
+ * never locked here (GroupKeyring.neverLocked): its own file, read for that line, has nothing of a lock; no ring's memory
+ * has; and no node answered that id locked this session, whichever community (answeredLocked, which outlives every ring).
+ * Everything else (a read that fails or doesn't answer, a ring put away meanwhile, a mark the file refused) is locked.
  */
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
@@ -152,10 +157,33 @@ export function groupKeysLookUnopenable(): boolean {
     return !wrapOpenedThisSession && wrapFailuresBeforeAnyOpened > 0;
 }
 
+/**
+ * This session's memory of locks. It outlives the rings: a Force Resync, a community taken off the phone or followed, and
+ * every other forgetGroupKeys drops them (third review of #3358, S1). Nothing takes an entry off but a restart: not a node's
+ * word, and not a file without the mark either, as that is what a mark refused, removed or resynced away looks like.
+ * - `answeredLocked`: ids (lower-cased) some community's node answered locked, or served a key of: nothing readable goes to
+ *   that id, in any community, whoever is signed in.
+ * - `lockedRings`: the rings (community, account, group) that is known of: each one's own file is owed the mark, and only
+ *   its own (second review, R1).
+ */
+const answeredLocked = new Set<string>();
+const lockedRings = new Set<string>();
+const ringIdOf = (nodeUrl: string, publicKey: string, groupId: string) => `${nodeUrl}|${publicKey}|${groupId}`;
+
+/** A node answered the chat of this id locked, for whoever, whatever becomes of its mark ({@link GroupKeyring.noteLocked}): noted for this session, in no file. */
+export function noteAnsweredLocked(conversationId: string): void {
+    answeredLocked.add(conversationId.toLowerCase());
+}
+
 /** For tests: a fresh app session. */
 export function _resetGroupKeySessionForTests(): void {
     forgetGroupKeys();
+    answeredLocked.clear();
+    lockedRings.clear();
 }
+
+/** What {@link GroupKeyring.neverLocked} answered, and whether it still holds: asked again, with no await, as the request leaves. */
+export interface NeverLocked { still(): boolean }
 
 const HOLE_REFETCH_MS = 60_000;
 
@@ -226,9 +254,25 @@ export class GroupKeyring {
      * after a sign-out, a new one) never reads or extends them (review of #1788, finding 8).
      */
     private readonly storeKey: string;
+    private readonly id: string;
 
     constructor(public readonly groupId: string, private readonly nodeUrl: string, private readonly identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, private readonly store: GroupKeyStore) {
         this.storeKey = `${identity.publicKey}/${groupId}`;
+        this.id = ringIdOf(nodeUrl, identity.publicKey, groupId);
+    }
+
+    /** What the file has of this group now, in STORE_READ_MS; 'store' when it can't be read or doesn't answer. */
+    private async readFile() {
+        try {
+            const [saved, verdicts, signers] = await inTime((async () => [
+                await this.store.load(this.storeKey), await this.store.loadVerdicts(this.storeKey), await this.store.loadSigners(this.storeKey),
+            ] as const)(), STORE_READ_MS);
+            // A key, a cursor, or what only a locked chat's lines leave (their signers and verdicts): the mark or not.
+            return { saved, verdicts, signers, ofALock: saved.locked || saved.epochs.length + saved.highest + saved.after + verdicts.length + signers.length > 0 };
+        } catch (e: any) {
+            console.warn('[GroupKeys] could not read this group\'s keys on the phone:', e?.message || e);
+            throw storeRefused(e);
+        }
     }
 
     /**
@@ -241,17 +285,8 @@ export class GroupKeyring {
     private ensureLoaded(): Promise<void> {
         if (!this.loading) {
             const loading = (async () => {
-                let saved: Awaited<ReturnType<GroupKeyStore['load']>>;
-                let verdicts: string[];
-                let signers: [string, string][];
-                try {
-                    [saved, verdicts, signers] = await inTime((async () => [
-                        await this.store.load(this.storeKey), await this.store.loadVerdicts(this.storeKey), await this.store.loadSigners(this.storeKey),
-                    ] as const)(), STORE_READ_MS);
-                } catch (e: any) {
-                    console.warn('[GroupKeys] could not read this group\'s keys on the phone:', e?.message || e);
-                    throw storeRefused(e);
-                }
+                const { saved, verdicts, signers, ofALock } = await this.readFile();
+                if (ofALock) this.lockedHere();
                 for (const e of saved.epochs) this.epochs.set(e.epoch, e);
                 this.highest = Math.max(this.highest, saved.highest);
                 this.after = Math.max(this.after, saved.after);
@@ -291,6 +326,21 @@ export class GroupKeyring {
     /** Every wipe, a copy moved or taken off the phone (forgetGroupKeys): a change still on its way is refused. */
     putAwayNow(): void { this.putAway = true; }
 
+    /** This chat is locked here: in memory at once, in the ring's and in the session's, which no ring's end takes. */
+    private lockedHere(): void {
+        this.sawLocked = true;
+        lockedRings.add(this.id);
+    }
+
+    /** A node answered this chat locked, or with a key of it: noted before anything is put or awaited. */
+    private answeredLockedNow(): void {
+        this.lockedHere();
+        noteAnsweredLocked(this.groupId);
+    }
+
+    /** This run knows the chat was locked in this community: this ring's memory, or one's dropped since. */
+    private get knownLockedHere(): boolean { return this.sawLocked || this.lockKept || lockedRings.has(this.id); }
+
     /**
      * True once this phone has held a key of this group (an epoch verified, opened or made), in its file as in memory. What
      * the DM guard goes by (utils/db.ts refuseGroupKeysForDm): a node's word alone never makes it true.
@@ -306,30 +356,51 @@ export class GroupKeyring {
      * decision b; review of #3358, F1). What this run has seen is asked first: it waits for no read (R3).
      */
     async seenLocked(): Promise<boolean> {
-        if (this.sawLocked || this.lockKept) return true;
-        return (await this.holdsKeys()) || this.sawLocked || this.lockKept;
+        if (this.knownLockedHere) return true;
+        return (await this.holdsKeys()) || this.knownLockedHere;
     }
 
     /**
      * What every path that can put words in this chat asks, last, whatever the node now calls the chat (second review of
      * #3358, R1 and R2): true, and only sealed words go. Before it answers true the lock is in this chat's own community's
-     * file (its keys, else the mark: one the file refused earlier is put now), so a restart knows it too. Throws ('store')
-     * while that file can't be read or won't take it, and nothing goes.
+     * file (its keys, else the mark: one the file refused earlier, or a ring dropped since was putting, is put now), so a
+     * restart knows it too. Throws ('store') while that file can't be read or won't take it, and nothing goes. Another
+     * community's locked answer for the id locks it this session, and marks nothing here. False says only that a readable
+     * line may ask {@link neverLocked}.
      */
     async locksSends(): Promise<boolean> {
         if (await this.holdsKeys()) return true;
-        if (!this.sawLocked && !this.lockKept) return false;
-        await this.noteLocked();
+        if (!this.knownLockedHere) return answeredLocked.has(this.groupId);
+        await this.keepMark();
         return true;
     }
 
     /**
+     * The one answer readable words go on (utils/db.ts readableLineTo, the last thing asked): this phone positively knows
+     * the chat was never locked here. Not what the file said once: it is read again for this line, after every other ask,
+     * and has nothing of a lock; and nothing this run knows says otherwise, as the read ends and, by `still`, as the request
+     * leaves. Null: locked. Throws ('store') when the file can't be read in time, or this ring was put away meanwhile.
+     */
+    async neverLocked(): Promise<NeverLocked | null> {
+        if (await this.locksSends()) return null;
+        if ((await this.readFile()).ofALock) { this.lockedHere(); return null; }
+        if (this.putAway) throw storeRefused(new Error('this group\'s keys were put away'));
+        const nothingKnown = () => !this.knownLockedHere && !answeredLocked.has(this.groupId);
+        return nothingKnown() ? { still: () => !this.putAway && nothingKnown() } : null;
+    }
+
+    /**
      * A node answered this group's chat locked: kept in the file, so it stays so after a restart, before this phone holds any
-     * key of it. In memory at once (a refusal is the safe side); throws while the file won't take it, and the next answer
-     * puts it again.
+     * key of it. In memory at once (a refusal is the safe side), and in the session's, which a ring dropped as the mark is put
+     * doesn't take with it (S1); throws while the file won't take it, and the next answer or send puts it again.
      */
     async noteLocked(): Promise<void> {
-        this.sawLocked = true;
+        this.answeredLockedNow();
+        await this.keepMark();
+    }
+
+    /** Put the mark in this community's file, unless it has it. */
+    private async keepMark(): Promise<void> {
         await this.ensureLoaded();
         if (this.lockKept) return;
         await this.commit(async () => {
@@ -488,6 +559,7 @@ export class GroupKeyring {
         let guard = 0;
         do {
             a = await this.fetchKeys(`?after=${this.after}`);
+            if (a.current || a.epochs?.length) this.answeredLockedNow();
             await this.absorb(a);
             const top = (a.epochs || []).reduce((m, e) => Math.max(m, e.epoch), 0);
             await this.moveCursor(top);
@@ -755,6 +827,7 @@ export class GroupKeyring {
      * line goes under a key a restart would not find, and the next sync serves this phone's own epoch back.
      */
     async adopt(record: GroupEpochRecord, key: Uint8Array): Promise<void> {
+        this.answeredLockedNow();
         await this.ensureLoaded();
         await this.commit(async () => {
             if (this.refusesEpoch(record.epoch)) throw new GroupChatKeyError(GROUP_KEY_ROLLBACK_TEXT, 'rollback');
@@ -1024,13 +1097,16 @@ const keyrings = new Map<string, GroupKeyring>();
  */
 export function groupKeyring(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, groupId: string, store: GroupKeyStore): GroupKeyring {
     const gid = groupId.toLowerCase();
-    const id = `${nodeUrl.replace(/\/+$/, '')}|${identity.publicKey}|${gid}`;
+    const id = ringIdOf(nodeUrl.replace(/\/+$/, ''), identity.publicKey, gid);
     let k = keyrings.get(id);
     if (!k) { k = new GroupKeyring(gid, nodeUrl.replace(/\/+$/, ''), identity, store); keyrings.set(id, k); }
     return k;
 }
 
-/** Every wipe (utils/db.ts clearDB): every opened key leaves memory, and this session's wrap tally; a kept store reopens them. */
+/**
+ * Every wipe (utils/db.ts clearDB): every opened key leaves memory, and this session's wrap tally; a kept store reopens them.
+ * What this session saw locked stays (answeredLocked, lockedRings): ids, no key.
+ */
 export function forgetGroupKeys(): void {
     for (const ring of keyrings.values()) ring.putAwayNow();
     keyrings.clear();

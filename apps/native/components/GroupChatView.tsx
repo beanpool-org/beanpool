@@ -25,6 +25,12 @@
  * one key (utils/db.ts postGroupChatPhoto). A photo line's bubble opens its photo only once its words opened, and a tap
  * shows it full screen. An enterprise thread and an old node's chat have no photo button.
  *
+ * In place (slice S6, DESIGN-no-switch-messaging-fable.md §6): a group of another community this phone holds, read and
+ * answered there without a switch. Every read and write below names that community (`at`), which holds its own copy open
+ * while this is on screen (utils/db.ts enterChatInPlace); what isn't done in place (photos and voice sent, invitations, the
+ * group's page, the history from before a change of phone) is offered as "Open {community} ›", never tried on the community
+ * in use.
+ *
  * Keyboard: KeyboardAvoidingView from react-native-keyboard-controller, padding on both platforms, no nested
  * provider (memory keyboard-avoidance-pattern). At 320dp and 1.3× text the header truncates the name, the
  * composer keeps a Send that never shrinks and the notice wraps.
@@ -41,7 +47,7 @@ import { anchorUrl } from '../utils/node-post';
 import { useAfterDismiss } from '../utils/screen-presented';
 import { View, Text, StyleSheet, Pressable, FlatList, Linking, TextInput, ScrollView, Platform } from 'react-native';
 import { Alert } from '../utils/keyboard-alert';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
@@ -54,9 +60,14 @@ import * as Crypto from 'expo-crypto';
 import {
     getGroupChat, postGroupChatMessage, postGroupChatPhoto, getDecryptedGroupPhoto, postGroupChatVoice, getDecryptedGroupVoice, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi,
     fetchGroupDetails, markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
-    groupScreenKeyringFor, noteLockedHistoryRow, reportGroupChatLine,
+    groupScreenKeyringFor, noteLockedHistoryRow, reportGroupChatLine, leaveGroupApi,
+    enterChatInPlace, leaveChatInPlace, whileChatInPlace,
     type GroupItem, type GroupMemberItem,
 } from '../utils/db';
+import { heldGroups } from '../utils/held-groups';
+import { openInCommunity } from '../utils/open-in-community';
+import { photoOnCommunity } from '../utils/photo-address';
+import { useNodeStatus } from '../app/NodeStatusContext';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri, withinMs } from '../utils/chat-photo';
 import { ChatPhoto, ChatPhotoViewer, ChatWaitingPhoto } from './chat/ChatPhoto';
@@ -110,6 +121,8 @@ interface Props {
     initialName?: string;
     /** Open the group's info sheet once the group has loaded: a vote's push or Home's line lands on its Decisions. */
     openInfo?: boolean;
+    /** A group of another community this phone holds, open in place (slice S6): its saved address and name. */
+    inPlace?: { community: string; name: string };
 }
 
 const GROUP_MESSAGE_MAX = 2000;
@@ -141,7 +154,16 @@ interface PendingMessage {
     timestamp: string;
 }
 
-export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: Props) {
+export function GroupChatView({ kind, id, justCreated, initialName, openInfo, inPlace }: Props) {
+    // The community this chat lives in when it is not the one in use: undefined, the one in use, as before.
+    const at = inPlace?.community;
+    // Held in place from here, before any read below, until it is left: then nothing more is asked of that community.
+    useFocusEffect(useCallback(() => {
+        if (!at) return;
+        enterChatInPlace(at);
+        return () => { void leaveChatInPlace(at); };
+    }, [at]));
+    const { recheck } = useNodeStatus();
     const insets = useSafeAreaInsets();
     const { colors, theme } = useTheme();
     // The screen's top in the window, for the KeyboardAvoidingView (an iPhone sheet starts ~50 pt down: utils/screen-keyboard-offset).
@@ -174,11 +196,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     // Voice messages only where the community says it takes them (core voiceLinesOn; a live community, 14 Nov): a node from before
     // voice V2 stores one as words with a sound no one can play. Read at send time from the ref, as the recorder holds the
     // onVoice it was given while a recording waits.
-    const voiceHere = voiceLinesOn(useNodeProfile()?.features);
+    const profile = useNodeProfile();
+    const voiceHere = !at && voiceLinesOn(profile?.features);
     const voiceHereRef = useRef(voiceHere);
     voiceHereRef.current = voiceHere;
-    // This phone has held a key of this group: the chat is locked here whatever the node says (group-chat-lines).
+    // This phone has held a key of this group, or seen it locked: the chat is locked here whatever the node says (group-chat-lines).
     const [seenLocked, setSeenLocked] = useState(false);
+    // What this phone keeps of the group's keys couldn't be read (or never answered): taken as locked until it can be.
+    const [keysUnread, setKeysUnread] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [invitedCount, setInvitedCount] = useState(0);
@@ -219,13 +244,15 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
     // Seeded from this chat's "Your groups" row, so a mute set on an earlier visit shows (and can be undone) before
     // the chat loads — and on a node too old to return the mute with an enterprise thread.
-    const [mute, setMute] = useState<YourChatMute | null>(() => chatMuteFromRows(yourGroupsStore.getState().items, id));
+    const [mute, setMute] = useState<YourChatMute | null>(() => chatMuteFromRows(at ? heldGroups.rowsOf(at) : yourGroupsStore.getState().items, id));
     // One id per message being written, so a send retried after a dropped connection is stored once (the node
     // de-duplicates on it). A new one once the node has it.
     const clientIdRef = useRef<string>(Crypto.randomUUID());
     const listRef = useRef<FlatList>(null);
     const composerRef = useRef<ChatComposerHandle>(null);
     const inFlight = useRef(false);
+    // "Open {community} ›" is under way: a second tap has nothing more to do, and nothing failed (slice S6).
+    const moving = useRef(false);
     const readUpTo = useRef<string | null>(null);
     // Whether the newest message is on screen: a message arriving while it is follows the thread down,
     // one arriving while someone reads history does not yank them.
@@ -240,7 +267,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     // when a join/leave line appears in the chat or this member changed something. Not on every poll.
     const loadDetails = useCallback(async () => {
         if (kind !== 'group') return;
-        const details = await fetchGroupDetails(id);
+        const details = await fetchGroupDetails(id, at);
         if (!details) return;
         setGroup(details.group);
         if (openInfo && !infoOpenedOnArrival.current) {
@@ -255,24 +282,26 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         setInvitedKeys(invKeys);
         setPendingKeys(pendKeys);
         setRosterRows(members.filter(m => m.status === 'active'));
-        anchorUrl()
+        (at ? Promise.resolve(at) : anchorUrl())
             .then(url => (url ? rememberRosterNames(url, members.filter(m => m.status === 'active')) : new Set<string>()))
             .then(setKeyChanged)
             .catch(() => {});
         setInvitedCount(members.filter(m => m.status === 'invited').length);
-    }, [kind, id, openInfo]);
+    }, [kind, id, openInfo, at]);
 
+    // The list this chat's row is in: that community's own in place, never the community in use's.
+    const row = useMemo(() => (at ? heldGroups.at(at) : yourGroupsStore), [at]);
     // Opening the chat reads it (decision 7: only Talk shows counts, so only reading clears one). The node's marker
     // moves only when there is something new, and "Your groups" drops the count at once and again once the node
     // has it, so a refresh already on its way cannot bring it back.
     const markRead = useCallback((latestId: string | null) => {
         if (!me || !latestId || readUpTo.current === latestId) return;
         readUpTo.current = latestId;
-        yourGroupsStore.markRead(id);
-        markThreadReadOnNode(id, me)
-            .then(() => yourGroupsStore.markRead(id))
+        row.markRead(id);
+        markThreadReadOnNode(id, me, at)
+            .then(() => row.markRead(id))
             .catch(() => { readUpTo.current = null; /* offline: the next poll tries again */ });
-    }, [id, me]);
+    }, [id, me, at, row]);
 
     // One request per poll (the chat), and never two at once on a slow connection.
     // Answers with the node's messages, or null when this read did not happen (it failed, or a poll already had
@@ -283,11 +312,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         try {
             let answer: any;
             if (kind === 'group') {
-                answer = await getGroupChat(id);
+                answer = await getGroupChat(id, undefined, undefined, at);
                 setView(answer);
                 setMute(m => chatMuteFromAnswer(answer, m));
                 openThreadRef.current(answer);
-            } else {
+            } else if (!at) {
                 answer = await getEnterpriseChat(id);
                 setView({ ...answer, canPost: !answer.readOnly, notice: ENTERPRISE_CHAT_NOTICE });
                 setMute(m => chatMuteFromAnswer(answer, m));
@@ -316,12 +345,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         } finally {
             inFlight.current = false;
         }
-    }, [kind, id, markRead, loadDetails]);
+    }, [kind, id, markRead, loadDetails, at]);
 
     useEffect(() => {
         // The group's own details (name, members, invite counts) — not the thread, which the poll reads.
-        loadDetails().catch(() => { });
-    }, [loadDetails]);
+        if (!at) loadDetails().catch(() => { });
+    }, [loadDetails, at]);
+    // In place, once the chat is held (above) and each time it is back: nothing is asked of that community before.
+    useFocusEffect(useCallback(() => { if (at) loadDetails().catch(() => { }); }, [loadDetails, at]));
 
     // Open what the node served (a locked chat): the epochs of the lines shown are opened lazily, each line named by
     // the key that signed it. Read through a ref so load() never closes over an old roster. Once per visit, this phone
@@ -340,7 +371,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         if (kind !== 'group') return;
         let alive = true;
         import('../utils/guest-chat-live')
-            .then((m) => m.guestRosterRows(id))
+            .then((m) => (at ? m.guestRosterRows(id, Date.now(), at) : m.guestRosterRows(id)))
             .then((rows) => {
                 if (!alive || (rows.shown.length === 0 && rows.named.length === 0)) return;
                 guestRowsRef.current = rows;
@@ -348,17 +379,18 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             })
             .catch(() => { });
         return () => { alive = false; };
-    }, [kind, id]);
+    }, [kind, id, at]);
     openThreadRef.current = (served: any) => {
         lastAnswer.current = served;
         // Through the DM guard: a known DM gets no keys synced here, whichever route drew this screen (#1841 review, 1).
-        groupScreenKeyringFor(id)
+        groupScreenKeyringFor(id, at)
             .then(async ring => {
                 const held = await ring.seenLocked();
                 setSeenLocked(held);
+                setKeysUnread(false);
                 let answer = served;
                 if (!chatIsLocked(served)) {
-                    // The node says the chat isn't locked. A phone that never held its key believes it (an old node);
+                    // The node says the chat isn't locked. A phone that never held its key, nor saw it locked, believes it (an old node);
                     // one that did keeps it locked, and reads it by the keys it holds (review of #1788, finding 4).
                     if (!held) { setThread(null); return; }
                     const st = await ring.sync().catch(() => null);
@@ -376,7 +408,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     ring.serveMissing().catch(() => { });
                 }
             })
-            .catch(e => console.warn('[GroupChat] could not open the chat\'s keys:', e?.message || e));
+            .catch(e => {
+                if (e instanceof GroupChatKeyError && e.code === 'store') setKeysUnread(true);
+                console.warn('[GroupChat] could not open the chat\'s keys:', e?.message || e);
+            });
     };
     // A roster that arrives after the lines re-names them (a former member, an earlier key).
     useEffect(() => {
@@ -397,10 +432,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const rawMessages: any[] = view?.messages || [];
     const isConvenor = !!view?.isConvenor;
     const canPost = !!view?.canPost && !!me;
-    // Locked by what this phone has verified, not by the node's word alone: once it held a key, always (finding 4).
-    const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
+    // Locked by what this phone keeps, not by the node's word now: once it held a key or saw it locked, always (finding 4).
+    const locked = kind === 'group' && (chatIsLocked(view) || seenLocked || keysUnread);
     // Photos are sealed on this phone: a locked group chat only, and not while a line is being edited.
-    const photoButton = kind === 'group' && locked && !editingMessage;
+    // Not in place (slice S6): a photo is sent from its own community.
+    const photoButton = kind === 'group' && locked && !editingMessage && !at;
 
     // This member changed phones: their own row carries a verified former key (the line-display design's chain).
     const myFormer = useMemo(() => {
@@ -443,9 +479,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     // never counted as done (review of #1844, finding 4). Only once the keys are read: before that nothing is known.
     const lockedRowCount: number = messages.find(m => m.id === LOCKED_HISTORY_ROW_ID)?.metadata?.lockedCount ?? 0;
     useEffect(() => {
+        // In place, the old-words screen (the community in use's) counts nothing of another community's.
+        if (at) return;
         if (kind !== 'group' || !thread) return;
         noteLockedHistoryRow(id, lockedRowCount).catch(() => {});
-    }, [kind, id, thread, lockedRowCount]);
+    }, [kind, id, thread, lockedRowCount, at]);
 
     const spokenCount = useMemo(
         () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,
@@ -480,12 +518,13 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const aloneInGroup = kind === 'group' && isConvenor && (activeCount ?? 0) <= 1;
     // The big prompt is for a convenor still alone with nobody asked yet; once invitations are out it steps aside
     // and the empty chat says who is on the way.
-    const showInvitePrompt = shouldShowInvitePrompt({
+    const showInvitePrompt = !at && shouldShowInvitePrompt({
         kind, isConvenor, justCreated: !!justCreated, activeCount, invitedCount, spokenCount, skipped: inviteSkipped,
     });
     const muted = isMuted(mute);
 
-    const detail = useMemo(() => headerDetail(kind === 'group' ? activeCount : null, muted), [kind, activeCount, muted]);
+    // In place: the community's name, as Chat's row and a direct chat in place say it.
+    const detail = useMemo(() => inPlace?.name ?? headerDetail(kind === 'group' ? activeCount : null, muted), [kind, activeCount, muted, inPlace?.name]);
 
     const openUrl = useCallback((raw: string) => {
         linkPressedRef.current = true;
@@ -500,14 +539,15 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         try {
             if (kind === 'group') {
                 const lastSealed = [...rawMessages].reverse().find(m => isSealedGroupLine(m));
-                await postGroupChatMessage(id, p.text, p.clientId, p.replyToId, locked ? {
+                // Held until it settles: a line sent as the chat is left still goes to its own community, or says it didn't.
+                await whileChatInPlace(at, () => postGroupChatMessage(id, p.text, p.clientId, p.replyToId, locked ? {
                     after: lastSealed ? String(lastSealed.id) : null,
                     mentionCandidates: rosterRows.map(r => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
                     onProgress: (done, total) => setSecuring(total >= 10 && done < total ? { done, total } : null),
-                } : undefined);
+                } : undefined, at));
                 setSecuring(null);
                 setKeyNotice(null);
-            } else await postEnterpriseChatMessage(id, p.text, p.clientId);
+            } else if (!at) await postEnterpriseChatMessage(id, p.text, p.clientId);
             // A poll may be mid-flight with the chat as it was before this message; wait for it, then read again.
             while (inFlight.current) await new Promise(r => setTimeout(r, 100));
             const msgs = await load();
@@ -526,7 +566,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             if (why) setKeyNotice(why);
             console.warn('[GroupChat] send failed:', e?.message || e);
         }
-    }, [kind, id, load, locked, rawMessages, rosterRows]);
+    }, [kind, id, load, locked, rawMessages, rosterRows, at]);
 
     /**
      * Pick a photo (camera or gallery) and fit it to 800 px: it waits above the box until Send. A group's photo is sealed
@@ -567,7 +607,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
      */
     const sendPhoto = async (caption: string) => {
         const waiting = photo;
-        if (!waiting || sending) return;
+        if (!waiting || sending || at) return;
         setSending(true);
         hapticTick();
         try {
@@ -581,7 +621,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             setReplyToMessage(null);
             setSecuring(null);
             setKeyNotice(null);
-            yourGroupsStore.noteSent(id);
+            row.noteSent(id);
             hapticSuccess();
             while (inFlight.current) await new Promise(r => setTimeout(r, 100));
             await load();
@@ -607,7 +647,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
      */
     const sendVoice = async (voice: VoiceInput, lineId: string) => {
         // The community no longer says it takes voice messages (asked again since the recording began): kept, not sent.
-        if (!voiceHereRef.current) {
+        if (!voiceHereRef.current || at) {
             const why = t(VOICE_LINES_WORDS.notTaken);
             setKeyNotice(why);
             throw new VoiceNotSentError(why);
@@ -647,7 +687,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 const target = editingMessage;
                 setEditingMessage(null);
                 try {
-                    await editThreadMessage(target.id, text, { groupId: id, metadata: target.metadata, locked: !!locked });
+                    await whileChatInPlace(at, () => editThreadMessage(target.id, text, { groupId: id, metadata: target.metadata, locked: !!locked }, at));
                     await load();
                 } catch (e: any) {
                     await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
@@ -665,7 +705,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             clientIdRef.current = Crypto.randomUUID();
             setPending(prev => [...prev, p]);
             // On Talk → Groups at once, as in the chat: the chat goes to the top, whatever becomes of the line (a failed one waits there).
-            yourGroupsStore.noteSent(id);
+            row.noteSent(id);
             setReplyToMessage(null);
             scrollChatToBottom(listRef, true);
             await deliver(p);
@@ -694,7 +734,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         setActiveEmojiPickerId(null);
         setActiveMessageActionsId(null);
         try {
-            await toggleMessageReactionApi(messageId, me, emoji);
+            await toggleMessageReactionApi(messageId, me, emoji, at, id);
             hapticSuccess();
             await load();
         } catch (e: any) {
@@ -712,7 +752,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             { text: t('Keep it'), style: 'cancel' },
             { text: t('Remove'), style: 'destructive', onPress: async () => {
                 try {
-                    await removeGroupChatMessage(id, item.id);
+                    await removeGroupChatMessage(id, item.id, at);
                     await load();
                 } catch (e: any) {
                     Alert.alert(t('Not removed'), chatActionErrorMessage(e) || (author ? t("Could not remove {name}'s message.", { name: author }) : t("Could not remove this member's message.")));
@@ -733,7 +773,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         const item = reportingMessage;
         if (!item) return;
         try {
-            const sent = await reportGroupChatLine(id, String(item.id), thread?.views.get(item.id), reason);
+            const sent = await whileChatInPlace(at, () => reportGroupChatLine(id, String(item.id), thread?.views.get(item.id), reason, at));
             await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
             hapticSuccess();
             Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, reason), [{ text: t('OK'), onPress: () => setReportingMessage(null) }]);
@@ -753,7 +793,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             { text: t('Cancel'), style: 'cancel' },
             { text: t('Delete'), style: 'destructive', onPress: async () => {
                 try {
-                    await deleteMessageApi(item.id);
+                    await deleteMessageApi(item.id, at, id);
                     hapticSuccess();
                     await load();
                 } catch (e: any) {
@@ -767,13 +807,52 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const setMuteTo = async (duration: '8h' | '1w' | 'always' | 'off') => {
         setMuteOpen(false);
         try {
-            const res = await muteChatApi(id, duration);
+            const res = await muteChatApi(id, duration, at);
             const next = duration === 'off' ? null : (res?.mute ?? { conversationId: id, mutedUntil: null, always: duration === 'always' });
             setMute(next);
-            yourGroupsStore.setMute(id, next);
+            row.setMute(id, next);
         } catch (e: any) {
             Alert.alert(t('Not changed'), e?.message ? signedRequestWords(e.message) : t('Could not reach the node.'));
         }
+    };
+
+    // What isn't done in place (slice S6): the phone moves to the chat's own community, through the one switch, and opens it there.
+    const openThere = async () => {
+        if (!inPlace || !me || moving.current) return;
+        moving.current = true;
+        try {
+            const moved = await openInCommunity(inPlace.community, `/chat/${id}?group=1`, me, recheck);
+            if (moved !== 'switched') Alert.alert(inPlace.name, t('Something went wrong. Try again in a moment.'));
+        } finally {
+            moving.current = false;
+        }
+    };
+    const offerThere = () => {
+        if (!inPlace) return;
+        Alert.alert(inPlace.name, t('Chat with {name} in {community}. Opens that community.', { name, community: inPlace.name }), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: t('Open {community} ›', { community: inPlace.name }), onPress: () => { void openThere(); } },
+        ]);
+    };
+    // The member leaves the group, in its own community (the group's page asks it the same way; a lead convenor is refused there).
+    const leaveHere = async () => {
+        if (!inPlace || !me) return;
+        await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+        Alert.alert(t('Leave Group'), t('Are you sure you want to leave {group}?', { group: name }), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: t('Leave'), style: 'destructive', onPress: async () => {
+                try {
+                    const left = await whileChatInPlace(at, () => leaveGroupApi(id, me, undefined, at));
+                    if (!left) throw new Error('');
+                    hapticSuccess();
+                    heldGroups.forget(inPlace.community, id);
+                    goBack();
+                } catch (e: any) {
+                    hapticWarning();
+                    Alert.alert(t('Leave Failed'), e?.message ? signedRequestWords(e.message) : t('Failed to leave group'));
+                }
+            } },
+        ]);
     };
 
     const openOwner = () => {
@@ -793,18 +872,22 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         setMenuOpen(true);
     };
 
+    // A picture that community's node stored is drawn from there, never from the community in use.
+    const pictureHere = (photo: string | null) => (at && photo ? photoOnCommunity(at, photo) : photo);
+
     const header = (
         <ChatOwnerHeader
             kind={kind}
             name={name}
             // Its picture, else its category's emblem, once the node has said which group this is: never a guessed emblem
             // that turns into the group's own picture a moment later.
-            avatarUrl={group || view?.group ? chatPicture(kind, group?.avatarUrl || view?.group?.avatarUrl, category) : null}
+            avatarUrl={group || view?.group ? pictureHere(chatPicture(kind, group?.avatarUrl || view?.group?.avatarUrl, category)) : null}
             category={category}
             lifecycle={lifecycle}
             detail={detail}
             onBack={goBack}
-            onOpenOwner={openOwner}
+            // In place, the group's own page is its community's: the ⋮ menu's Open {community} › goes there.
+            onOpenOwner={at ? undefined : openOwner}
             onMenu={openMenu}
         />
     );
@@ -820,7 +903,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 </Pressable>
                 {/* Someone removed mid-vote reads no chat, but is still on the vote's roll: a push or Home's line
                     lands them here (info=1), so the votes the node answers them show below (#1784 review B1). */}
-                {kind === 'group' && openInfo && (
+                {kind === 'group' && openInfo && !at && (
                     <ScrollView contentContainerStyle={{ padding: 16 }}>
                         <GroupDecisions groupId={id} myPubkey={me ?? null} people={[]} votesOnly={refused} />
                     </ScrollView>
@@ -875,15 +958,17 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     );
 
     const menuItems: ChatMenuItem[] = [
-        { icon: 'account-plus', label: t('Invite people'), hidden: kind !== 'group' || !isConvenor, onPress: () => closeMenuThen(() => setInviteOpen(true)) },
+        { icon: 'account-plus', label: t('Invite people'), hidden: kind !== 'group' || !isConvenor || !!at, onPress: () => closeMenuThen(() => setInviteOpen(true)) },
         { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
         { icon: 'magnify', label: t('Search this chat'), hidden: kind !== 'group', onPress: () => { setMenuOpen(false); setSearchOpen(true); } },
-        { icon: 'cellphone-check', label: chatLineWords(NEW_PHONE_CONFIRM_MENU), hidden: kind !== 'group', onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
-        { icon: 'information-outline', label: kind === 'group' ? t('Group info') : t('Enterprise page'), onPress: () => closeMenuThen(openOwner) },
+        { icon: 'cellphone-check', label: chatLineWords(NEW_PHONE_CONFIRM_MENU), hidden: kind !== 'group' || !!at, onPress: () => { setMenuOpen(false); router.push('/confirm-new-phone'); } },
+        { icon: 'information-outline', label: kind === 'group' ? t('Group info') : t('Enterprise page'), hidden: !!at, onPress: () => closeMenuThen(openOwner) },
+        { icon: 'exit-to-app', label: t('Leave Group'), hidden: !at, onPress: () => closeMenuThen(() => { void leaveHere(); }) },
+        { icon: 'home-group', label: t('Open {community} ›', { community: inPlace?.name ?? '' }), hidden: !at, onPress: () => closeMenuThen(() => { void openThere(); }) },
     ];
 
     const renderMessage = (item: ChatMessage) => {
-        if (item.id === LOCKED_HISTORY_ROW_ID) return <LockedHistoryRow text={item.text} onPress={() => setHistoryOpen(true)} />;
+        if (item.id === LOCKED_HISTORY_ROW_ID) return <LockedHistoryRow text={item.text} onPress={() => (at ? offerThere() : setHistoryOpen(true))} />;
         if (item.type === 'system' || item.senderId === 'SYSTEM') return <SystemLine text={item.text} styles={styles} />;
         // A sealed line that names nobody: one that couldn't be verified ("Unverified"), or one whose key isn't here yet.
         if (item.unattributed) return <SealedNoticeLine name={item.authorName ?? null} text={item.text} details={item.integrityNote ?? null} />;
@@ -930,13 +1015,13 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         const raw = kind === 'group' && item.type === 'image' ? rawById.get(item.id) : undefined;
         const lineView = raw ? thread?.views.get(item.id) : undefined;
         const photoSlot = raw && lineView ? (
-            <ChatPhoto photoKey={`${item.id}|${lineView.signer}|${lineView.epoch}`} load={() => getDecryptedGroupPhoto(id, raw, lineView)} onOpen={openPhoto} />
+            <ChatPhoto photoKey={`${item.id}|${lineView.signer}|${lineView.epoch}`} load={() => getDecryptedGroupPhoto(id, raw, lineView, at)} onOpen={openPhoto} />
         ) : null;
         // A voice line of a locked chat: played only because its words opened (the line is attributed), as a photo is.
         const voiceRaw = kind === 'group' && item.type === 'voice' ? rawById.get(item.id) : undefined;
         const voiceView = voiceRaw ? thread?.views.get(item.id) : undefined;
         const voiceSlot = voiceRaw && voiceView ? (
-            <VoiceBubble messageId={String(item.id)} isMe={isMe} load={() => getDecryptedGroupVoice(id, voiceRaw, voiceView)} />
+            <VoiceBubble messageId={String(item.id)} isMe={isMe} load={() => getDecryptedGroupVoice(id, voiceRaw, voiceView, at)} />
         ) : null;
         const photoFooter = (photoSlot || voiceSlot) && !item.text ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
@@ -1100,7 +1185,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     busy={sending}
                     maxLength={GROUP_MESSAGE_MAX}
                     // The phone's own words for what it decided, never the node's notice (finding 4).
-                    notice={kind === 'group' ? chatLineWords(groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked })) : t(CHAT_NOTICE.enterprise)}
+                    notice={kind === 'group' ? chatLineWords(groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked, keysUnread: keysUnread && !seenLocked })) : t(CHAT_NOTICE.enterprise)}
                     // A long name wrapped the placeholder to three lines at 320dp; short ones read better named. Beside the photo
                     // button the box is 48 dp narrower and at 1.3× text even "Message the group…" wraps: the header names the chat.
                     placeholder={photoButton ? t('Message…') : name.length <= 18 ? t('Message {name}…', { name }) : (kind === 'group' ? t('Message the group…') : t('Message…'))}
@@ -1148,7 +1233,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 onAsk={() => { setHistoryOpen(false); router.push('/new-phone-code'); }}
             />
 
-            {kind === 'group' && (
+            {kind === 'group' && !at && (
                 <InvitePeopleSheet
                     isOpen={inviteOpen}
                     groupId={id}
@@ -1161,7 +1246,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     onInvited={(n) => { if (n > 0) { setInviteSkipped(true); loadDetails().catch(() => { }); } }}
                 />
             )}
-            {kind === 'group' && (
+            {kind === 'group' && !at && (
                 <GroupDetailModal
                     group={group}
                     keyChanged={keyChanged}

@@ -20,6 +20,9 @@
  *     `at`, the community the chat lives in, at that function's place for it; every other function of utils/db.ts it calls
  *     sits behind `at`: in a function that returns (or throws) first when `at` is set, or under a condition that holds only
  *     with no `at`. The one exception is getKnownChatMute, a read of this run's memory by the chat's id (no copy, no server).
+ * 11b. components/GroupChatView.tsx (slice S6), the same rule: every in-place call hands it `at`, every other function of
+ *     utils/db.ts it calls sits behind `at`; its sends, edits, reports and leave are held in place until they settle
+ *     (whileChatInPlace(at, …)), and it holds the chat in place by that `at` before any read.
  * 12. app/chat/key-code.tsx hands its `at` to each of the three pin calls, and holds the chat in place by that `at` while it
  *     shows (enterChatInPlace, leaveChatInPlace in its cleanup), before its first read (#3305 review).
  */
@@ -30,6 +33,7 @@ import ts from 'typescript';
 
 const DB_TS = path.join(__dirname, '..', 'db.ts');
 const CHAT_TSX = path.join(__dirname, '..', '..', 'app', 'chat', '[id].tsx');
+const GROUP_TSX = path.join(__dirname, '..', '..', 'components', 'GroupChatView.tsx');
 const KEY_CODE_TSX = path.join(__dirname, '..', '..', 'app', 'chat', 'key-code.tsx');
 
 /** The in-place set (slice S2): every function of utils/db.ts that takes a community. */
@@ -46,11 +50,16 @@ const IN_PLACE = [
     'quietlyLetIn',
     // Slice N3: how long the oldest unread line waited (the fact line), read there before the chat marks itself read.
     'oldestUnreadAt',
+    // Slice S6, groups in place: the group's own context, its reads, its sends and its refusals' own asks.
+    'groupContextFor', 'groupAddressOf', 'groupKeyringFor', 'groupScreenKeyringFor', 'isHeldGroupChat', 'heldGroupRefusal',
+    'nodeChatAnswer', 'nodeChatIsUnlocked', 'editRefusal', 'getGroupChat', 'fetchGroupDetails', 'postGroupChatMessage',
+    'editThreadMessage', 'removeGroupChatMessage', 'reportGroupChatLine', 'getDecryptedGroupPhoto', 'getDecryptedGroupVoice',
+    'leaveGroupApi', 'markThreadReadOnNode', 'noteGroupLocked',
 ].sort();
 /** A function the DM screen may call with no `at`: it reads neither a copy nor a server (this run's memory, by the chat's id). */
 const NO_COPY = new Set(['getKnownChatMute']);
 /** The copy's own makers: they decide what the community names, and are read by rule 9 or by eye. */
-const MAKERS = new Set(['chatCopyForRequest', 'chatReadFor', 'chatDbFor', 'copyInPlaceFor', 'enterChatInPlace', 'leaveChatInPlace']);
+const MAKERS = new Set(['chatCopyForRequest', 'chatReadFor', 'chatDbFor', 'copyInPlaceFor', 'enterChatInPlace', 'leaveChatInPlace', 'whileChatInPlace']);
 const RESOLVERS = new Set(['chatCopyForRequest', 'chatDbFor', 'chatReadFor']);
 const TAKES_A_COPY = new Set(['getDb', 'waitForInit']);
 
@@ -221,10 +230,12 @@ export function screenHolesIn(source: string, takesAt: ReadonlyMap<string, numbe
     return holes;
 }
 
-/** Where each in-place function of db.ts takes its community (leaveChatInPlace, a maker, too: the screen hands it `at`). */
+/** The makers a screen calls itself, handing `at`: what holds its chat in place. */
+const HOLDS = new Set(['enterChatInPlace', 'leaveChatInPlace', 'whileChatInPlace']);
+/** Where each in-place function of db.ts takes its community (the holds, makers, too: the screen hands them `at`). */
 function takesAtOf(source: string): Map<string, number | 'opts'> {
     const { fns } = dbFunctions(source);
-    return new Map(fns.filter((f) => f.communityAt !== null && (!MAKERS.has(f.name) || f.name === 'enterChatInPlace' || f.name === 'leaveChatInPlace')).map((f) => [f.name, f.communityAt as number | 'opts']));
+    return new Map(fns.filter((f) => f.communityAt !== null && (!MAKERS.has(f.name) || HOLDS.has(f.name))).map((f) => [f.name, f.communityAt as number | 'opts']));
 }
 
 describe('slice S2: every in-place read and write takes its community by name', () => {
@@ -245,6 +256,26 @@ describe('slice S2: every in-place read and write takes its community by name', 
         // Not vacuous: the screen makes in-place calls, and calls some that aren't.
         expect((source.match(/, at\)/g) ?? []).length).toBeGreaterThan(10);
         expect(source).toMatch(/getDealsBetween\(/);
+    });
+
+    it('the group screen hands `at` to every in-place call, keeps every other behind it, and holds its sends (rule 11b)', () => {
+        const source = fs.readFileSync(GROUP_TSX, 'utf8');
+        expect(screenHolesIn(source, takesAtOf(dbSource), 'GroupChatView')).toEqual([]);
+        // Not vacuous: it makes in-place calls, and calls some that aren't (photos and voice sent, an enterprise's thread).
+        expect((source.match(/\bat\)/g) ?? []).length).toBeGreaterThan(10);
+        expect(source).toMatch(/postGroupChatPhoto\(/);
+        // A dropped `at` is seen here too (mutation, on the real screen).
+        expect(screenHolesIn(source.replace('getGroupChat(id, undefined, undefined, at)', 'getGroupChat(id)'), takesAtOf(dbSource), 'GroupChatView').length).toBe(1);
+        expect(screenHolesIn(source.replace('if (!waiting || sending || at) return;', 'if (!waiting || sending) return;'), takesAtOf(dbSource), 'GroupChatView').length).toBe(1);
+        for (const held of ['postGroupChatMessage(', 'editThreadMessage(', 'reportGroupChatLine(', 'leaveGroupApi(']) {
+            expect(source, held).toContain(`whileChatInPlace(at, () => ${held}`);
+            expect(source.split(held).length - 1, held).toBe(1);
+        }
+        // Held before any read: the hold is the component's first effect, and the details and the poll come after it.
+        const body = source.slice(source.indexOf('export function GroupChatView('));
+        const hold = body.search(/useFocusEffect\(useCallback\(\(\) => \{\s*if \(!at\) return;\s*enterChatInPlace\(at\);\s*return \(\) => \{ void leaveChatInPlace\(at\); \};\s*\}, \[at\]\)\);/);
+        expect(hold).toBeGreaterThan(0);
+        for (const later of ['useEffect(', 'useChatPoll(load', 'loadDetails()']) expect(hold, later).toBeLessThan(body.indexOf(later));
     });
 
     it('the key code screen hands its `at` to each pin call (rule 12)', () => {

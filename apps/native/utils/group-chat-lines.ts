@@ -19,8 +19,8 @@
  * member's membership are hidden unopened.
  *
  * Old node (§14.3): a chat answer with no `encryption` is a node from before locked chats. The phone then sends and reads
- * as it always did, and never shows the chat as locked: no false success. But once this phone has held a key of the group
- * (GroupKeyring.seenLocked), the chat stays locked here whatever the node says later: nothing readable is ever sent to
+ * as it always did, and never shows the chat as locked: no false success. But once this phone has held a key of the group,
+ * or has seen its chat answered locked (GroupKeyring.seenLocked), the chat stays locked here whatever the node says later: nothing readable is ever sent to
  * it again, and the screen says why in the phone's own words, never the node's (review of #1788, finding 4; director's
  * decision b).
  */
@@ -28,7 +28,7 @@ import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { detectMentions, groupMessageKey, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
 import { toBase64, sealGroupVoice, openGroupVoice, sealGroupLineEdit, VOICE_MIME, type VoiceInput } from '@beanpool/core';
-import { groupKeyring, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import { groupKeyring, GroupKeysRequestError, GROUP_KEY_STORE_UNREAD_TEXT, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import {
     groupLineView, isSealedGroupLine, GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT,
     type DisplayRosterRow, type GroupLineView, type ServedGroupLine,
@@ -53,10 +53,11 @@ export const GROUP_CHAT_OLD_NODE_NOTICE = "This community's node is older and ca
 /** A locked chat's notice (design §8), in the phone's own words. */
 export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.";
 /**
- * A chat this phone has held a key of, which the node now says isn't locked: what the phone does, not what it waits for
- * (confirmation of #1788, finding 4). Every line still goes sealed when the keys come; nothing goes readable.
+ * A chat this phone has seen locked, which the node now says isn't locked: what the phone does, not what it waits for
+ * (confirmation of #1788, finding 4). Every line still goes sealed when the keys come; nothing goes readable. Said of a chat
+ * whose keys this phone held and of one it only saw locked, so it names what is true of both (second review of #3358, R4).
  */
-export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.";
+export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.";
 /** A node that refuses this phone the group's keys and its chat (a removed member): it said nothing about locking. */
 export const GROUP_CHAT_NOT_MEMBER_TEXT = 'Only members of this group can open its chat';
 /**
@@ -67,8 +68,10 @@ export const GROUP_CHAT_NOT_MEMBER_TEXT = 'Only members of this group can open i
 export const GROUP_KEYS_FOR_DM_TEXT = "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.";
 
 /** The group chat's notice: the phone's own words for what it decided, never the node's text. */
-export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean }): string {
+export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean; keysUnread?: boolean }): string {
     if (state.nodeSaysLocked) return GROUP_CHAT_LOCKED_NOTICE;
+    // Whether it was ever locked here can't be read: nothing is said to be known, and nothing goes (R3).
+    if (state.keysUnread) return GROUP_KEY_STORE_UNREAD_TEXT;
     return state.seenLocked ? GROUP_CHAT_LOCK_LOST_TEXT : GROUP_CHAT_OLD_NODE_NOTICE;
 }
 
@@ -198,6 +201,7 @@ export async function openGroupThread(
         if (v.signer && !l.editedAt) ring.rememberSigner(l.id, v.signer);
         views.set(l.id, v);
     }
+    await ring.saveSigners();
     // A chat with no epoch yet is not waiting: the first member to write makes epoch 1.
     const waitingForNextKey = from !== null && enc.current !== null && from > enc.current;
     return { views, waitingForNextKey };

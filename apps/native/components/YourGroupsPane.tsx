@@ -15,6 +15,7 @@ import { YourGroupRow } from './YourGroupRow';
 import { CreateGroupModal } from './CreateGroupModal';
 import { chatHref, type YourChat } from '../utils/your-groups';
 import { yourGroupsStore } from './useYourGroups';
+import { heldGroupParams, heldGroups, isHeldGroup, type HeldGroup } from '../utils/held-groups';
 import { t } from '@beanpool/core';
 
 export function NewGroupButton({ onPress, compact }: { onPress: () => void; compact?: boolean }) {
@@ -56,11 +57,27 @@ export function FindGroupsButton({ onPress }: { onPress: () => void }) {
     );
 }
 
-/** Rows only (no scroll container), for embedding in a parent list's header. */
-export function YourGroupsRows({ items, myPubkey, showUnread, flush }: { items: YourChat[]; myPubkey?: string | null; showUnread?: boolean; flush?: boolean }) {
+/**
+ * Rows only (no scroll container), for embedding in a parent list's header. A group of another community this phone holds
+ * (slice S6, utils/held-groups.ts) says its community and opens in place there, with no switch.
+ */
+export function YourGroupsRows({ items, myPubkey, showUnread, flush }: { items: ReadonlyArray<YourChat | HeldGroup>; myPubkey?: string | null; showUnread?: boolean; flush?: boolean }) {
     return (
         <>
-            {items.map(item => (
+            {items.map(item => (isHeldGroup(item) ? (
+                <YourGroupRow
+                    key={item.key}
+                    item={item}
+                    myPubkey={myPubkey}
+                    showUnread={showUnread}
+                    flush={flush}
+                    communityName={item.communityName}
+                    onPress={() => {
+                        if (showUnread) heldGroups.at(item.community).markRead(item.conversationId);
+                        router.push({ pathname: '/chat/[id]', params: heldGroupParams(item) } as any);
+                    }}
+                />
+            ) : (
                 <YourGroupRow
                     key={`${item.kind}:${item.id}`}
                     item={item}
@@ -73,7 +90,7 @@ export function YourGroupsRows({ items, myPubkey, showUnread, flush }: { items: 
                         router.push(chatHref(it) as any);
                     }}
                 />
-            ))}
+            )))}
         </>
     );
 }

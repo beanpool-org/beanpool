@@ -1677,7 +1677,7 @@
   "Not confirmed\u0004chat line": "تأییدنشده",
   "This community's node is older and can read this group's chat. It will be locked once the node is updated.": "گره این جامعه قدیمی‌تر است و می‌تواند گفتگوی این گروه را بخواند. پس از به‌روزرسانی گره، قفل خواهد شد.",
   "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, mentions, what each line answers, and reactions.": "رمزگذاری سرتاسری: فقط اعضای این گروه می‌توانند آن را بخوانند. گره فقط می‌بیند چه کسی، چه زمانی، چه اشاره‌هایی، در پاسخ به چه پیامی نوشته است و واکنش‌ها را مشاهده می‌کند.",
-  "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.": "این گره اکنون می‌گوید این گفتگو قفل نیست. این گوشی کلیدهای آن را نگه داشته است، بنابراین همچنان هر پیام را قفل می‌کند و پیامی را که نتواند قفل کند نمی‌فرستد.",
+  "This node now says this chat isn't locked. This phone has seen it locked, so it still locks every message, and sends nothing it can't lock.": "این گره اکنون می‌گوید این گفتگو قفل نیست. این گوشی آن را قفل‌شده دیده است، بنابراین همچنان هر پیام را قفل می‌کند و پیامی را که نتواند قفل کند نمی‌فرستد.",
   "Only members of this group can open its chat": "فقط اعضای این گروه می‌توانند گفتگوی آن را باز کنند",
   "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": "این گوشی این گفتگو را به عنوان یک پیام مستقیم می‌شناسد نه گفتگوی گروهی. چیزی ارسال نشد.",
   "This message's key isn't on this phone, so it can't be edited here.": "کلید این پیام در این گوشی نیست، بنابراین نمی‌توان آن را اینجا ویرایش کرد.",

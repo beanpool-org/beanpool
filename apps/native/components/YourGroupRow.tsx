@@ -29,9 +29,11 @@ interface Props {
     onPress: (item: YourChat) => void;
     /** Inside a list that already pads its sides (Commons). */
     flush?: boolean;
+    /** The community a held group lives in (slice S6), in grey under its name, as Chat's held row says it: it wraps, never cut. */
+    communityName?: string;
 }
 
-export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flush }: Props) {
+export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flush, communityName }: Props) {
     const { colors } = useTheme();
     const styles = useStyles(({ colors, theme }) => StyleSheet.create({
         row: {
@@ -53,6 +55,8 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
         time: { flexShrink: 0, fontSize: 12, color: colors.text.muted, fontWeight: '500' },
         timeUnread: { color: colors.accent.primary, fontWeight: '700' },
         bottom: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+        where: { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginTop: 2 },
+        whereText: { fontSize: 13, color: colors.text.secondary, flexShrink: 1 },
         kindPill: {
             flexShrink: 0, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6,
             backgroundColor: colors.surface.subtle,
@@ -86,7 +90,8 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
     return (
         <Pressable
             accessibilityRole="button"
-            accessibilityLabel={rowSpoken(rowSpokenName(item), unread, muted, preview)}
+            // The community is part of a held row's name: "Garden Crew, group, Riverside, 2 unread. …".
+            accessibilityLabel={rowSpoken(communityName ? `${rowSpokenName(item)}, ${communityName}` : rowSpokenName(item), unread, muted, preview)}
             style={[styles.row, flush && { marginHorizontal: 0 }]}
             onPress={() => onPress(item)}
         >
@@ -105,6 +110,12 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
                     {muted && <MaterialCommunityIcons name="bell-off-outline" size={14} color={colors.text.muted} />}
                     {!!time && <Text style={[styles.time, unread > 0 && styles.timeUnread]} numberOfLines={1}>{time}</Text>}
                 </View>
+                {communityName ? (
+                    <View style={styles.where}>
+                        <MaterialCommunityIcons name="home-group" size={14} color={colors.text.secondary} />
+                        <Text style={styles.whereText} testID="held-group-community">{communityName}</Text>
+                    </View>
+                ) : null}
                 <View style={styles.bottom}>
                     {roleWord && item.kind === 'group' && (
                         <View style={styles.kindPill}>

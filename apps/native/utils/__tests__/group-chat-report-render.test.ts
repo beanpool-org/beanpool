@@ -184,7 +184,7 @@ describe('Report message in a locked group chat (S6)', () => {
         vi.mocked(reportGroupChatLine).mockResolvedValue({ success: true, report: { id: 'r1' } });
         await click(button('Spam or scam'));
         await click(byLabel('Submit report'));
-        expect(vi.mocked(reportGroupChatLine).mock.calls).toEqual([[G, BENS, thread.views.get(BENS), 'Spam or scam']]);
+        expect(vi.mocked(reportGroupChatLine).mock.calls).toEqual([[G, BENS, thread.views.get(BENS), 'Spam or scam', undefined]]);
         const [title, body, buttons] = vi.mocked(Alert.alert).mock.calls[0] as any[];
         expect([title, body]).toEqual(['Reported', "Thanks. This community's moderators will take a look."]);
         // The sheet stays under the dialog until OK.

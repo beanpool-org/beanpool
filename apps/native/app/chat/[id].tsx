@@ -9,7 +9,6 @@ import { dealStateWords, dealStep, formatHundredths, freePriceWords, itemDealTit
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { leaveScreen } from '../../utils/leave-screen';
 import { PUSH_RECEIVED_EVENT } from '../../utils/app-events';
 
@@ -19,7 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, oldestUnreadAt, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, oldestUnreadAt, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, isLockedGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
 import { ChatScrollPage } from '../../components/chat/ChatScrollPage';
@@ -30,8 +29,9 @@ import { dmKeyBannerMaxHeight, dmKeyCodeShowsVerified } from '../../utils/dm-key
 import { keyCodeOf } from '../../utils/key-code';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
-import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
+import { routeChat, screenIdOf, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
 import { chatInPlaceRoute, type ChatInPlaceRoute } from '../../utils/held-chats';
+import { openInCommunity } from '../../utils/open-in-community';
 import { useNodeStatus } from '../NodeStatusContext';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { dmPeerName, isDmBlocked } from '../../utils/dm-blocked';
@@ -103,12 +103,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promi
 }
 
 /** What the route asks the phone (utils/chat-route.ts tests these wirings). */
-const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isLockedGroupChat, knownDmConversationId, getConversationKind };
 
 /**
  * `/chat/:id` serves several kinds of conversation, and utils/chat-route.ts decides which screen, in this order: a group
- * whose keys this phone has held (its group chat, sealed or refused), a known DM (the DM screen), an event chat, a group's
- * or an enterprise's thread, else a DM. An event chat is its own screen (docs/events-on-the-map.md §2.2): node-readable
+ * whose keys this phone has held (its group chat, sealed or refused), a known DM (the DM screen), a chat this phone has seen
+ * locked (its group chat), an event chat, a group's or an enterprise's thread, else a DM. An event chat is its own screen (docs/events-on-the-map.md §2.2): node-readable
  * `plaintext-v1`, members that follow the RSVPs, a host who can remove a message, read-only once the event ends — none of
  * which the DM pipeline below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
  *
@@ -162,6 +162,8 @@ export default function ChatRoute() {
     // A direct chat of another community this phone holds, read and written there in place (slice S2): its screen reaches
     // that community by name for everything.
     if (id && community && !placedNow) return null;
+    // A group of that community (slice S6): the group's chat, its id as the node makes it.
+    if (id && placedNow?.open === 'in-place' && placedNow.kind === 'group') return <GroupChatView kind="group" id={screenIdOf(String(id))} initialName={name} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
     if (id && placedNow?.open === 'in-place') return <ChatScreen id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
     if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;
     if (!id || !route || route.for !== String(id)) return null;
@@ -202,18 +204,7 @@ function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) 
         setMoveNote(null);
         setMoving(true);
         try {
-            // Asked only on the tap: the switch and its guards, as Chat's held rows move (app/(tabs)/chats.tsx openHeldChat).
-            const [{ openNoticeIn }, { switchCommunity, communitySwitchUnderWay }, { getPendingOnboarding }] = await Promise.all([
-                import('../../utils/push-notice-switch'), import('../../utils/use-communities'), import('../../utils/onboarding-state'),
-            ]);
-            const result = await openNoticeIn(move.community, null, async () => `/chat/${id}` as const, {
-                storage: AsyncStorage,
-                publicKey: identity.publicKey,
-                joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
-                switchUnderWay: communitySwitchUnderWay,
-                switchTo: switchCommunity,
-                recheck,
-            });
+            const result = await openInCommunity(move.community, `/chat/${id}`, identity.publicKey, recheck);
             if (result !== 'switched') setMoveNote(t("Something went wrong. Try again in a moment."));
         } finally {
             setMoving(false);

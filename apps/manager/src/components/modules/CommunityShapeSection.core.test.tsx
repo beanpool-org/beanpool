@@ -264,6 +264,24 @@ describe('Core settings — locked: Unlock to change', () => {
         expect(log).toHaveTextContent('Beans: On → Off');
     });
 
+    it('pausing new members, and un-pausing to the door it had, are everyday: not in the Core log; a new door is (followup 15)', async () => {
+        const shape = locked();
+        const by = { kept: 'community_settings_log' as const, at: '2026-11-05T11:00:00.000Z', actor: 'o'.repeat(64), actorCallsign: 'ada', actorRole: 'owner', note: null };
+        shape.log = [
+            { ...by, id: '5', setting: 'join', from: 'paused', to: 'members' },
+            { ...by, id: '4', setting: 'join', from: 'members', to: 'paused' },
+            { ...by, id: '3', setting: 'join', from: 'admins', to: 'members' },
+            { ...by, id: '2', setting: 'core.unlock', from: null, to: 'join' },
+            { ...by, id: '1', setting: 'core.lock', from: null, to: 'locked' },
+        ];
+        mockApi(shape);
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        const log = await screen.findByTestId('shape-audit-log');
+        expect(log).toHaveTextContent('Who can join: Only admins invite → Any member invites');
+        expect(log).toHaveTextContent('🔓 Unlocked Who can join');
+        expect(log.textContent).not.toMatch(/Paused/);
+    });
+
     it('the log names the members\' credit-line gift in words, as its row does, never its key (G1, round 2)', async () => {
         const shape = locked();
         const by = { kept: 'community_settings_log' as const, at: '2026-11-05T11:00:00.000Z', actor: 'o'.repeat(64), actorCallsign: 'ada', actorRole: 'owner', note: null };

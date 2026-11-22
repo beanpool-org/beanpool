@@ -94,7 +94,7 @@ type Target =
 
 /** Why no line can go from `t` now, or null when one can. */
 function whyNotWritable(t: Exclude<Target, { at: 'refused' }>): string | null {
-    if (t.at === 'here' || t.at === 'held') {
+    if (!('chat' in t)) {
         const server = t.at === 'here' ? SERVERS.riverside : SERVERS.hillside;
         const there = (t.at === 'here' ? phone.directHere : phone.directHeld).some((c) => c.peerPubkey === t.key);
         if (t.existing && !there) return 'no such chat there';

@@ -47,11 +47,16 @@ export type GroupChatKeyErrorCode = 'rollback' | 'no_key' | 'unopenable' | 'not_
 
 /** Why this phone will not seal a line now; `message` is the sentence the chat shows. */
 export class GroupChatKeyError extends Error {
+    /** 'store': what the key store refused with (utils/db.ts noteGroupLocked). Never shown. */
+    why?: unknown;
     constructor(message: string, public code: GroupChatKeyErrorCode) {
         super(message);
         this.name = 'GroupChatKeyError';
     }
 }
+
+/** What this phone keeps of a group's keys couldn't be read or kept, and why ('store'). */
+const storeRefused = (why: unknown): GroupChatKeyError => Object.assign(new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store'), { why });
 
 /** One epoch as this phone keeps it: the record as served (no wraps) and my wrap, exactly as the node sent them. */
 export interface StoredGroupEpoch {
@@ -245,7 +250,7 @@ export class GroupKeyring {
                     ] as const)(), STORE_READ_MS);
                 } catch (e: any) {
                     console.warn('[GroupKeys] could not read this group\'s keys on the phone:', e?.message || e);
-                    throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
+                    throw storeRefused(e);
                 }
                 for (const e of saved.epochs) this.epochs.set(e.epoch, e);
                 this.highest = Math.max(this.highest, saved.highest);
@@ -275,7 +280,7 @@ export class GroupKeyring {
             } catch (e: any) {
                 if (e instanceof GroupChatKeyError) throw e;
                 console.warn('[GroupKeys] could not keep this group\'s keys on the phone:', e?.message || e);
-                throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
+                throw storeRefused(e);
             }
             return take();
         });

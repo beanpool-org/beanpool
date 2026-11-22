@@ -8378,7 +8378,9 @@ async function noteGroupLocked(asked: GroupContext, groupId: string, community?:
         await put();
     } catch (e) {
         if (community) throw e;
-        if (await asked.handle().catch(() => null)) return;
+        // The store refused because the phone was elsewhere (it may be back by now), or SQLite did and the phone has not left.
+        const elsewhere = e instanceof GroupChatKeyError && (e.why as Error | undefined)?.message === SWITCHED_SINCE_CHAT_OPENED_TEXT;
+        if (!elsewhere && await asked.handle().catch(() => null)) return;
         await whileChatInPlace(asked.nodeUrl, put);
     }
 }
@@ -11948,16 +11950,20 @@ export async function fetchHeldYourGroups(myPubkey: string, community: string, s
 /** A group's chat as the member sees it. Throws the node's own message. */
 export async function getGroupChat(groupId: string, limit = 50, offset = 0, community?: ChatCommunity): Promise<any> {
     // The community it is asked of, its address and its key memory, taken before the ask: what its answer says is kept there.
-    const asked = await groupContextFor(groupId, community);
-    const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}&offset=${offset}`, { anchorUrl: asked.nodeUrl });
+    // None in use with no account or address on the phone: asked as any signed-out read is, and no locked answer is handed on.
+    const asked = await groupContextFor(groupId, community).catch((e) => { if (community) throw e; return null; });
+    const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}&offset=${offset}`, { anchorUrl: asked?.nodeUrl });
     const body = await res.json().catch(() => ({}));
     // The status goes with it: 403 or 404 is the node refusing someone not in the group now, not a failed read. A phone that
     // held the group's keys then takes the group's opened photos off, as the words are no longer served to it (§2.4).
     if (!res.ok) {
-        if ((res.status === 403 || res.status === 404) && await ringOf(asked, groupId).holdsKeys().catch(() => false)) await forgetGroupPhotos(groupId);
+        if ((res.status === 403 || res.status === 404) && asked && await ringOf(asked, groupId).holdsKeys().catch(() => false)) await forgetGroupPhotos(groupId);
         throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
     }
-    if (chatIsLocked(body)) await noteGroupLocked(asked, groupId, community);
+    if (chatIsLocked(body)) {
+        if (!asked) throw new Error('No identity found. You must be logged in.');
+        await noteGroupLocked(asked, groupId, community);
+    }
     forgetRemovedGroupPhotos(groupId, body?.messages);
     forgetRemovedVoices(body?.messages);
     return body;

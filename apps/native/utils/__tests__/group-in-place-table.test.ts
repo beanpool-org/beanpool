@@ -1266,7 +1266,7 @@ describe('every path that can send words into a group-like chat asks the lock ma
         const source = fs.readFileSync(path.join(native, 'utils', 'db.ts'), 'utf8');
         const bodyOf = (fn: string) => { const at = source.search(new RegExp(`(async )?function ${fn}\\(`)); return source.slice(at, source.indexOf('\n}\n', at)); };
         for (const fn of ['postGroupChatMessage', 'editThreadMessage', 'lockForConversation']) expect(bodyOf(fn), fn).toMatch(/await readableLineTo\(asked, /);
-        for (const fn of ['postEventChatMessage', 'postEnterpriseChatMessage', 'postEnterpriseThreadMessage']) expect(bodyOf(fn), fn).toMatch(/const to = await readableChatAddress\(.*\n    return _signedRequest\(.*, to\);$/m);
+        for (const fn of ['postEventChatMessage', 'postEnterpriseChatMessage', 'postEnterpriseThreadMessage']) expect(bodyOf(fn), fn).toMatch(/const to = await readableChatAddress\(.*\n {4}return _signedRequest\(.*, to\);$/m);
         expect(source.match(/nonce: 'plaintext-v1'/g)?.length, 'the readable lines: lockForConversation, editThreadMessage').toBe(2);
     });
 
@@ -1443,6 +1443,69 @@ describe('the mark goes to the file of the community that answered, never to the
         for (const send of SENDS) await send.run().catch(() => null);
         await settle();
         expect(wordsOut()).toEqual(NOTHING);
+    });
+
+    it('in use, no account on the phone as it is asked: a locked answer has nobody to be kept for, so it is refused; an unlocked one is shown, as before', async () => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        await db.getDb();
+        const { loadIdentity } = await import('../identity');
+        const out: string[] = [];
+        for (const unlocked of [false, true]) {
+            servers[A].unlocked = unlocked;
+            vi.mocked(loadIdentity).mockImplementation(async () => null);
+            out.push(await db.getGroupChat(g).then(() => 'shown', () => 'refused'));
+            vi.mocked(loadIdentity).mockImplementation(async () => ({ ...h.me, callsign: 'Me' }) as any);
+        }
+        expect(out).toEqual(['refused', 'shown']);
+        expect([marked(A_FILE), marked(B_FILE)]).toEqual([false, false]);
+    });
+
+    it('in use, the phone set to B and back as the answer lands, at every moment of it: A\'s file is marked, or the answer was refused; B\'s never is', async () => {
+        const seen: string[] = [];
+        for (let k = 0; k < 24; k++) {
+            await phoneOnB();
+            await switchPhoneTo(A);
+            await neitherHolds();
+            servers[A].unlocked = false;
+            await db.getDb();
+            const chat = holdNext(chatAsked);
+            const reading = db.getGroupChat(g).then(() => 'shown', () => 'refused');
+            await chat.asked;
+            await switchPhoneTo(B);
+            // The switch back starts first (k < 12) or the answer does, by a growing number of turns.
+            const turns = async (n: number) => { for (let i = 0; i < n; i++) await Promise.resolve(); };
+            let back: Promise<unknown>;
+            if (k < 12) { back = switchPhoneTo(A); await turns(k * 9); chat.letGo(); }
+            else { chat.letGo(); await turns((k - 12) * 9); back = switchPhoneTo(A); }
+            const how = await reading;
+            await back;
+            await settle();
+            expect(marked(B_FILE), `moment ${k}`).toBe(false);
+            if (how === 'shown') expect(marked(A_FILE), `moment ${k}: shown, so kept`).toBe(true);
+            seen.push(how);
+        }
+        expect(seen).toContain('shown');
+    });
+
+    it.each([[1, 1], [1, 2], [2, 1], [2, 2], [3, 1], [3, 2], [4, 1]])('in use, the phone on B just as the mark is put, and on A again as it is asked where it is (reads of the address %i, %i): A\'s file is marked, not B\'s', async (from, times) => {
+        await switchPhoneTo(A);
+        await neitherHolds();
+        servers[A].unlocked = false;
+        await db.getDb();
+        const storage: any = (await import('@react-native-async-storage/async-storage')).default;
+        const chat = holdNext(chatAsked);
+        const reading = db.getGroupChat(g).then(() => 'shown', () => 'refused');
+        await chat.asked;
+        let reads = 0;
+        storage.getItem.mockImplementation(async (k: string) => (k === ANCHOR && ++reads >= from && reads < from + times ? B : h.store.get(k) ?? null));
+        chat.letGo();
+        const how = await reading;
+        storage.getItem.mockImplementation(async (k: string) => h.store.get(k) ?? null);
+        await settle();
+        expect(marked(B_FILE)).toBe(false);
+        if (times === 1) expect(how).toBe('shown');
+        expect([how, marked(A_FILE)], 'shown, so kept').toEqual([how, how === 'shown']);
     });
 
     it.each([

@@ -154,6 +154,8 @@ afterEach(async () => {
 });
 
 const ANA = 'a'.repeat(64);
+/** The account on this phone (the identity above): a deal's own steps and a rating are signed by it or not sent (slice S6c). */
+const ME = 'me'.padEnd(64, '0');
 const fileOf = (url: string) => `beanpool_${new URL(url).hostname}.db`;
 
 /** The copy as a 1.3 build left it for `url`: user_version 3, Beans as REAL, a member, a listing, and the account's own stores. */
@@ -525,10 +527,10 @@ describe('a writer holding the sync lock that asks for the copy during a swap ge
     const TX = { id: 'T1', postId: 'L1', buyerPublicKey: ANA, sellerPublicKey: OTHER, status: 'pending', amount_c: 100, createdAt: '2026-11-11T00:00:00.000Z' };
     const TAKERS: { name: string; run: (db: Db) => Promise<unknown>; answer?: unknown }[] = [
         { name: 'acceptMarketplacePost', run: (db) => db.acceptMarketplacePost('L1', ANA, 1), answer: { success: true, transaction: TX } },
-        { name: 'completeMarketplaceTransaction', run: (db) => db.completeMarketplaceTransaction('T1', ANA), answer: { success: true, transaction: TX } },
-        { name: 'cancelMarketplaceTransaction', run: (db) => db.cancelMarketplaceTransaction('T1', ANA), answer: { success: true } },
+        { name: 'completeMarketplaceTransaction', run: (db) => db.completeMarketplaceTransaction('T1', ME), answer: { success: true, transaction: TX } },
+        { name: 'cancelMarketplaceTransaction', run: (db) => db.cancelMarketplaceTransaction('T1', ME), answer: { success: true } },
         { name: 'requestMarketplacePost', run: (db) => db.requestMarketplacePost('L1', ANA, 1), answer: { success: true, transaction: { ...TX, status: 'requested' } } },
-        { name: 'submitRating', run: (db) => db.submitRating(ANA, OTHER, 5, 'Kind', 'T1'), answer: { success: true } },
+        { name: 'submitRating', run: (db) => db.submitRating(ME, OTHER, 5, 'Kind', 'T1'), answer: { success: true } },
         { name: 'getMemberRatings', run: (db) => db.getMemberRatings(OTHER) },
         { name: 'getRatingsGiven', run: (db) => db.getRatingsGiven(ANA) },
     ];

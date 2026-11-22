@@ -5,7 +5,7 @@ import { LightBarModal } from '../../components/LightBarModal';
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, formatHundredths, freePriceWords, itemDealTitle, itemTrustLine, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
+import { dealStateWords, dealStep, formatHundredths, freePriceWords, isLiveStanding, itemDealTitle, itemTrustLine, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -18,7 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, oldestUnreadAt, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, isLockedGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, oldestUnreadAt, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, syncDealsBetween, stopStandingDeal, lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk, whileChatInPlace, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, isLockedGroupChat, getDmKeyChange, getDmKeyCodeInfo, acceptOfferedPeer, decideMessageRequest, reportDmLine, enterChatInPlace, leaveChatInPlace, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedPane } from '../../components/chat/DmKeyChangedPane';
 import { ChatScrollPage } from '../../components/chat/ChatScrollPage';
@@ -37,6 +37,7 @@ import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist'
 import { dmPeerName, isDmBlocked } from '../../utils/dm-blocked';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
+import { StandingPanel, type StandingLowerStep } from '../../components/StandingDeal';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -94,6 +95,10 @@ const MESSAGE_PAGE_SIZE = 50;
 function keepKeys(prev: string[], next: string[]): string[] {
     return prev.length === next.length && prev.every((k, i) => k === next[i]) ? prev : next;
 }
+
+/** In place (slice S6c): the deals with the person that their own community has answered, by id, and how the asking stands. */
+interface DealsThere { ids: ReadonlyMap<string, { postAuthorPublicKey?: string | null; postType?: string | null }>; state: 'asking' | 'answered' | 'failed' }
+const DEALS_UNASKED: DealsThere = { ids: new Map(), state: 'asking' };
 
 function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promise<T> {
     return Promise.race([
@@ -164,14 +169,15 @@ export default function ChatRoute() {
     if (id && community && !placedNow) return null;
     // A group of that community (slice S6): the group's chat, its id as the node makes it.
     if (id && placedNow?.open === 'in-place' && placedNow.kind === 'group') return <GroupChatView kind="group" id={screenIdOf(String(id))} initialName={name} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
-    if (id && placedNow?.open === 'in-place') return <ChatScreen id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
+    // One screen per chat and community (slice S6c): no deal, or anything else, of one is ever shown under another's name.
+    if (id && placedNow?.open === 'in-place') return <ChatScreen key={placedNow.community + ' ' + id} id={String(id)} inPlace={{ community: placedNow.community, name: placedNow.name }} />;
     if (id && (placedNow?.open === 'move' || placedNow?.open === 'nothing')) return <ChatNotInPlace id={String(id)} where={placedNow} />;
     if (!id || !route || route.for !== String(id)) return null;
     const { view, screenId } = route.answer;
     if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     if (view === 'event') return <EventChatView eventId={screenId} />;
     if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
-    return <ChatScreen id={screenId} />;
+    return <ChatScreen key={screenId} id={screenId} />;
 }
 
 /**
@@ -232,8 +238,9 @@ function ChatNotInPlace({ id, where }: { id: string; where: ChatInPlaceRoute }) 
 
 /**
  * The DM screen, on routeChat's id: a known DM's own spelling, else the link's. `inPlace`: a DM of another community this
- * phone holds, read and written there without a switch (slice S2): every read and write below names it (`at`), and what
- * this slice doesn't do there (deals, photos and voice sent, reports, a profile or a listing opened) is not offered.
+ * phone holds, read and written there without a switch (slice S2): every read and write below names it (`at`). Its deals are
+ * that community's (slice S6c): read from it, and every step on one asked of it, never of the community in use. What isn't
+ * done there is not offered (photos and voice sent, a profile), or says so and offers the move (a listing, a request to answer).
  */
 function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string; name: string } }) {
     const { theme, colors } = useTheme();
@@ -241,6 +248,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     const at = inPlace?.community;
     const { triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();
+    const { recheck } = useNodeStatus();
     const [messages, setMessages] = useState<any[]>([]);
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
@@ -258,7 +266,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     const [postContext, setPostContext] = useState<any>(null);
     // On a community with Beans off (the worldwide one) a post has no price: the header under it says none.
     const nodeProfile = useNodeProfile();
-    const showsBeans = beansOn(nodeProfile?.features);
+    // In place (slice S6c) the profile is the community in use's, and a deal of another community's says what it holds.
+    const showsBeans = !!at || beansOn(nodeProfile?.features);
     // Voice messages only where the community says it takes them (core voiceLinesOn; a live community, 14 Nov): a node from before
     // voice V2 stores one as words with a sound no one can play. Read at send time from the ref, as the recorder holds the
     // onVoice it was given while a recording waits.
@@ -279,6 +288,10 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     const [replyToMessage, setReplyToMessage] = useState<any | null>(null);
     const [editingMessage, setEditingMessage] = useState<any | null>(null);
     const [deals, setDeals] = useState<any[]>([]);
+    // In place (slice S6c): the deals with this person their own community answered since this chat came into view, by id, as
+    // its copy now holds them (syncDealsBetween). A money step shows on no other deal there: a copy not synced since the phone
+    // was last set to it may be weeks old. `failed`: that community didn't answer.
+    const [dealsThere, setDealsThere] = useState<DealsThere>(DEALS_UNASKED);
     const [viewerUri, setViewerUri] = useState<string | null>(null);
     // The first local read has come back (a cold database open is not instant), and what went wrong if it did not.
     const [firstLoadDone, setFirstLoadDone] = useState(false);
@@ -436,6 +449,10 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         dealBtnCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 13 },
         dealBtnReview: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.amber50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.amber200, flex: 1 },
         dealBtnReviewText: { color: theme === 'dark' ? colors.text.body : colors.feedback.warning.fg, fontWeight: '800', fontSize: 13 },
+        standingThere: { paddingHorizontal: 12, paddingTop: 10, backgroundColor: colors.surface.card },
+        dealsUnread: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: colors.surface.card },
+        dealsUnreadText: { flex: 1, minWidth: 160, fontSize: 13, color: colors.text.secondary },
+        dealsUnreadBtn: { flex: 0, minHeight: 44, paddingHorizontal: 16 },
         dealAwaiting: { color: colors.text.secondary, fontSize: 12, fontWeight: '600', fontStyle: 'italic' },
         // Full-screen image viewer
         imageViewerOverlay: { flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' },
@@ -566,7 +583,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     useChatSoftInputMode();
 
     const loadRatedTransactions = useCallback(async () => {
-        // Deals and ratings are the community in use's: none in place (slice S2).
+        // The release lines' ratings are the community in use's: in place (slice S6c) a deal is rated from its card.
         if (!identity?.publicKey || at) return;
         try {
             const db = await getDb();
@@ -665,7 +682,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 } else {
                     setIsDynamicContext(true);
                 }
-                // Track pending transaction for inline action bar (never in place: a deal is the community in use's)
+                // Track pending transaction for inline action bar (in place it comes from that community's deals, below)
                 if (res.pendingTxId && identity.publicKey && !at) {
                     setPendingTx({
                         id: res.pendingTxId,
@@ -696,9 +713,10 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     // and on sync events below so a deal written moments after navigation
     // (e.g. accept-offer → chat) still surfaces without a remount.
     const loadDeals = useCallback(async () => {
-        if (!identity?.publicKey || !peerPubkey || at) return;
+        if (!identity?.publicKey || !peerPubkey || (at && !inViewRef.current)) return;
         try {
-            const next = await getDealsBetween(identity.publicKey, peerPubkey);
+            const next = await getDealsBetween(identity.publicKey, peerPubkey, at);
+            if (at && !inViewRef.current) return;
             // Polled every few seconds — keep the previous reference when nothing
             // changed so unchanged ticks don't re-render the thread.
             setDeals(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
@@ -708,9 +726,33 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     }, [identity?.publicKey, peerPubkey, at]);
 
     React.useEffect(() => { loadDeals(); }, [loadDeals]);
+    // In place (slice S6c): the chat's own community is asked for its deals with this person, one ask at a time; one wanted
+    // while another is on its way (a step just taken) is asked after it, so the newest answer is the last one kept.
+    const dealsAsk = useRef<{ running: Promise<void> | null; again: boolean }>({ running: null, again: false });
+    const askDeals = useCallback((): Promise<void> => {
+        const ask = dealsAsk.current;
+        if (!at || !identity?.publicKey || !peerPubkey || !inViewRef.current) return Promise.resolve();
+        if (ask.running) { ask.again = true; return ask.running; }
+        const me = identity.publicKey;
+        ask.running = (async () => {
+            do {
+                ask.again = false;
+                const ids = await syncDealsBetween(me, peerPubkey, at).catch(() => null);
+                if (!inViewRef.current) return;
+                setDealsThere(prev => (ids ? { ids, state: 'answered' } : prev.state === 'answered' ? prev : { ids: prev.ids, state: 'failed' }));
+                await loadDeals();
+            } while (ask.again && inViewRef.current);
+        })().finally(() => { ask.running = null; });
+        return ask.running;
+    }, [identity?.publicKey, peerPubkey, at, loadDeals]);
+    const askDealsRef = useRef(askDeals);
+    askDealsRef.current = askDeals;
+    // Asked once the person is known, and whenever a deal's own line comes (funded, released, cancelled, a standing deal's).
+    const dealLines = at ? messages.reduce((n, m: any) => n + (m.type === 'system' || m.senderId === 'SYSTEM' ? 1 : 0), 0) : 0;
+    React.useEffect(() => { void askDeals(); }, [askDeals, dealLines]);
     // The peer's key, once read, changes loadDeals, and the focus effect runs again so an ordinary chat's deals read under
-    // it. In place loadDeals does nothing, and that re-run would let go of the community's copy and hold it again, cutting
-    // the first poll from that community's server on its way (#3305 review): there the key arriving runs nothing again.
+    // it. In place that re-run would let go of the community's copy and hold it again, cutting the first poll from that
+    // community's server on its way (#3305 review): there the key arriving runs the effects above and nothing else again.
     const dealsRerun = at ? null : loadDeals;
 
     useFocusEffect(
@@ -728,6 +770,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
             inViewRef.current = true;
             // Held in place (slice S2) before the first read: its copy opens again, once a close still under way is done.
             if (at) enterChatInPlace(at);
+            // Its deals are that community's word from this visit only (slice S6c).
+            if (at) { setDealsThere(DEALS_UNASKED); void askDealsRef.current(); }
 
             let sub: any = null;
             let wsSub: any = null;
@@ -806,6 +850,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 wsSub = DeviceEventEmitter.addListener(at ? PUSH_RECEIVED_EVENT : 'ws_activity', () => {
                     if (active && AppState.currentState === 'active') {
                         syncSingleConversation(id as string, at).then(afterSingle);
+                        // In place, a push may be a deal's step with no line of its own (a standing deal's ask).
+                        if (at) void askDealsRef.current();
                     }
                 });
             }
@@ -1197,8 +1243,8 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     };
 
     const handleReleaseCredits = async () => {
-        // A deal is the community in use's: never released from a chat in place (slice S2).
-        if (!pendingTx || !identity?.publicKey || at) return;
+        // In place (slice S6c) it is released in the deal's own community, by name (`at`), never in the one in use.
+        if (!pendingTx || !identity?.publicKey) return;
         await KeyboardController.dismiss(); // Alert = separate window; see review-modal note
         // English writes one form for both; a language with more forms has them.
         Alert.alert(
@@ -1212,7 +1258,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                     onPress: async () => {
                         setActionLoading(true);
                         try {
-                            await completeMarketplaceTransaction(pendingTx.id, identity.publicKey);
+                            await whileChatInPlace(at, () => completeMarketplaceTransaction(pendingTx.id, identity.publicKey, undefined, at));
                             hapticSuccess();
                             Alert.alert(t('Success'), t('The Beans have been released!'));
                             
@@ -1232,9 +1278,12 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                                 loadDeals();
                                 loadMessages(true);
                             });
+                            void askDeals();
                         } catch (e: any) {
                             hapticWarning();
                             Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release the Beans.'));
+                            // No answer, or a refusal: what became of it is that community's word, asked again.
+                            void askDeals();
                         } finally {
                             setActionLoading(false);
                         }
@@ -1245,8 +1294,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     };
 
     const handleCancelEscrow = async () => {
-        // A deal is the community in use's: never cancelled from a chat in place (slice S2).
-        if (at) return;
+        // In place (slice S6c), in the deal's own community, as the release above.
         if (!pendingTx || !identity?.publicKey) return;
         await KeyboardController.dismiss();
         Alert.alert(
@@ -1260,7 +1308,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                     onPress: async () => {
                         setActionLoading(true);
                         try {
-                            await cancelMarketplaceTransaction(pendingTx.id, identity.publicKey);
+                            await whileChatInPlace(at, () => cancelMarketplaceTransaction(pendingTx.id, identity.publicKey, at));
                             hapticWarning();
                             Alert.alert(t('Cancelled'), t('The hold has been cancelled and the Beans refunded.'));
                             syncSingleConversation(id as string, at).then(() => {
@@ -1268,9 +1316,11 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                                 loadDeals();
                                 loadMessages(true);
                             });
+                            void askDeals();
                         } catch (e: any) {
                             hapticWarning();
                             Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel the hold.'));
+                            void askDeals();
                         } finally {
                             setActionLoading(false);
                         }
@@ -1286,20 +1336,31 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
     // answer (core's dealStep `to-answer`: the web's strip carries it too, and Talk's Action Required counts it, so the chat
     // it opens must show it). My own request, a declined one and a stranger's are not here.
     const myKey = identity?.publicKey;
+    // In place (slice S6c) that community's copy may not hold a deal's listing: whose it is, and its kind, as its node says them.
+    const shownDeals = React.useMemo(() => (at ? deals.map(d => ({
+        ...d,
+        postAuthorPublicKey: d.postAuthorPublicKey ?? dealsThere.ids.get(d.txId)?.postAuthorPublicKey,
+        postType: d.postType ?? dealsThere.ids.get(d.txId)?.postType,
+    })) : deals), [deals, dealsThere, at]);
     // Which deals and which buttons are core's one rule (dealMoves, through utils/deal-rows): a standing deal's rows never
     // show Release or Cancel, and only its first period asks for a review (DESIGN-standing-deals-upfront-fable §0, §3).
     const activeDeals = React.useMemo(
-        () => (myKey ? deals.filter(d => isChatStripDeal(d, myKey)) : []),
-        [deals, myKey]
+        () => (myKey ? shownDeals.filter(d => isChatStripDeal(d, myKey)) : []),
+        [shownDeals, myKey]
     );
+    // The deals a money step may show on: in place (slice S6c), those their own community has answered this visit.
+    const actDeals = React.useMemo(() => (at ? shownDeals.filter(d => dealsThere.ids.has(d.txId)) : shownDeals), [shownDeals, dealsThere, at]);
+    // A standing deal's panel is on its listing's page, which doesn't open in place: there it is here, over the cards.
+    const standing = React.useMemo(() => (at && myKey ? shownDeals.filter(d => isLiveStanding(localDealRow(d, myKey))) : []), [shownDeals, at, myKey]);
+    const standingThere = standing.filter(d => dealsThere.ids.has(d.txId));
 
     // The inline bar's deal, as core reads it: Release and Cancel only where dealMoves offers them. A deal the phone hasn't
     // read yet shows no bar (never a button the node would refuse).
     const pendingMoves = React.useMemo(() => {
         if (!pendingTx || !myKey) return null;
-        const d = deals.find(x => x.txId === pendingTx.id);
+        const d = actDeals.find(x => x.txId === pendingTx.id);
         return d ? localDealMoves(d, myKey) : null;
-    }, [deals, pendingTx, myKey]);
+    }, [actDeals, pendingTx, myKey]);
     const showInlineBar = !!pendingTx && !!pendingMoves?.release && postContext?.status === 'pending';
 
     // Filter out the deal from the top strip if it is currently displayed in the richer bottom Inline Action Bar
@@ -1315,10 +1376,10 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
         let selectedDeal = null;
         const me = identity?.publicKey ?? '';
         if (focusTx) {
-            selectedDeal = deals.find(d => d.txId === focusTx && (localDealMoves(d, me)?.cancelHold || localDealMoves(d, me)?.release));
+            selectedDeal = actDeals.find(d => d.txId === focusTx && (localDealMoves(d, me)?.cancelHold || localDealMoves(d, me)?.release));
         }
         if (!selectedDeal) {
-            selectedDeal = deals.find(d => localDealMoves(d, me)?.release);
+            selectedDeal = actDeals.find(d => localDealMoves(d, me)?.release);
         }
 
         if (selectedDeal) {
@@ -1338,7 +1399,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
             setPendingTx(null);
             setPostContext(null);
         }
-    }, [deals, isDynamicContext, focusTx, identity?.publicKey]);
+    }, [actDeals, isDynamicContext, focusTx, identity?.publicKey]);
 
     // postId -> item title, so escrow events can be labelled by deal in the merged timeline.
     const dealTitleByPostId = React.useMemo(() => {
@@ -1349,43 +1410,47 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
 
     /** `amount_c`: what the deal holds, whole hundredths of a Bean (null: no figure, said "—"). */
     const handleReleaseDeal = async (txId: string, amount_c: number | null) => {
-        if (!identity?.publicKey || at) return;
+        if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
         Alert.alert(t('Release Beans'), tn((amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.', { n: formatHundredths(amount_c) }), [
             { text: t('Cancel'), style: 'cancel' },
             { text: t('Release'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
                 try {
-                    await completeMarketplaceTransaction(txId, identity.publicKey);
+                    await whileChatInPlace(at, () => completeMarketplaceTransaction(txId, identity.publicKey, undefined, at));
                     hapticSuccess();
                     if (peerPubkey) setPromptReviewForTx({ txId, targetPubkey: peerPubkey, targetCallsign: peerName });
                     await syncSingleConversation(id as string, at);
+                    await askDeals();
                     await loadDeals();
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
                     Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release the Beans.'));
+                    void askDeals();
                 } finally { setActionLoading(false); }
             }}
         ]);
     };
 
     const handleCancelDeal = async (txId: string) => {
-        if (!identity?.publicKey || at) return;
+        if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
         Alert.alert(t('Cancel Deal'), t('Cancel this deal? The Beans held in trust will be refunded.'), [
             { text: t('Keep'), style: 'cancel' },
             { text: t('Cancel Deal'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
                 try {
-                    await cancelMarketplaceTransaction(txId, identity.publicKey);
+                    await whileChatInPlace(at, () => cancelMarketplaceTransaction(txId, identity.publicKey, at));
                     hapticWarning();
                     await syncSingleConversation(id as string, at);
+                    await askDeals();
                     await loadDeals();
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
                     Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel.'));
+                    void askDeals();
                 } finally { setActionLoading(false); }
             }}
         ]);
@@ -1393,6 +1458,68 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
 
     const handleReviewDeal = (deal: any) => {
         if (peerPubkey) setPromptReviewForTx({ txId: deal.txId, targetPubkey: peerPubkey, targetCallsign: peerName });
+    };
+
+    // ---- In place (slice S6c): a standing deal's steps, and what isn't done here ----
+
+    // Stop, as the listing's page asks it (the panel confirms, in core's words), asked of the deal's own community.
+    const stopThere = async (standingId: string) => {
+        if (!myKey) return;
+        setActionLoading(true);
+        try {
+            await whileChatInPlace(at, () => stopStandingDeal(standingId, myKey, at));
+            hapticSuccess();
+        } catch (e: any) {
+            hapticWarning();
+            Alert.alert(t('Failed'), e?.message ? signedRequestWords(e.message) : t('Something went wrong. Try again in a moment.'));
+        } finally {
+            await askDeals();
+            setActionLoading(false);
+        }
+    };
+    // A short week's lowering, ask, answer or take-back: a refusal goes back to the panel in words, which shows it.
+    const lowerThere = async (step: StandingLowerStep) => {
+        try {
+            await whileChatInPlace(at, async () => {
+                if (step.move === 'lower') await lowerStandingPeriod(step.standingId, step.changeId, step.periodNo, step.beans_c, myKey, at);
+                else if (step.move === 'answer') await answerStandingAsk(step.standingId, step.changeId, step.yes, myKey, at);
+                else await withdrawStandingAsk(step.standingId, step.changeId, myKey, at);
+            });
+        } catch (e: any) {
+            hapticWarning();
+            void askDeals();
+            throw new Error(e?.message ? signedRequestWords(e.message) : t('Something went wrong. Try again in a moment.'));
+        }
+        hapticSuccess();
+        // Wait a little for that community's word, so the card doesn't offer the same step again meanwhile; never long.
+        await Promise.race([askDeals(), new Promise(done => setTimeout(done, 5000))]);
+    };
+    // A listing (its deal's requests are answered there too) opens in its own community: says so, and one tap moves the phone
+    // there through the one switch (utils/open-in-community.ts). A second tap while it moves does nothing.
+    const movingThere = useRef(false);
+    const openThere = async (postId: string, txId?: string) => {
+        if (!inPlace || !identity?.publicKey || movingThere.current) return;
+        movingThere.current = true;
+        try {
+            const moved = await openInCommunity(inPlace.community, `/post/${postId}${txId ? `?txId=${encodeURIComponent(txId)}` : ''}`, identity.publicKey, recheck);
+            if (moved !== 'switched') Alert.alert(inPlace.name, t('Something went wrong. Try again in a moment.'));
+        } finally {
+            movingThere.current = false;
+        }
+    };
+    const offerThere = async (title: string | null | undefined, postId: string, txId?: string) => {
+        if (!inPlace) return;
+        await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+        Alert.alert(inPlace.name, t('{title} is in {community}. Opens that community.', { title: title || t('Deal'), community: inPlace.name }), [
+            { text: t('Cancel'), style: 'cancel' },
+            { text: t('Open {community} ›', { community: inPlace.name }), onPress: () => { void openThere(postId, txId); } },
+        ]);
+    };
+    /** A listing named in this chat: its page, or in place the offer to open it in its own community. */
+    const openListing = (postId: string, title?: string | null, txId?: string) => {
+        if (at) void offerThere(title, postId, txId);
+        else if (txId) router.push({ pathname: '/post/[id]', params: { id: postId, txId } });
+        else router.push(`/post/${postId}`);
     };
 
     // ⚡ Bolt: O(1) Map lookup for parent messages in reply threads instead of repeated O(M) .find() scans
@@ -1534,13 +1661,13 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 </View>
                 <Text style={chat.systemTimestamp}>{messageTime(item)}</Text>
 
-                {/* Inline post link — only when it points somewhere the sticky header doesn't already cover. Not in place
-                    (slice S2): the listing screen reads the community in use, which never has this chat's listing. */}
-                {!at && item.metadata?.postId && item.metadata.postId !== postContext?.id && (
+                {/* Inline post link — only when it points somewhere the sticky header doesn't already cover. In place (slice
+                    S6c) it offers the listing's own community: the listing screen reads the community in use. */}
+                {item.metadata?.postId && item.metadata.postId !== postContext?.id && (
                     <Pressable
                         accessibilityRole="button"
                         style={chat.systemActionBtn}
-                        onPress={() => router.push(`/post/${item.metadata.postId}`)}
+                        onPress={() => openListing(item.metadata.postId, dealTitleByPostId[item.metadata.postId])}
                     >
                         <MaterialCommunityIcons name="tag-outline" size={14} color={colors.brand.primary} style={{ marginRight: 4 }} />
                         <Text style={chat.systemActionText}>{t('View Post')}</Text>
@@ -1748,7 +1875,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 editing={editingMessage?.id === item.id}
                 quote={quote}
                 about={item.about ? (
-                    <ChatAboutCard about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => { if (!at) router.push(`/post/${postId}`); }} />
+                    <ChatAboutCard about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => openListing(postId, item.about.title)} />
                 ) : null}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
                     // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept
@@ -1900,6 +2027,23 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                 barsRoom={fit.bars}
             >
 
+            {/* In place (slice S6c): this person's standing deals, and the one line that says their community didn't answer
+                about its deals (their money steps wait for its word), with the next try. */}
+            {standingThere.map(d => (
+                <View key={`standing-${d.txId}`} style={styles.standingThere}>
+                    <StandingPanel tx={{ ...localDealRow(d, myKey!), amount_c: d.amount_c ?? null }} actingAs={myKey!} busy={actionLoading}
+                        onStop={() => { void stopThere(String(d.standing_id)); }} onLower={lowerThere} />
+                </View>
+            ))}
+            {!!inPlace && dealsThere.state === 'failed' && (activeDeals.length > 0 || standing.length > 0) && (
+                <View style={styles.dealsUnread} testID="deals-unread">
+                    <Text style={styles.dealsUnreadText} accessibilityRole="alert">{t("Can't reach {name} right now. Check your connection and try again.", { name: inPlace.name })}</Text>
+                    <Pressable accessibilityRole="button" style={[styles.dealBtn, styles.dealBtnReview, styles.dealsUnreadBtn]} onPress={() => { void askDeals(); }}>
+                        <Text style={styles.dealBtnReviewText}>{t('Try again')}</Text>
+                    </Pressable>
+                </View>
+            )}
+
             {/* Pinned active-deals strip — per-deal actions live here (one card per live deal),
                 always visible so a Release/Review is never buried in the conversation scroll. While the key card is up it
                 sits under the card in the page they scroll as, never in the thread (DmKeyChangedPane). */}
@@ -1911,7 +2055,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                                 key={d.txId}
                                 accessibilityRole="button"
                                 style={styles.dealCard}
-                                onPress={() => d.postId && router.push({ pathname: '/post/[id]', params: { id: d.postId, txId: d.txId } })}
+                                onPress={() => d.postId && openListing(d.postId, d.postTitle, d.txId)}
                             >
                                 {/* A per-item deal says how many, as Your deals does: "3 × Solar Panels". */}
                                 <Text style={styles.dealCardTitle} numberOfLines={1}>{d.postTitle ? itemDealTitle(d, d.postTitle) : t('Deal')}</Text>
@@ -1925,9 +2069,18 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                                     </Text>
                                 )}
                                 {(() => {
-                                const moves = localDealMoves(d, identity!.publicKey);
+                                // In place, no step before the deal's own community has answered about it this visit.
+                                const acts = !at || dealsThere.ids.has(d.txId);
+                                const moves = acts ? localDealMoves(d, identity!.publicKey) : null;
+                                // What is done only there, said on the card: a request to answer, a deal that community didn't name.
+                                const onlyThere = !!inPlace && !!d.postId && (acts ? !!moves?.answer : dealsThere.state === 'answered');
                                 return (
                                 <View style={styles.dealCardActions}>
+                                    {onlyThere && (
+                                        <Pressable accessibilityRole="button" style={[styles.dealBtn, styles.dealBtnReview]} onPress={() => { void offerThere(d.postTitle, d.postId, d.txId); }}>
+                                            <Text style={styles.dealBtnReviewText} numberOfLines={2}>{t('Open {community} ›', { community: inPlace!.name })}</Text>
+                                        </Pressable>
+                                    )}
                                     {moves?.release && (
                                         <>
                                             <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release Beans for {title}', { title: d.postTitle }) : t('Release Beans for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.amount_c ?? null)}>
@@ -1959,7 +2112,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
 
             {/* Sticky Marketplace Header */}
             {postContext && (
-                <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${postContext.id}`)} style={styles.stickyHeader}>
+                <Pressable accessibilityRole="button" onPress={() => openListing(postContext.id, postContext.title)} style={styles.stickyHeader}>
                     <View style={styles.stickyHeaderLeft}>
                         <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.primary} />
                         <View style={{ marginLeft: 12 }}>
@@ -2249,6 +2402,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                     txId={promptReviewForTx.txId}
                     targetPubkey={promptReviewForTx.targetPubkey}
                     targetCallsign={promptReviewForTx.targetCallsign}
+                    community={at}
                     onClose={() => {
                         setPromptReviewForTx(null);
                         if (triggerReview === 'true') {
@@ -2260,6 +2414,7 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                         setPromptReviewForTx(null);
                         loadRatedTransactions();
                         loadDeals(); // reviewed deal drops off the pinned strip
+                        void askDeals();
                         if (triggerReview === 'true') {
                             router.navigate('/(tabs)/chats');
                         }

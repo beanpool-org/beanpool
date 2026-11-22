@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, Modal, ActivityIndicator, StyleSheet, ScrollView, Platform, Keyboard } from 'react-native';
 import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { submitRating, getDb } from '../utils/db';
+import { submitRating, getDb, whileChatInPlace } from '../utils/db';
 import { useIdentity } from '../app/IdentityContext';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
@@ -18,9 +18,11 @@ interface ReviewModalProps {
     targetCallsign: string;
     onClose: () => void;
     onSuccess: () => void;
+    /** A deal of a chat open in place (slice S6c): the deal's own community, where the rating goes. Nothing is read of the one in use. */
+    community?: string;
 }
 
-export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClose, onSuccess }: ReviewModalProps) {
+export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClose, onSuccess, community }: ReviewModalProps) {
     const { colors } = useTheme();
     const fieldScroll = useScrollFieldIntoView();
     const styles = useStyles(makeStyles);
@@ -49,7 +51,7 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
     }, []);
 
     React.useEffect(() => {
-        if (visible && txId && identity?.publicKey) {
+        if (visible && txId && identity?.publicKey && !community) {
             (async () => {
                 try {
                     const db = await getDb();
@@ -71,13 +73,13 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
                 }
             })();
         }
-    }, [visible, txId, identity?.publicKey]);
+    }, [visible, txId, identity?.publicKey, community]);
 
     const handleSubmit = async () => {
         if (!identity) return;
         setSubmitting(true);
         try {
-            await submitRating(identity.publicKey, targetPubkey, stars, comment, txId);
+            await whileChatInPlace(community, () => submitRating(identity.publicKey, targetPubkey, stars, comment, txId, community));
             onSuccess();
         } catch (e: any) {
             Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to submit review'));

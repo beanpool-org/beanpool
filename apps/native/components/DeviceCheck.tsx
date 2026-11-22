@@ -141,7 +141,7 @@ export function DeviceCheck({ onSignInProbe }: {
                     {button(t('Read what is copied'), () => void readWhatIsCopied(), 'device-check-read')}
                     {check.pasteButton ? (
                         <Clipboard.ClipboardPasteButton
-                            onPress={(data) => add({ pasted: pastedOnly(data) })}
+                            onPress={(data) => setCheck((c) => ({ ...c, pasted: [...(c.pasted ?? []), pastedOnly(data)] }))}
                             acceptedContentTypes={['plain-text', 'url']}
                             displayMode="iconOnly"
                             backgroundColor={colors.action.cta}

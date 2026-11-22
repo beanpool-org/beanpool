@@ -40,7 +40,7 @@ vi.mock('expo-clipboard', () => ({
     getStringAsync: async () => INVITE,
     getUrlAsync: async () => null,
     setStringAsync: async (text: string) => { phone.copied.push(text); return true; },
-    ClipboardPasteButton: (props: Record<string, any>) => createElement('button', { 'data-testid': 'apple-paste', onClick: () => props.onPress({ type: 'text', text: INVITE }) }),
+    ClipboardPasteButton: (props: Record<string, any>) => createElement('button', { 'data-testid': 'apple-paste', onClick: () => { props.onPress({ type: 'text', text: INVITE }); props.onPress({ type: 'text', text: null }); } }),
 }));
 vi.mock('expo-notifications', () => {
     const says = () => ({ status: phone.iosStatus === 2 ? 'granted' : 'undetermined', granted: phone.iosStatus === 2, canAskAgain: true, expires: 'never', ios: { status: phone.iosStatus } });
@@ -107,7 +107,7 @@ it('draws both sections, and Copy results holds every field with its raw value',
     }
     const first60 = `length ${INVITE.length}, first 60: ${JSON.stringify(INVITE.slice(0, 60))}`;
     for (const raw of [
-        'ios 18.7, isPasteButtonAvailable: true', 'hasStringAsync: true', 'hasUrlAsync: false', `getStringAsync: ${first60}`, 'getUrlAsync: null', `type: text, ${first60}`,
+        'ios 18.7, isPasteButtonAvailable: true', 'hasStringAsync: true', 'hasUrlAsync: false', `getStringAsync: ${first60}`, 'getUrlAsync: null', `type: text, ${first60}; then type: text, text: null`,
         'ios.status: 0 (NOT_DETERMINED), canAskAgain: true', 'status: undetermined, ios.status: 3 (PROVISIONAL)', 'status: granted, ios.status: 2 (AUTHORIZED)',
     ]) expect(results).toContain(raw);
     for (const note of [

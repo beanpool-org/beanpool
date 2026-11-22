@@ -27,8 +27,8 @@ export interface DeviceCheckAnswers {
     hasUrl?: Answer<boolean>;
     text?: Answer<string>;
     url?: Answer<string | null>;
-    /** What Apple's button handed over, without a picture's own data. */
-    pasted?: { type: 'text'; text: string } | { type: 'image'; width: number; height: number };
+    /** Everything Apple's button handed over, in order: one tap gives one event per item copied. */
+    pasted?: Pasted[];
     /** The permission when the screen opened: whether this phone can answer section B at all. */
     opened?: Answer<NotificationPermissionsStatus>;
     now?: Answer<NotificationPermissionsStatus>;
@@ -45,15 +45,24 @@ export interface DeviceCheckRow {
     raw: string | null;
 }
 
-/** A pasted payload with only what the check shows. */
-export function pastedOnly(data: PasteEventPayload): DeviceCheckAnswers['pasted'] {
+/** One event from Apple's button, with only what the check shows: never a picture's own data. */
+export type Pasted = { type: 'text'; text: string | null } | { type: 'image'; width: number; height: number };
+
+/** A link the phone couldn't load arrives as text with no text in it (expo-clipboard's ClipboardPasteButton.swift). */
+export function pastedOnly(data: PasteEventPayload): Pasted {
     return data.type === 'text'
-        ? { type: 'text', text: data.text }
+        ? { type: 'text', text: data.text ?? null }
         : { type: 'image', width: data.size.width, height: data.size.height };
 }
 
 /** Its length and its first 60 characters, quoted so a line break shows. */
 const start = (text: string) => `length ${text.length}, first 60: ${JSON.stringify(text.slice(0, 60))}`;
+
+const pastedWords = (p: Pasted) => (p.type === 'image' ? t('A picture.')
+    : p.text === null ? t('Text, with nothing in it.')
+    : t('Text: {length} characters.', { length: p.text.length }));
+const pastedRaw = (p: Pasted) => (p.type === 'image' ? `type: image, ${p.width} x ${p.height}`
+    : `type: text, ${p.text === null ? 'text: null' : start(p.text)}`);
 
 function row<T>(id: string, label: string, call: string, got: Answer<T> | undefined, notYet: string, said: (value: T) => string, raw: (value: T) => string): DeviceCheckRow {
     if (!got) return { id, label, said: notYet, raw: null };
@@ -63,7 +72,7 @@ function row<T>(id: string, label: string, call: string, got: Answer<T> | undefi
 
 /** Section A. */
 export function inviteRows(c: DeviceCheckAnswers): DeviceCheckRow[] {
-    const pasted = c.pasted;
+    const pasted = c.pasted ?? [];
     return [
         {
             id: 'phone',
@@ -83,12 +92,8 @@ export function inviteRows(c: DeviceCheckAnswers): DeviceCheckRow[] {
         {
             id: 'apple-button',
             label: t("What Apple's button handed over"),
-            said: !pasted ? t('Not tapped yet.')
-                : pasted.type === 'text' ? t('Text: {length} characters.', { length: pasted.text.length })
-                : t('A picture.'),
-            raw: !pasted ? null
-                : pasted.type === 'text' ? `type: text, ${start(pasted.text)}`
-                : `type: image, ${pasted.width} x ${pasted.height}`,
+            said: pasted.length ? pasted.map(pastedWords).join(' ') : t('Not tapped yet.'),
+            raw: pasted.length ? pasted.map(pastedRaw).join('; then ') : null,
         },
     ];
 }

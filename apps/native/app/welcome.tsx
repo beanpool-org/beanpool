@@ -121,6 +121,14 @@ const DEAD_INVITE_REASONS = new Set(['used', 'expired', 'invalid', 'malformed'])
 /** The invite check's answers about the address: the address box is drawn, even for one the invite named. 'unknown_inviter'
  *  is one: its words say to check it is the right community. */
 const ADDRESS_REASONS = new Set(['invites_off', 'not_a_community', 'unknown_inviter']);
+/** The community an invite in hand is checked at: the one its own link names, else the address in the box. '' for none. */
+function checkedAt(code: string, address: string): string {
+    let origin: string | null;
+    try { origin = extractNodeOrigin(code.trim()); } catch { origin = null; }
+    return normalizeNodeUrl(origin || address.trim());
+}
+/** A code as one community answered it: a community that holds no such code calls a good one 'invalid' too (engine members.ts). */
+const deadKey = (at: string, code: string) => `${normalizeNodeUrl(at)}\n${normaliseInviteCode(code.trim())}`;
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
@@ -435,17 +443,19 @@ export default function WelcomeScreen() {
      * of #3361).
      * - A dead code (used by someone else, expired, not recognised): a link's held invite is never offered again, or every
      *   launch would reopen this step on it. A good code at the wrong address, or at a community whose invites are off for
-     *   now, stays held. A newer one held meanwhile stays too. And it goes with the step's ‹ ({@link goBack}): "I have an
-     *   invite" then looks for one again (the phone's held invite, the clipboard), never back at the dead code (review of #3361).
+     *   now, stays held. A newer one held meanwhile stays too. And it is set aside with the community that said so (`at`):
+     *   the step's ‹ ({@link goBack}) drops it from hand while that community is the one in hand, and "I have an invite"
+     *   takes no copy of it from the clipboard ({@link handleInviteTap}), so the tap looks for another, never back at the
+     *   dead code. At another address the same code may be live: it stays (review of #3371). A paste or a scan the member
+     *   chooses takes it again, and the community says so again.
      * - An answer about the address: its box is drawn, to put it right.
      */
-    const deadCodesRef = useRef(new Set<string>());
-    const inviteRefused = useCallback((code: string, reason: string | undefined) => {
+    const deadCodesRef = useRef(new Map<string, string>());
+    const inviteRefused = useCallback((code: string, reason: string | undefined, at: string) => {
         if (!reason) return;
         if (DEAD_INVITE_REASONS.has(reason)) {
             void forgetHeldInvite(AsyncStorage, code);
-            const dead = normaliseInviteCode(code.trim());
-            if (dead) deadCodesRef.current.add(dead);
+            if (normaliseInviteCode(code.trim())) deadCodesRef.current.set(deadKey(at, code), reason);
         }
         if (ADDRESS_REASONS.has(reason)) setAddressAsked(true);
     }, []);
@@ -980,7 +990,8 @@ export default function WelcomeScreen() {
     /**
      * Our own "I have an invite" (utils/invite-arrival.ts): an invite held on the phone first, never asking for one it has;
      * then on Android and iOS 15 the clipboard, read at this tap and kept only if it is an invite. On iOS 16 and later
-     * nothing is read (only Apple's button may). No invite found: Your invite.
+     * nothing is read (only Apple's button may). No invite found: Your invite. A copied invite its community has called
+     * dead (inviteRefused) is not taken again: Your invite, with that community's words.
      */
     async function handleInviteTap() {
         setError(null);
@@ -993,12 +1004,24 @@ export default function WelcomeScreen() {
             noteInviteAddress(held.invite, held.server);
         } else if (!inviteCodeRef.current && ourButtonReadsClipboard({ os: Platform.OS, pasteButton: Clipboard.isPasteButtonAvailable })) {
             const invite = inviteOnly(await Clipboard.getStringAsync().catch(() => ''));
-            if (invite) {
+            const dead = invite ? deadAnswerFor(invite) : null;
+            if (invite && !dead) {
                 await processFullUrl(invite);
                 return;
             }
+            if (dead) setInviteNote(inviteProblemMessage(dead.reason, dead.at));
         }
         setMode('create');
+    }
+
+    /** What a community said of this invite's code, if it set the code aside as dead there: the community its link names, else the one in hand. */
+    function deadAnswerFor(invite: string): { reason: string; at: string } | null {
+        let read: { code: string | null; origin: string | null };
+        // An address that isn't plain: processFullUrl refuses it and says why.
+        try { read = readInviteText(invite); } catch { return null; }
+        const at = normalizeNodeUrl(read.origin || createAnchorUrl.trim());
+        const reason = deadCodesRef.current.get(deadKey(at, read.code ?? invite));
+        return reason ? { reason, at } : null;
     }
 
     /** Your invite's Next: the box holds an invite (a link, a code, a code typed in small letters), or the one line says not. */
@@ -1439,7 +1462,7 @@ export default function WelcomeScreen() {
                 if (cancelled || !check) return;
                 setGreeting({ at: nodeUrl, code: codeHere, community: check.communityName || null, inviter: check.valid ? check.inviterCallsign || null : null });
                 setRefusal(refused ? { at: nodeUrl, code: codeHere, reason: check.reason } : null);
-                if (refused) inviteRefused(codeHere, check.reason);
+                if (refused) inviteRefused(codeHere, check.reason, nodeUrl);
             }).catch(() => {});
         }, 600);
         return () => { cancelled = true; clearTimeout(timer); };
@@ -1559,7 +1582,7 @@ export default function WelcomeScreen() {
                         return;
                     }
                     if (spent !== 'carryOn') {
-                        inviteRefused(parsedCode, check.reason);
+                        inviteRefused(parsedCode, check.reason, nodeUrl);
                         setError(inviteProblemMessage(check.reason, nodeUrl));
                         return;
                     }
@@ -1680,7 +1703,7 @@ export default function WelcomeScreen() {
                 // done as at the check above. No answer, or a good code: it stays held.
                 const heldCode = normaliseInviteCode(rawInvite);
                 const again = await import('../utils/db').then(({ checkInvite }) => checkInvite(heldCode, nodeUrl)).catch(() => null);
-                if (again && !again.valid) inviteRefused(heldCode, again.reason);
+                if (again && !again.valid) inviteRefused(heldCode, again.reason, nodeUrl);
                 // Nothing answers there: the address it tried is drawn, to be read and put right.
                 if (!again) setAddressAsked(true);
                 // The reason: a lower layer's sentence in the member's language, or the node's own words as they came.
@@ -2527,8 +2550,9 @@ export default function WelcomeScreen() {
 
 
     function goBack() {
-        // A code its community called dead is not kept in hand: "I have an invite" reads the phone again (inviteRefused).
-        if (deadCodesRef.current.has(normaliseInviteCode(inviteCodeRef.current.trim()))) setInviteCode('');
+        // A code the community in hand called dead is not kept in hand: "I have an invite" reads the phone again (inviteRefused).
+        const code = inviteCodeRef.current;
+        if (deadCodesRef.current.has(deadKey(checkedAt(code, createAnchorUrl), code))) setInviteCode('');
         setMode('home');
         setError(null);
         setInviteNote(null);

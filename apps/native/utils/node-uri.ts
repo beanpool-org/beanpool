@@ -7,17 +7,24 @@
  */
 import { useEffect, useState } from 'react';
 import { anchorUrl } from './node-post';
+import { photoOnCommunity } from './photo-address';
 
-export function useNodeUri(url: string | null | undefined): string | null {
-    const relative = typeof url === 'string' && url.startsWith('/');
+/** The address of the community in use, read once something is drawn from it (`wanted`): null until then, and with none. */
+export function useCommunityAddress(wanted: boolean): string | null {
     const [anchor, setAnchor] = useState<string | null>(null);
     useEffect(() => {
-        if (!relative) return;
+        if (!wanted) return;
         let live = true;
         void anchorUrl().then((a) => { if (live) setAnchor(a); }).catch(() => {});
         return () => { live = false; };
-    }, [relative]);
+    }, [wanted]);
+    return anchor;
+}
+
+export function useNodeUri(url: string | null | undefined): string | null {
+    const relative = typeof url === 'string' && url.startsWith('/');
+    const anchor = useCommunityAddress(relative);
     if (!url) return null;
     if (!relative) return url;
-    return anchor ? `${anchor.replace(/\/+$/, '')}${url}` : null;
+    return anchor ? photoOnCommunity(anchor, url) : null;
 }

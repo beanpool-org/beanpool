@@ -175,13 +175,15 @@ export function LearnForm({ use, initial, onSend, keepPhotosOnly = false, onEdit
                         const out = takenOff.includes(i);
                         // Only an address the web's image allow-list lets through is drawn (lib/avatar.ts), as on the page itself.
                         const shown = resolveImageUrl(src);
+                        const says = out ? t('Keep this photo') : t('Remove photo');
                         return (
                             <figure key={`${i}-${src}`} data-testid="learn-form-page-photo" data-kept={out ? 'false' : 'true'} className="m-0 flex flex-col gap-1">
                                 {shown && <img src={shown} alt={t('Photo {n}', { n: i + 1 })} className={`w-full aspect-[4/3] object-cover rounded-xl ${out ? 'opacity-40' : ''}`} />}
-                                {/* Its label names the picture, so a screen reader doesn't hear three alike (review of #3353, N6). */}
+                                {/* Its name is the words on it, whole, so voice control finds it by them, then which picture, so a screen reader
+                                    doesn't hear three alike (reviews of #3353, N6, and #3355). The phone's is the same (learn-keep.ts photoToggleName). */}
                                 <button type="button" data-testid="learn-form-photo-toggle" disabled={sending} onClick={() => toggleTakenOff(i)} className={SMALL}
-                                    aria-label={out ? t('Keep photo {n}', { n: i + 1 }) : t('Remove photo {n}', { n: i + 1 })}>
-                                    {out ? t('Keep this photo') : t('Remove photo')}
+                                    aria-label={t('{list}, {item}', { list: says, item: t('Photo {n}', { n: i + 1 }) })}>
+                                    {says}
                                 </button>
                             </figure>
                         );

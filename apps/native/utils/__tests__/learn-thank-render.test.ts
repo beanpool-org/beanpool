@@ -58,6 +58,8 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: h.identity }) }));
 vi.mock('../use-learn-mode', () => ({ useLearnMode: () => h.mode }));
+// A picture the node gives by path is drawn from the community's address (utils/node-uri.ts): read from the phone's store on a device.
+vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => 'https://node.test') }));
 vi.mock('../../components/learn/useLearnWriter', () => ({
     useLearnWriter: (live: boolean) => (live ? { checks: h.checks, waiting: 0 } : { checks: false, waiting: 0 }),
     readMyDrafts: vi.fn(async () => null),

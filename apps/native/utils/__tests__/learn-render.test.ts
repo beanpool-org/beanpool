@@ -69,6 +69,8 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: h.identity }) }));
 vi.mock('../use-learn-mode', () => ({ useLearnMode: () => h.mode }));
+// A picture the node gives by path is drawn from the community's address (utils/node-uri.ts): read from the phone's store on a device.
+vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => 'https://node.test') }));
 // Who is writing (slice K4): a member with nothing waiting, here; learn-write-render.test.ts covers the rest.
 vi.mock('../../components/learn/useLearnWriter', () => ({ useLearnWriter: () => ({ checks: false, waiting: 0 }), readMyDrafts: vi.fn(async () => null) }));
 vi.mock('../db', () => ({

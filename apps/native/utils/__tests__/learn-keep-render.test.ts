@@ -2,6 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -556,8 +559,9 @@ describe('an Edit takes a picture off a page; the forms leave the node\'s credit
         expect(rows()).toEqual(ADDR.map((a) => `kept:https://node.test${a}`));
         expect(q('learn-new-page-photos')!.textContent).toContain('A photo you remove is taken off this page for everyone when you save.');
         expect([0, 1, 2].map((i) => toggle(i).textContent)).toEqual(['Remove photo', 'Remove photo', 'Remove photo']);
-        // A screen reader hears which picture each button is for (review of #3353, N6), and each picture its number.
-        expect([0, 1, 2].map((i) => toggle(i).getAttribute('aria-label'))).toEqual(['Remove photo 1', 'Remove photo 2', 'Remove photo 3']);
+        // A screen reader hears which picture each button is for (review of #3353, N6), after the words on it, so voice control finds it
+        // by what it shows (review of #3355), and each picture its number.
+        expect([0, 1, 2].map((i) => toggle(i).getAttribute('aria-label'))).toEqual(['Remove photo, Photo 1', 'Remove photo, Photo 2', 'Remove photo, Photo 3']);
         expect(Array.from(q('learn-new-page-photos')!.querySelectorAll('img')).map((i) => i.getAttribute('aria-label'))).toEqual(['Photo 1', 'Photo 2', 'Photo 3']);
         expect(has('learn-new-add-photo')).toBe(false);
     });
@@ -567,7 +571,7 @@ describe('an Edit takes a picture off a page; the forms leave the node\'s credit
         await click('learn-new-photo-toggle-1');
         expect(rows().map((r) => r.split(':')[0])).toEqual(['kept', 'off', 'kept']);
         expect(toggle(1).textContent).toBe('Keep this photo');
-        expect(toggle(1).getAttribute('aria-label')).toBe('Keep photo 2');
+        expect(toggle(1).getAttribute('aria-label')).toBe('Keep this photo, Photo 2');
         await click('learn-new-send');
         expect(edits()).toHaveLength(1);
         expect(edits()[0].body.photos).toEqual([ADDR[0], ADDR[2]]);
@@ -686,8 +690,34 @@ describe('an Edit takes a picture off a page; the forms leave the node\'s credit
             expect(toggle(0).textContent).toBe(pseudoLocalise('Remove photo'));
             await click('learn-new-photo-toggle-0');
             expect(toggle(0).textContent).toBe(pseudoLocalise('Keep this photo'));
-            expect(toggle(0).getAttribute('aria-label')).toBe(pseudoLocalise('Keep photo {n}').replace('{n}', '1'));
-            expect(toggle(1).getAttribute('aria-label')).toBe(pseudoLocalise('Remove photo {n}').replace('{n}', '2'));
+            const named = (shown: string, n: number) => pseudoLocalise('{list}, {item}')
+                .replace('{list}', pseudoLocalise(shown)).replace('{item}', pseudoLocalise('Photo {n}').replace('{n}', String(n)));
+            expect(toggle(0).getAttribute('aria-label')).toBe(named('Keep this photo', 1));
+            expect(toggle(1).getAttribute('aria-label')).toBe(named('Remove photo', 2));
+        } finally {
+            setLanguage('en');
+        }
+    });
+
+    // In every language the app ships, kept or taken off: the button's name holds the words on it, whole, and its picture's number.
+    const WORDS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'words');
+    const CORE_WORDS = path.resolve(WORDS, '../../../packages/beanpool-core/words');
+    const LANGUAGES = readdirSync(WORDS).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length));
+    it('reads every language the phone ships', () => { expect(LANGUAGES).toHaveLength(24); });
+    it.each(LANGUAGES)('%s: each button is named by the words on it, then its picture', async (language) => {
+        setLanguage(language as any, [WORDS, CORE_WORDS].map((dir) => JSON.parse(readFileSync(path.join(dir, `${language}.json`), 'utf8'))));
+        try {
+            await openEdit();
+            await click('learn-new-photo-toggle-0');
+            for (const i of [0, 1, 2]) {
+                const name = toggle(i).getAttribute('aria-label')!;
+                expect(toggle(i).textContent!.trim()).not.toBe('');
+                expect(name.startsWith(toggle(i).textContent!), `"${name}" holds "${toggle(i).textContent}"`).toBe(true);
+                expect(name).toContain(String(i + 1));
+            }
+            expect(new Set([0, 1, 2].map((i) => toggle(i).getAttribute('aria-label'))).size).toBe(3);
+            // Not the English: the words came from that language's catalog.
+            expect(toggle(0).textContent).not.toBe('Keep this photo');
         } finally {
             setLanguage('en');
         }

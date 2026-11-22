@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LEARN_HOME_WORDS, inCapitalsOf, t, type KnowledgeRow } from '@beanpool/core';
 import { useStyles } from '../../app/ThemeContext';
 import { ListPhoto } from '../ListPhoto';
+import { useNodeUri } from '../../utils/node-uri';
 import { LEARN_LINES, checkedOverAYearAgo, monthYear, topicOf } from './learn-lines';
 
 const TILE = 64;
@@ -42,6 +43,8 @@ export function KnowledgeRowCard({ row, onPress, now, testID, fresh }: { row: Kn
         footOld: { fontSize: 12, fontWeight: '700', color: colors.feedback.warning.fg },
     }));
     const topic = topicOf(row.topic);
+    // A row from the copy names its picture whole (utils/db.ts getKnowledgePosts); the node's own (a search, Home) names it by path.
+    const photo = useNodeUri(row.photo);
     const when = monthYear(row.checkedAt);
     const old = checkedOverAYearAgo(row.checkedAt, now);
     const checked = old ? t(LEARN_LINES.checkedOver) : when ? t(LEARN_LINES.checked, { date: when }) : '';
@@ -58,7 +61,7 @@ export function KnowledgeRowCard({ row, onPress, now, testID, fresh }: { row: Kn
             testID={testID ?? `learn-row-${row.id}`}
         >
             <View style={styles.picture}>
-                <ListPhoto photo={row.photo} fallback={<TopicTile topic={row.topic} />} style={{ width: TILE, height: TILE }} contentFit="cover" />
+                <ListPhoto photo={photo} fallback={<TopicTile topic={row.topic} />} style={{ width: TILE, height: TILE }} contentFit="cover" />
             </View>
             <View style={styles.body}>
                 <View style={styles.chips}>

@@ -31,6 +31,7 @@ import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
 import { createHeldCopies } from './held-copies';
 import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
+import { photoOnCommunity } from './photo-address';
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
@@ -1428,7 +1429,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
             try {
                 r.photos = JSON.parse(r.photos);
                 if (Array.isArray(r.photos)) {
-                    r.photos = r.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+                    r.photos = r.photos.map((p: string) => photoOnCommunity(anchorUrl, p));
                 }
             } catch (e) { r.photos = []; }
         }
@@ -1460,7 +1461,7 @@ export async function getMyPosts(pubkey: string) {
         if (typeof r.photos === 'string') {
             try {
                 r.photos = JSON.parse(r.photos);
-                if (Array.isArray(r.photos)) r.photos = r.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+                if (Array.isArray(r.photos)) r.photos = r.photos.map((p: string) => photoOnCommunity(anchorUrl, p));
             } catch (e) { r.photos = []; }
         }
         return r;
@@ -1624,7 +1625,7 @@ export async function getPost(id: string) {
             try {
                 row.photos = JSON.parse(row.photos);
                 if (Array.isArray(row.photos)) {
-                    row.photos = row.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+                    row.photos = row.photos.map((p: string) => photoOnCommunity(anchorUrl, p));
                 }
             } catch (e) { row.photos = []; }
         }
@@ -2216,7 +2217,7 @@ export async function getHeldOutsideChats(myPubkey: string, community: string): 
 /** A photo's address on `community`'s server: a path its node stored ("/uploads/…") is that server's, never the one in use. */
 function onCommunity(community: string, value: unknown): string | null {
     if (typeof value !== 'string' || !value.trim() || value === 'null' || value === 'undefined') return null;
-    return value.startsWith('/') ? `${community.replace(/\/+$/, '')}${value}` : value;
+    return photoOnCommunity(community, value);
 }
 
 /**
@@ -5075,31 +5076,37 @@ async function writeKnowledgePost(txn: SQLite.SQLiteDatabase, p: any): Promise<v
         [p.id, typeof p.category === 'string' ? p.category : '', JSON.stringify(p), checkedAt, p.updatedAt ?? p.updated_at ?? p.createdAt ?? null, showing ? 1 : 0]);
 }
 
-/** Every page of Local knowledge this phone holds that is showing, as the node sent it. Learn groups and orders them (utils/learn-copy.ts). */
-export async function getKnowledgePosts(): Promise<any[]> {
-    const database = await waitForInit();
-    const rows = await database.getAllAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE active = 1');
-    const pages: any[] = [];
-    for (const r of rows) {
-        try {
-            pages.push(JSON.parse(r.post));
-        } catch {
-            // A row that doesn't read is no page; the next sync writes it again.
-        }
-    }
-    return pages;
-}
-
-/** One page this phone holds, showing, or null. */
-export async function getKnowledgePost(id: string): Promise<any | null> {
-    const database = await waitForInit();
-    const row = await database.getFirstAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE id = ? AND active = 1', [id]);
-    if (!row) return null;
+/**
+ * A page as the copy holds it, its pictures' paths put on `community`, the community whose copy it is, as a listing's are (getPost):
+ * the copy keeps a page as the node sent it, paths and all, so a page kept by an earlier build draws its pictures too (review of
+ * #3355). Null when the row doesn't read: it is no page, and the next sync writes it again.
+ */
+function knowledgePageOf(post: string, community: string | null): any | null {
     try {
-        return JSON.parse(row.post);
+        const page = JSON.parse(post);
+        if (!page || !Array.isArray(page.photos)) return page ?? null;
+        return { ...page, photos: page.photos.map((p: unknown) => (typeof p === 'string' ? photoOnCommunity(community, p) : p)) };
     } catch {
         return null;
     }
+}
+
+/**
+ * Every page of Local knowledge this phone holds that is showing, as the node sent it, its pictures on the community's own address
+ * (knowledgePageOf). The copy and its address are taken together (chatCopyForRequest), so a page read as the phone switches community
+ * is never drawn from the other one's address. Learn groups and orders them (utils/learn-copy.ts).
+ */
+export async function getKnowledgePosts(): Promise<any[]> {
+    const { database, anchorUrl } = await chatCopyForRequest();
+    const rows = await database.getAllAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE active = 1');
+    return rows.map((r) => knowledgePageOf(r.post, anchorUrl)).filter((page) => page !== null);
+}
+
+/** One page this phone holds, showing, its pictures on its community's own address (as getKnowledgePosts), or null. */
+export async function getKnowledgePost(id: string): Promise<any | null> {
+    const { database, anchorUrl } = await chatCopyForRequest();
+    const row = await database.getFirstAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE id = ? AND active = 1', [id]);
+    return row ? knowledgePageOf(row.post, anchorUrl) : null;
 }
 
 /**
@@ -11185,7 +11192,7 @@ export async function getMemberPosts(pubkey: string) {
                 r.photos = JSON.parse(r.photos);
                 // Resolve relative photo paths against the active node (same as getPosts/getPost)
                 if (Array.isArray(r.photos)) {
-                    r.photos = r.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+                    r.photos = r.photos.map((p: string) => photoOnCommunity(anchorUrl, p));
                 }
             } catch (e) { r.photos = []; }
         }

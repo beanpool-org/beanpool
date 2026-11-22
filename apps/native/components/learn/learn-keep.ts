@@ -9,8 +9,9 @@
  * (pagePhotosKept), as the web's LearnForm does. Edit and Suggest a fix list and send the page's own sources only: the node's
  * credit rows for its pictures are never in a form (formOfPage).
  */
-import { KNOWLEDGE_LIMITS, knowledgeTagsDiffer, ownKnowledgeSources, word } from '@beanpool/core';
+import { KNOWLEDGE_LIMITS, knowledgeTagsDiffer, ownKnowledgeSources, t, word } from '@beanpool/core';
 import type { KnowledgePage } from '../../utils/learn-copy';
+import { photoOnCommunity } from '../../utils/photo-address';
 import { knowledgeFormBody, type KnowledgeFormValues } from './learn-write';
 
 export const LEARN_KEEP = {
@@ -36,9 +37,7 @@ export const LEARN_KEEP = {
     // An owner's or admin's Edit of a page with pictures (slice 4): the web's words for the same list (LearnForm).
     photosLine: word('A photo you remove is taken off this page for everyone when you save.'),
     keepPhoto: word('Keep this photo'),
-    /** What a screen reader hears for each picture's button: which picture it is (review of #3353, N6). */
-    removePhotoN: word('Remove photo {n}'),
-    keepPhotoN: word('Keep photo {n}'),
+    /** Which picture: its own label, and after its button's words in the name a screen reader and voice control hear (photoToggleName). */
     photoN: word('Photo {n}'),
 } as const;
 
@@ -134,14 +133,23 @@ export function pagePhotosKept(pictures: readonly string[], takenOff: readonly n
 }
 
 /**
- * Where a picture of the page is drawn from: the node's own address put in front of a path the node gave (as the copy's
- * listings are, utils/db.ts), an http(s) address as it is, anything else not drawn. Only for drawing: what is sent back is the
- * address as the page gave it (pagePhotosKept).
+ * What the button beside a picture is called: the words it shows first, whole ("Remove photo", "Keep this photo", in any language),
+ * then which picture, so voice control finds it by the words on it and a screen reader hears which of them it is (review of #3355).
+ * The web's LearnForm names its own the same way.
  */
-export function pagePhotoUri(src: string, anchor: string | null | undefined): string | null {
-    const at = src.trim();
-    if (at.startsWith('/') && !at.startsWith('//')) return anchor ? `${anchor.replace(/\/+$/, '')}${at}` : null;
-    return /^https?:\/\//i.test(at) ? at : null;
+export function photoToggleName(shown: string, i: number): string {
+    return t('{list}, {item}', { list: shown, item: t(LEARN_KEEP.photoN, { n: i + 1 }) });
+}
+
+/**
+ * Where a picture of the page is drawn from, on the page (KnowledgeDetail) and in its Edit's list alike: the community's address in
+ * front of a path the node gave (utils/photo-address.ts, as the copy's listings and pages), an http(s) address or a `data:` picture
+ * as it is, anything else not drawn. Only for drawing: what is sent back is the address as the page gave it (pagePhotosKept).
+ */
+export function pagePhotoUri(src: string, community: string | null | undefined): string | null {
+    const given = src.trim();
+    const at = given.startsWith('//') ? given : photoOnCommunity(community, given);
+    return /^(https?:\/\/|data:image\/)/i.test(at) ? at : null;
 }
 
 /**

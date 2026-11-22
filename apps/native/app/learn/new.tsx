@@ -44,9 +44,9 @@ import {
 } from '../../components/learn/learn-write';
 import { forgetLearnRole, useLearnWriter } from '../../components/learn/useLearnWriter';
 import {
-    LEARN_KEEP, LEARN_PAGE_READ, editBody, fixBody, formOfPage, pagePhotoUri, pagePhotosKept, pagePhotosOf,
+    LEARN_KEEP, LEARN_PAGE_READ, editBody, fixBody, formOfPage, pagePhotoUri, pagePhotosKept, pagePhotosOf, photoToggleName,
 } from '../../components/learn/learn-keep';
-import { anchorUrl } from '../../utils/node-post';
+import { useCommunityAddress } from '../../utils/node-uri';
 import { readNodePage, useKnowledgePage } from '../../components/learn/useKnowledgePage';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { useIdentity } from '../IdentityContext';
@@ -88,8 +88,8 @@ export default function NewKnowledgeScreen() {
     const [takenOff, setTakenOff] = useState<number[]>([]);
     const pictures = use === 'edit' ? pagePhotosOf(opened) : [];
     const toggleTakenOff = (i: number) => { setTakenOff((list) => (list.includes(i) ? list.filter((j) => j !== i) : [...list, i])); setProblem(null); };
-    // The node's address, to draw a picture the page gave as a path (pagePhotoUri); what is sent back is the path as given.
-    const [anchor, setAnchor] = useState<string | null>(null);
+    // The community's address, to draw a picture the page gave as a path (pagePhotoUri); what is sent back is the path as given.
+    const community = useCommunityAddress(pictures.length > 0);
     const set = (patch: Partial<KnowledgeFormValues>) => { setForm((f) => ({ ...f, ...patch })); setProblem(null); };
     useEffect(() => {
         if (use === 'fix' && page && !opened) { setForm(formOfPage(page)); setOpened(page); }
@@ -104,12 +104,6 @@ export default function NewKnowledgeScreen() {
         });
         return () => { gone = true; };
     }, [use, pageId, tries]);
-    useEffect(() => {
-        if (use !== 'edit') return undefined;
-        let gone = false;
-        void anchorUrl().then((url) => { if (!gone) setAnchor(url); }, () => {});
-        return () => { gone = true; };
-    }, [use]);
 
     const s = useStyles(({ colors: c }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: c.surface.page },
@@ -357,16 +351,17 @@ export default function NewKnowledgeScreen() {
                         <Text style={s.small}>{t(LEARN_KEEP.photosLine)}</Text>
                         {pictures.map((src, i) => {
                             const out = takenOff.includes(i);
-                            const uri = pagePhotoUri(src, anchor);
+                            const uri = pagePhotoUri(src, community);
+                            const says = out ? t(LEARN_KEEP.keepPhoto) : t(LEARN_WRITE.removePhoto);
                             return (
                                 <View key={`${i}-${src}`} style={s.pagePhoto} testID={`learn-new-page-photo-${out ? 'off' : 'kept'}`}>
                                     {uri ? (
                                         <Image source={{ uri }} style={[s.photo, out && s.photoOff]} contentFit="cover" accessibilityLabel={t(LEARN_KEEP.photoN, { n: i + 1 })} />
                                     ) : <View style={[s.photo, out && s.photoOff]} />}
                                     <Pressable testID={`learn-new-photo-toggle-${i}`} accessibilityRole="button" disabled={busy}
-                                        accessibilityLabel={out ? t(LEARN_KEEP.keepPhotoN, { n: i + 1 }) : t(LEARN_KEEP.removePhotoN, { n: i + 1 })}
+                                        accessibilityLabel={photoToggleName(says, i)}
                                         style={[s.secondary, s.toggle]} onPress={() => toggleTakenOff(i)}>
-                                        <Text style={s.secondaryText}>{out ? t(LEARN_KEEP.keepPhoto) : t(LEARN_WRITE.removePhoto)}</Text>
+                                        <Text style={s.secondaryText}>{says}</Text>
                                     </Pressable>
                                 </View>
                             );

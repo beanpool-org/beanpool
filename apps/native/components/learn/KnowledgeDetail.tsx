@@ -36,9 +36,10 @@ import { reportedAlertBody } from '../../utils/reportReasons';
 import { signedRequestWords } from '../signed-request-lines';
 import { LANGUAGE_NAMES } from '../../utils/language-choice';
 import type { KnowledgePage } from '../../utils/learn-copy';
+import { useCommunityAddress } from '../../utils/node-uri';
 import { ChipText } from './KnowledgeRowCard';
 import { LEARN_LINES, monthYear, topicOf } from './learn-lines';
-import { LEARN_KEEP, LEARN_PAGE_READ, pageActions } from './learn-keep';
+import { LEARN_KEEP, LEARN_PAGE_READ, pageActions, pagePhotoUri, pagePhotosOf } from './learn-keep';
 import { learnRefusal } from './learn-write';
 import { useLearnWriter } from './useLearnWriter';
 import { ForumLinkedTopics } from '../forum/ForumLinks';
@@ -227,7 +228,11 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
     const rating = useMemberRating(k.gathered ? null : page.authorPublicKey);
     const readerLang = currentLanguage();
     const writtenIn = k.lang && k.lang !== readerLang ? (LANGUAGE_NAMES as Record<string, string>)[k.lang] ?? null : null;
-    const photos = (page.photos ?? []).filter((p) => typeof p === 'string' && p !== '');
+    // A page from the copy names its pictures whole (utils/db.ts getKnowledgePost, on its own community); the node's answer (a page
+    // read by its link, an action's or an Edit's) names them by path, on the community asked, the one in use.
+    const given = pagePhotosOf(page);
+    const community = useCommunityAddress(given.some((p) => p.trim().startsWith('/')));
+    const photos = given.map((p) => pagePhotoUri(p, community)).filter((p): p is string => p !== null);
     const sources = (k.sources ?? []).filter((s) => s && openableSource(s.url));
     const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/learn' as any); };
 

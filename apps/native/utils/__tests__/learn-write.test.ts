@@ -154,7 +154,11 @@ describe('an Edit\'s pictures and a form\'s sources (learn web pictures, slice 4
         expect(pagePhotoUri(`https://node.test${ADDR[0]}`, null)).toBe(`https://node.test${ADDR[0]}`);
         expect(pagePhotoUri('//elsewhere.example/p.jpg', 'https://node.test')).toBeNull();
         expect(pagePhotoUri('javascript:alert(1)', 'https://node.test')).toBeNull();
-        expect(pagePhotoUri('data:image/jpeg;base64,AAAA', 'https://node.test')).toBeNull();
+        expect(pagePhotoUri('file:///data/user/0/p.jpg', 'https://node.test')).toBeNull();
+        expect(pagePhotoUri('data:text/html;base64,AAAA', 'https://node.test')).toBeNull();
+        // A picture that carries itself is drawn as it is, on the page and in the Edit's list alike (review of #3355).
+        expect(pagePhotoUri('data:image/jpeg;base64,AAAA', 'https://node.test')).toBe('data:image/jpeg;base64,AAAA');
+        expect(pagePhotoUri('data:image/jpeg;base64,AAAA', null)).toBe('data:image/jpeg;base64,AAAA');
     });
 
     it('Edit sends the kept list only when given one, beside the words in the page\'s language; the form holds the page\'s own sources only', () => {

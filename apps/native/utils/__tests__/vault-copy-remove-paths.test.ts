@@ -134,7 +134,7 @@ const left = (copies: (typeof SIGN_IN)[], halves: (typeof HALF)[]): WaysBack => 
     pending: [],
 });
 
-const stays = (copyKnown: boolean, communityOnly: boolean, here = 'Riverside', reason = "it didn't answer: check your connection") =>
+const stays = (copyKnown: boolean, communityOnly: boolean, reason = "it didn't answer: check your connection") =>
     ({ kind: 'vault-copy-stays', reason, copyKnown, communityOnly }) as Extract<DeleteOutcome, { kind: 'vault-copy-stays' }>;
 
 /** A copy the line says stays, and its Remove on the screen: the button's name, and what tapping it (then Remove) removes. */
@@ -161,7 +161,7 @@ const ROWS: { name: string; line: () => string; keys: () => { at: 'native' | 'pw
     {
         name: "the admins' half alone (the phone knows only it, 'c')",
         line: () => vaultCopyStaysLine('Riverside', stays(true, true)),
-        keys: () => [{ at: 'native', key: vaultCopyStaysLine('{here}', stays(true, true, '{here}', '{reason}')), path: true }],
+        keys: () => [{ at: 'native', key: vaultCopyStaysLine('{here}', stays(true, true, '{reason}')), path: true }],
         left: [HALF_LEFT],
         state: left([], [HALF]),
     },
@@ -169,7 +169,7 @@ const ROWS: { name: string; line: () => string; keys: () => { at: 'native' | 'pw
         name: "a sign-in's copy the phone knows of, and any half beside it",
         line: () => vaultCopyStaysLine('Riverside', stays(true, false)),
         keys: () => [
-            { at: 'native', key: vaultCopyStaysLine('{here}', stays(true, false, '{here}', '{reason}')).slice(0, -(ADMINS_HALF_STAYS_TOO.length + 1)), path: true },
+            { at: 'native', key: vaultCopyStaysLine('{here}', stays(true, false, '{reason}')).slice(0, -(ADMINS_HALF_STAYS_TOO.length + 1)), path: true },
             { at: 'native', key: ADMINS_HALF_STAYS_TOO, path: false },
         ],
         left: [SIGN_IN_LEFT, HALF_LEFT],
@@ -179,7 +179,7 @@ const ROWS: { name: string; line: () => string; keys: () => { at: 'native' | 'pw
         name: "a sign-in's copy the phone doesn't know of (restored with the 12 words), and any half beside it",
         line: () => vaultCopyStaysLine('Riverside', stays(false, false)),
         keys: () => [
-            { at: 'native', key: vaultCopyStaysLine('{here}', stays(false, false, '{here}', '{reason}')).slice(0, -(ADMINS_HALF_STAYS_TOO.length + 1)), path: true },
+            { at: 'native', key: vaultCopyStaysLine('{here}', stays(false, false, '{reason}')).slice(0, -(ADMINS_HALF_STAYS_TOO.length + 1)), path: true },
             { at: 'native', key: ADMINS_HALF_STAYS_TOO, path: false },
         ],
         left: [SIGN_IN_LEFT, HALF_LEFT],

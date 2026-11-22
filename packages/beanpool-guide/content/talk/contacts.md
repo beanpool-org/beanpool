@@ -43,10 +43,11 @@ Your list has two parts: **On BeanPool** and **Not on BeanPool yet**. BeanPool n
 - **When someone joins with an invite you sent a contact** (below), and you say it was them.
 - **On the phone,** **⋯**, then **Add people I've chatted with and my friends** adds everyone you have chatted with or added as a friend in the community you are on. A chat counts only if you wrote in it or accepted it yourself: someone who only wrote to you, or took up your Offer, isn't added.
 
-Under **On BeanPool**, **Message** opens a chat with them: the one you have already, or a new one. Nothing switches, and no question is asked.
+Under **On BeanPool**, **Message** opens a chat with them: the one you have already, or a new one. Nothing switches, and no question is asked, but for the last case here.
 
 - **If you share a community,** the chat is there. On the phone that can be any community you have on it, and you stay in the one you are in. In the web app it is the community you have open.
 - **If you don't,** it is a chat across communities, through yours. They see your first message if they take messages from other communities: see "People in other communities". Where your community takes no messages from other communities, **Message** says so and opens nothing.
+- **If BeanPool can't be sure whose address they are saved at,** because a community moved or gave an address up, it opens nothing, so you never write where nobody would read it. On the phone it asks whether to switch to that address. In the web app a button to open that address shows beside **Message**.
 
 A member you blocked shows **Blocked** and **Unblock**. Blocking someone doesn't take them out of your contacts, and taking them out doesn't unblock them. In the web app, being in your contacts doesn't let anyone past message requests. On your phone, someone you added to your contacts is let in: see "Message requests" in "Messages".
 

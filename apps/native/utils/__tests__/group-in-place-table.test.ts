@@ -1357,18 +1357,19 @@ describe('every path that can send words into a group-like chat asks the lock ma
         expect(JSON.stringify(servers[A].lines[1])).not.toContain(WORDS);
     });
 
-    it('the DM screen, an edit: the phone set to B, which holds the group\'s keys, just before it is sealed: nothing sealed under B\'s keys goes to A, nor anything to B', async () => {
+    it.each([['A\'s key memory read this run', true], ['A\'s key memory not read yet', false]] as const)('the DM screen, an edit begun in A, the phone set to B, which holds the group\'s keys and a newer one, just before it is sealed (%s): sealed under A\'s key and sent to A, or refused; nothing under B\'s', async (_n, read) => {
         await switchPhoneTo(A);
-        await db.closeDB();
-        servers[B].epochs = [...servers[A].epochs];
+        const { record } = await makeEpochRecord({ myEdPrivHex: peer.privateKey, groupId: g, epoch: 2, reason: 'rotate', subject: null, createdAt: new Date().toISOString(), recipients: [me.publicKey, peer.publicKey] });
+        servers[B].epochs = [...servers[A].epochs, record];
         forgetGroupKeys();
+        if (read) expect(await (await db.groupKeyringFor(g)).holdsKeys()).toBe(true);
         asked = [];
-        await db.getDb();
         h.reads = { file: A_FILE, sql: /FROM messages WHERE id = \?/, times: 1, hang: false, refuse: false, wait: true, hit: () => switchPhoneTo(B) };
-        await expect(db.editMessage(g, mine.id, WORDS)).rejects.toThrow();
+        const thrown: any = await db.editMessage(g, mine.id, WORDS).then(() => null, (e) => e);
         expect(h.reads.times, 'switched as it was asked').toBe(0);
         h.reads = null;
-        expect(asked.filter((r) => r.method === 'POST' && /message|edit/.test(r.url)).map((r) => r.url)).toEqual([]);
+        expect(thrown?.code ?? null).toBe(read ? null : 'store');
+        expect(asked.filter((r) => r.method === 'POST' && /message|edit/.test(r.url)).map((r) => [r.url, r.body.metadata?.epoch])).toEqual(read ? [[`${A}/api/messages/edit`, 1]] : []);
         expect(wordsOut()).toEqual(NOTHING);
     });
 

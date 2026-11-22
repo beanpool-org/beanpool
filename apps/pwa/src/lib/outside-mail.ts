@@ -579,12 +579,13 @@ export async function syncOutsideMail(ctx: OutsideMailContext, now = Date.now())
                 // From a member here (slice S5): my own server's mark beside the item, never the envelope's; this community's
                 // own rule then decides, as on the phone (core gateOutsideItem).
                 const memberHere = heldFromMemberHere(h);
+                const theirs = chat ? { state: chat.state, theirLines: await ctx.store.theirLines(me, chatId, env.senderKey) } : null;
                 const blocked = await ctx.isBlocked(env.senderKey);
                 // Let in once (S5 part 3): asked only for a first line with no chat here, from someone not blocked, as on the phone.
                 const letIn = !chat && !blocked && env.kind === 'dm-line' && !!ctx.letIn && await ctx.letIn(env.senderKey);
                 const verdict = gateOutsideItem({
                     kind: env.kind,
-                    chat: chat ? { state: chat.state, theirLines: await ctx.store.theirLines(me, chatId, env.senderKey) } : null,
+                    chat: theirs,
                     doorOpen: open,
                     blocked,
                     letIn,

@@ -45,6 +45,7 @@ vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/ReviewModal', () => ({ ReviewModal: () => null }));
 const theme = vi.hoisted(() => ({ dark: false }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 48, left: 0, right: 0 }) }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors: light, darkColors: dark } = await import('../../constants/colors');
     const colors = () => (theme.dark ? dark : light);

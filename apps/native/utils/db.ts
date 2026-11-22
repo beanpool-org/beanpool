@@ -8042,25 +8042,6 @@ export async function isDmKeyChangePending(conversationId: string): Promise<bool
     }
 }
 
-/**
- * True when first sight found lines in this DM it couldn't place and no single key is listed (§3.4 amendment, rule 5): no
- * key is pinned and every send is refused as not locked, the state in which the DM screen shows rule 5's line in the
- * composer (it reads that from getDmKeyChange's `unplaced`). Read as the resting rule would leave it, as the Inbox tag is
- * (dmEntryWaitsForMember): a record whose listing names one key waits for nobody, since the screen's check makes it a pin
- * on that key (restDmEntry, DESIGN-dm-key-signal-model §2.3 row 5). Reads only. False when the pins can't be read (a send
- * then says that itself).
- */
-export async function isDmUnplaced(conversationId: string): Promise<boolean> {
-    try {
-        const me = (await loadIdentity())?.publicKey;
-        if (!me) return false;
-        const entry = dmSightFor(await dmPins.read(me, await getDb()), conversationId);
-        return isUnplacedSight(entry) && dmEntryWaitsForMember(entry, await dmVerified.read(me));
-    } catch {
-        return false;
-    }
-}
-
 /** What the DM screen's banner says about a key change (DESIGN-dm-peer-key-pin §3.5). */
 export interface DmKeyChange {
     /**

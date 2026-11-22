@@ -1,11 +1,12 @@
 /**
  * A followed topic on the web's forum, notifications (scratch/fable-design/DESIGN-notify-and-backup-asks-fable-amend2.md
  * §12.3 slice N5b; the phone's N2b): following a topic may bring "Hear when someone replies here." [Tell me] under the bell,
- * by core's rule, while the topic stays followed; never on a closed topic, which takes no replies (the node refuses them,
- * apps/server/src/engine/forum.ts). The forum's canReply flag (sweep-8) is not on main: the topic's closed state gates it.
+ * by core's rule, while the topic stays followed; never where no reply can go (the node refuses one, apps/server/src/engine/
+ * forum.ts): a closed topic, an open one in an archived section, or one in a group's section this member only reads. The
+ * topic's own read says which (canReply, sectionArchived; review of #3339).
  *
- * Table, each row red without its line: (topic: open / closed) x (browser) x (the rule's state) -> the line or none, the
- * browser's prompt never at the follow. Then: unfollow, a refused follow, another topic opened in its place; 320 px at 130%,
+ * Table, each row red without its line: (topic: open / closed / archived section / reads only) x (browser) x (the rule's
+ * state) -> the line or none, the browser's prompt never at the follow. Then: unfollow, a refused follow, another topic opened in its place; 320 px at 130%,
  * light and dark. The ForumPage over a stand-in node, as ForumPage.test.tsx stands one in.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -48,7 +49,8 @@ const post = (number: number, words: string) => ({
     editedAt: null, removed: null, photos: 0, hidden: false, linksOn: true,
 });
 
-let state: { topics: any[]; refuseFollow: boolean; failReadAfterSave: boolean; readFailsAfterSave: boolean };
+/** `read`: what ft-1's own read adds to its row (canReply, sectionArchived), never a list row. */
+let state: { topics: any[]; read: Record<string, unknown>; refuseFollow: boolean; failReadAfterSave: boolean; readFailsAfterSave: boolean };
 function standIn(c: Call): unknown {
     const p = c.path.split('?')[0];
     if (c.method === 'GET' && p === '/api/forum') return { sections: SECTIONS, public: false, told: true, moderator: false, firstLooksWaiting: null, firstTopicWaits: false, linksOn: true };
@@ -56,7 +58,8 @@ function standIn(c: Call): unknown {
     const read = /^\/api\/forum\/topics\/(ft-\d)$/.exec(p);
     if (c.method === 'GET' && read) {
         if (state.readFailsAfterSave) return Object.assign(new Error('Could not read this topic.'), { status: 503 });
-        return { topic: state.topics.find((x) => x.id === read[1]), posts: [post(1, 'Who has beans to swap?')], next: null, lastRead: 1 };
+        const row = state.topics.find((x) => x.id === read[1]);
+        return { topic: read[1] === 'ft-1' ? { ...row, ...state.read } : row, posts: [post(1, 'Who has beans to swap?')], next: null, lastRead: 1 };
     }
     const follow = /^\/api\/forum\/topics\/(ft-\d)\/follow$/.exec(p);
     if (c.method === 'POST' && follow) {
@@ -70,8 +73,21 @@ function standIn(c: Call): unknown {
     return { ok: true };
 }
 
-async function openAndFollow(closed = false) {
-    state.topics = [topic('ft-1', 'Seed swap ideas', closed ? { closed: AT } : {}), topic('ft-2', 'Welcome: start here')];
+/**
+ * The topic as it reads for this member: its row, what its own read adds (canReply, sectionArchived: never in a list row,
+ * engine/forum.ts forumTopic), and why no line may come (null: it may).
+ */
+type Kind = { row: Record<string, unknown>; read: Record<string, unknown> };
+const KINDS: [string, Kind, string | null][] = [
+    ['open topic', { row: {}, read: {} }, null],
+    ['closed topic', { row: { closed: AT }, read: {} }, 'a closed topic takes no replies'],
+    ['open topic in an archived section', { row: {}, read: { canReply: false, sectionArchived: true } }, 'an archived section takes no replies'],
+    ["open topic in a group's section this member only reads", { row: {}, read: { canReply: false, sectionArchived: false } }, 'a member who only reads there sends none'],
+];
+
+async function openAndFollow(kind: Kind = { row: {}, read: {} }) {
+    state.topics = [topic('ft-1', 'Seed swap ideas', kind.row), topic('ft-2', 'Welcome: start here')];
+    state.read = kind.read;
     render(<ForumPage me={ME} />);
     fireEvent.click(await screen.findByText('Seed swap ideas'));
     await screen.findByTestId('forum-topic-title');
@@ -83,7 +99,7 @@ async function openAndFollow(closed = false) {
 beforeEach(() => {
     forgetForum();
     node.answer = standIn;
-    state = { topics: [], refuseFollow: false, failReadAfterSave: false, readFailsAfterSave: false };
+    state = { topics: [], read: {}, refuseFollow: false, failReadAfterSave: false, readFailsAfterSave: false };
     localStorage.clear();
 });
 afterEach(() => {
@@ -92,16 +108,16 @@ afterEach(() => {
     resetScreen();
 });
 
-describe("following a topic: open or closed x browser x the rule's state -> the line or none", () => {
-    for (const closed of [false, true]) {
+describe("following a topic: open, closed, archived section or reads only x browser x the rule's state -> the line or none", () => {
+    for (const [kind, over, noReply] of KINDS) {
         for (const b of BROWSERS) {
             for (const [rec, { offers, pins }] of Object.entries(RECORDS) as [RecordKind, { offers: boolean; pins: string }][]) {
                 if (b !== 'default' && rec !== 'fresh') continue;
-                const shows = !closed && CAN_OFFER[b as BrowserKind] && offers;
-                it(`${closed ? 'closed' : 'open'} topic, ${b}, ${rec} -> ${shows ? `"${LINE}" [Tell me]` : 'no line'} (pins: ${closed ? 'a closed topic takes no replies' : pins})`, async () => {
+                const shows = !noReply && CAN_OFFER[b as BrowserKind] && offers;
+                it(`${kind}, ${b}, ${rec} -> ${shows ? `"${LINE}" [Tell me]` : 'no line'} (pins: ${noReply ?? pins})`, async () => {
                     const ask = standBrowser(b, ME);
                     keepRecord(ME, rec, 'follow');
-                    await openAndFollow(closed);
+                    await openAndFollow(over);
                     if (shows) {
                         const line = await screen.findByTestId('forum-follow-line');
                         expect(line).toHaveTextContent(LINE);

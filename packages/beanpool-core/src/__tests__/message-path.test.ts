@@ -5,7 +5,7 @@
  * taken out in turn (mutants) and every one gets rows wrong.
  */
 import { describe, expect, it } from 'vitest';
-import { communityNamed, homesOfCommunity, type NamedCommunity } from '../community-homes';
+import { communityNamed, formerHomesOf, homesOfCommunity, saysNoHome, type NamedCommunity } from '../community-homes';
 import { ACROSS_FIRST_LINE_NOTE, acrossChatListed, acrossFirstLineNoteUnder, messagePathFor, type KnownChat, type MessageLink, type MessagePath } from '../message-path';
 import { nodeHomeOf } from '../node-request-signing';
 
@@ -20,10 +20,13 @@ const same = (a: string, b: string) => a.replace(/\/+$/, '').toLowerCase() === b
 const HERE_OLD = 'https://oldriver.example';
 const HERE_ALIAS = 'https://river.example';
 const HELD_A_ALIAS = 'https://oldhill.example';
+/** A name Riverside had before; and one it lost, which an older server still lists as one, and Lakeside goes by now (round 5). */
+const HERE_FORMER = 'https://formerriver.example';
+const HERE_LOST = 'https://lostriver.example';
 const COMMUNITIES: NamedCommunity[] = [
-    { community: HERE, known: [HERE_OLD], says: ['riverside.example', 'river.example'] },
+    { community: HERE, known: [HERE_OLD], says: ['riverside.example', 'river.example'], before: ['formerriver.example', 'lostriver.example'] },
     { community: HELD_A, known: [HELD_A_ALIAS], says: ['hillside.example'] },
-    { community: HELD_B },
+    { community: HELD_B, says: ['lakeside.example', 'lostriver.example'] },
 ];
 
 type Input = Parameters<typeof messagePathFor>[0];
@@ -111,6 +114,10 @@ const ROWS: Row[] = [
     { name: 'phone · a held community takes none across: its chat is left out', input: { ...phone([{ community: AWAY, key: K, name: 'Dee' }], [xA]), takesAcross: (c) => c !== HELD_A }, want: across(AWAY) },
     { name: 'phone · the community in use takes none across, the held one that carries the chat does: that chat', input: { ...phone([{ community: HERE, key: K }], [xHere, xA]), takesAcross: (c) => c !== HERE }, want: { open: 'existing', chat: xA } },
     { name: 'web · this community takes none across: the chat here', input: { ...web([{ community: HERE, key: K }], [xHere]), takesAcross: () => false }, want: { open: 'shared', community: HERE, key: K } },
+    // ── a name a community had before is its own only while no other goes by it (#3354 review, round 5) ──
+    { name: 'phone · a name the community in use had before is here', input: phone([{ community: HERE_FORMER, key: K }]), want: { open: 'shared', community: HERE, key: K } },
+    { name: 'phone · a name it lost to a held community is that community', input: phone([{ community: HERE_LOST, key: K }]), want: { open: 'shared', community: HELD_B, key: K } },
+    { name: 'phone · an across chat kept with a name a held community goes by now: the direct chat there', input: phone([{ community: AWAY, key: K }], [at(xHere, 'lostriver.example')]), want: { open: 'shared', community: HELD_B, key: K } },
     // ── a guest's look (#3354 review, round 4): the direct chat a visitor has there is theirs; nothing else of it counts ──
     { name: 'look · a direct chat there opens', input: { ...phone([{ community: HERE, key: K }], [dHere, dA]), setTo: null, look: HERE, held: [HELD_A, HELD_B] }, want: { open: 'existing', chat: dHere } },
     { name: 'look · no chat there: none is started there', input: { ...phone([{ community: HERE, key: K, name: 'Dee' }]), setTo: null, look: HERE, held: [HELD_A, HELD_B] }, want: across(HERE) },
@@ -148,6 +155,8 @@ describe('messagePathFor: which chat Message opens', () => {
         'a community is one spelling (the bug: a link at another of its addresses goes across)': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ community }) => ({ community }))) }),
         'what the device knows of a community left out': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ community, says }) => ({ community, says }))) }),
         'what a community says of itself left out': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ community, known }) => ({ community, known }))) }),
+        'a name it had before left out': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ before: _before, ...c }) => c)) }),
+        'a name it had before weighed as one it goes by now (the bug: a lost name is here)': (i) => messagePathFor({ ...i, whose: communityNamed(COMMUNITIES.map(({ says, before, ...c }) => ({ ...c, says: [...(says ?? []), ...(before ?? [])] }))) }),
         'a dead across chat counts (its person is in a community shared)': (i) => messagePathFor({ ...i, chats: i.chats.map((c) => (c.kind === 'across' ? { ...c, home: 'faraway.example' } : c)) }),
         'a community that takes none across still carries one': (i) => messagePathFor({ ...i, takesAcross: () => true }),
         'a guest\'s look counts as a membership': (i) => messagePathFor({ ...i, setTo: i.setTo ?? i.look, look: null }),
@@ -184,9 +193,9 @@ describe('acrossChatListed: which chats across Message may open as the existing 
 // #3354 review, round 4: one community, all its addresses (community-homes.ts), the rule Message and the address card share.
 describe('a community, all its addresses', () => {
     it.each([
-        { name: 'the address reached, and every one it says: hosts, former names, its main', at: 'https://Riverside.example/',
+        { name: 'the address reached, and every one it says it goes by now: hosts, its main; never a name it had before', at: 'https://Riverside.example/',
             said: { addresses: ['riverside.example', 'river.example'], primaryAddress: 'river.example', formerAddresses: ['oldriver.example'] },
-            want: ['riverside.example', 'river.example', 'oldriver.example'] },
+            want: ['riverside.example', 'river.example'] },
         { name: 'a name said with no port is on the port it is reached at, for that host only', at: 'https://coop.example:8443',
             said: { addresses: ['coop.example', 'other.example', 'third.example:9443'] }, want: ['coop.example:8443', 'other.example', 'third.example:9443'] },
         { name: 'nothing said (an older server, or not read): the address reached', at: 'https://riverside.example', said: null, want: ['riverside.example'] },
@@ -197,10 +206,32 @@ describe('a community, all its addresses', () => {
         expect(homesOfCommunity(reached, said)).toEqual(want);
     });
 
+    it.each([
+        { name: 'the names it had before, each once, spelled as homes', at: 'https://riverside.example', said: { addresses: ['riverside.example'], formerAddresses: ['OldRiver.example', 'oldriver.example', 7, 'no address'] }, want: ['oldriver.example'] },
+        { name: 'one with no port is on the port it is reached at, for that host only', at: 'https://coop.example:8443', said: { formerAddresses: ['coop.example', 'other.example'] }, want: ['coop.example:8443', 'other.example'] },
+        { name: 'none said', at: 'https://riverside.example', said: { addresses: ['riverside.example'] }, want: [] },
+        { name: 'nothing read', at: 'https://riverside.example', said: null, want: [] },
+    ])('$name', ({ at: reached, said, want }) => {
+        expect(formerHomesOf(reached, said)).toEqual(want);
+    });
+
+    // #3354 review, round 5: a community with no address of its own sends nothing across (its server answers 503 no_home).
+    it.each([
+        { name: 'none published', said: { addresses: [], primaryAddress: null }, want: true },
+        { name: 'none published, no main said', said: { addresses: [] }, want: true },
+        { name: 'a name with no route yet: published, not where it lives', said: { addresses: ['riverside.example'], primaryAddress: null }, want: true },
+        { name: 'one published, and lived at', said: { addresses: ['riverside.example'], primaryAddress: 'riverside.example' }, want: false },
+        { name: 'no main said (an older server): not known', said: { addresses: ['riverside.example'] }, want: false },
+        { name: 'nothing said of addresses (an older server): not known', said: { primaryAddress: null }, want: false },
+        { name: 'nothing read: not known', said: null, want: false },
+    ])('knows no address of its own: $name -> $want', ({ said, want }) => {
+        expect(saysNoHome(said)).toBe(want);
+    });
+
     const whose = communityNamed([
         { community: HERE, known: [HERE_OLD], says: ['river.example', 'hillside.example', 'lakeside-known.example'] },
         { community: HELD_A, known: ['https://lakeside-known.example'], says: ['shared-claim.example', 'taken.example'], refused: ['https://taken.example'] },
-        { community: HELD_B, says: ['shared-claim.example', 'taken.example'] },
+        { community: HELD_B, says: ['shared-claim.example', 'taken.example'], before: ['river.example', 'had-before.example', 'gone.example'], refused: ['https://gone.example'] },
     ]);
     it.each([
         { name: 'however spelled', address: 'HTTPS://Riverside.example:443/x?y', want: HERE },
@@ -212,6 +243,9 @@ describe('a community, all its addresses', () => {
         { name: 'one the device knows for a community is never another\'s, whoever says so', address: 'lakeside-known.example', want: HELD_A },
         { name: 'two say it: the first in order', address: 'shared-claim.example', want: HELD_A },
         { name: 'one that answered the device as something else is not its', address: 'taken.example', want: HELD_B },
+        { name: 'one it had before, and no other goes by', address: 'had-before.example', want: HELD_B },
+        { name: 'one it had before that another goes by now is the other\'s', address: 'https://river.example', want: HERE },
+        { name: 'one it had before that answered the device as something else is not its', address: 'gone.example', want: null },
         { name: 'another community', address: AWAY, want: null },
         { name: 'no address', address: 'not an address', want: null },
         { name: 'none', address: null, want: null },

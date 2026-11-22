@@ -803,6 +803,33 @@ describe('Message over the real files: never a chat no line can go from', () => 
         expect(await openAcrossChat({ key: peer.publicKey, home: PEER_HOME, name: 'Pia' })).toEqual({ refused: 'off' });
     });
 
+    // Round 5: an address the record alone holds, which A says it goes by no more, is a name A may have lost. It is A's only for
+    // someone A's copy on this phone has as a member: the members row of the real file, in use and through the held handle.
+    for (const [set, held] of [[A, [B, C]], [B, [A, C]]] as const) {
+        it(`set to ${set === A ? 'A' : 'B'}: an address A goes by no more, by whether A's copy has the person as a member`, async () => {
+            await phone(set);
+            movedOnce();
+            h.profile = { features: { outsideMessages: true }, addresses: ['riverside.example'], primaryAddress: 'riverside.example' } as typeof h.profile;
+            const sql = new DatabaseSync(fileOn(A_FILE));
+            sql.prepare('DELETE FROM outside_chats').run();
+            sql.prepare('DELETE FROM members WHERE public_key = ?').run(peer.publicKey);
+            sql.close();
+            const other = new DatabaseSync(fileOn(B_FILE));
+            other.prepare('DELETE FROM outside_chats').run();
+            other.close();
+            expect(await pathFor(OLD_A, [...held])).toEqual({ open: 'across', key: peer.publicKey, home: 'oldriver.example', name: 'Pia' });
+            const member = (status: string) => {
+                const w = new DatabaseSync(fileOn(A_FILE));
+                w.prepare('INSERT OR REPLACE INTO members (public_key, callsign, status) VALUES (?, ?, ?)').run(peer.publicKey, 'pia', status);
+                w.close();
+            };
+            member('active');
+            expect(await pathFor(OLD_A, [...held])).toEqual({ open: 'shared', community: A, key: peer.publicKey });
+            member('pruned');
+            expect(await pathFor(OLD_A, [...held])).toMatchObject({ open: 'across' });
+        });
+    }
+
     it("set to B as a guest's look, the chat in A's held file: that chat, in A's file; the copy of it in the guest's file never is", async () => {
         await phone(B);
         h.store.set('beanpool_guest_nodes', JSON.stringify([B]));

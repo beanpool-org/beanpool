@@ -129,6 +129,16 @@ describe('find by name: the look-up', () => {
         });
     }
 
+    // #3354 review, round 5: the rule Message keeps. Mutation (PR body): without the check -> a box opens whose line can't go.
+    it('this community knows no address of its own: its server sends no line, so it says so and no box opens', async () => {
+        said.info = { features: { outsideMessages: true }, addresses: [], primaryAddress: null, formerAddresses: [] };
+        here.found = await signAddressCard({ key: WREN.key, home: 'riverside.example', name: 'Wren Tallowmere' }, ed25519Signer(hexToBytes(WREN.seed)));
+        render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);
+        await find('riverside.example', 'wren tallowmere');
+        expect(await screen.findByText("This community's server knows none of its own names yet, so it can't send to another community.")).toBeTruthy();
+        expect(screen.queryByTestId('first-message')).toBeNull();
+    });
+
     it('a refusal reads in core\'s words by its code, never the server\'s English', async () => {
         here.refuse = { status: 429, code: 'find_day_used' };
         render(<AddressCardPanel onBack={() => {}} onOpenChat={() => {}} />);

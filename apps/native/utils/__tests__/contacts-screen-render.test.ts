@@ -64,7 +64,7 @@ const mem = vi.hoisted(() => ({
     // The held handles closed again (db.ts closeHeldCopies), #3302 review F3.
     closes: 0,
     // What the community in use says of its addresses, asked now (#3354 review round 4).
-    saysNow: {} as { addresses?: string[]; primaryAddress?: string; formerAddresses?: string[] },
+    saysNow: {} as { addresses?: string[]; primaryAddress?: string; formerAddresses?: string[]; noHome?: true },
 }));
 // The store loads Expo's file system, AsyncStorage and the share sheet with require() (utils/contacts-store.ts
 // phoneContactsDeps, use-contacts.ts shareContactsFile), which vi.mock doesn't reach: Node's loader hands these out instead.
@@ -386,6 +386,7 @@ describe('the Contacts screen (the web ContactsPage\'s words and order)', () => 
 
     it.each([
         { name: 'this community takes no messages from other communities', set: () => { mem.outsideOn = false; }, says: "This community doesn't take messages from other communities." },
+        { name: 'this community knows no address of its own to send from (round 5)', set: () => { mem.saysNow = { noHome: true }; }, says: "This community's server knows none of its own names yet, so it can't send to another community." },
         { name: 'someone the account blocked', set: () => { mem.acrossBlocked = true; }, says: 'You have blocked this user. Messaging is disabled.' },
         { name: 'no community in use', set: () => { mem.noAcrossContext = true; }, says: 'Connect to your community to start a chat.' },
     ])('across refused ($name): says why, makes nothing, moves nowhere', async ({ set, says }) => {

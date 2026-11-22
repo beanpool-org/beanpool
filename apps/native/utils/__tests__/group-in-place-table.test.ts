@@ -1187,13 +1187,15 @@ describe('Talk → Groups\' rows in one order: newest first, the member\'s own l
     const row_ = (id: string, at: string): YourChat => ({ kind: 'group', badge: null, id, conversationId: id, name: id, avatarUrl: null, role: 'member', readOnly: false, lastMessage: null, unreadCount: 0, mute: null, lastActivityAt: at });
     const listed = () => groupsListed(yourGroupsStore.getState().items ?? [], heldGroups.getState(), yourGroupsStore.movedAt).map((i) => i.conversationId);
     const held = (id: string) => heldGroups.at(heldGroups.getState().find((r) => r.conversationId === id)!.community);
-    /** `hours` from this phone's clock now, as a server writes a time. */
-    const T = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+    /** `hours` from when the lists were made, as a server writes a time: one line's time is the same however often it is served. */
+    let made = 0;
+    const T = (hours: number) => new Date(made + hours * 3_600_000).toISOString();
     /**
      * B in use, A and C held: each one's list as its server sorts it, its newest an hour old by the servers' clock, which is
      * `ahead` hours ahead of this phone's.
      */
     async function lists(ahead = 0): Promise<void> {
+        made = Date.now();
         await switchPhoneTo(C);
         await switchPhoneTo(B);
         servers[B].listed = [row_('own-new', T(ahead - 2)), row_('own-old', T(ahead - 50))];

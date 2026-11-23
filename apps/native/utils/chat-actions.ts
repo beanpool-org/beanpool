@@ -556,7 +556,7 @@ export function pendingAfterRead<T extends { clientId: string; after?: string }>
     if (!nodeMessages) return pending;
     const held = new Set(nodeMessages.map(m => String(m.id)));
     const times = nodeMessages.map(m => m.timestamp);
-    const oldest = nodeMessages.length >= pageSize && times.every((t): t is string => typeof t === 'string' && t.length > 0)
+    const oldest = nodeMessages.length >= pageSize && times.every((at): at is string => typeof at === 'string' && at.length > 0)
         ? times.reduce((a, b) => (b < a ? b : a))
         : null;
     return pending.filter(p => !held.has(p.clientId) && !(oldest !== null && typeof p.after === 'string' && oldest > p.after));

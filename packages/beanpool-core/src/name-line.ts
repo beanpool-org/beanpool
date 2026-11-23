@@ -12,6 +12,7 @@
  * and as a guest it always shows (Marty, joint design question 3).
  */
 import { t, word } from './words.js';
+import { SHOWS_NOTHING_CHARS } from './shows-nothing.js';
 
 export type NameLineKind = 'name' | 'community' | 'waiting' | 'unconfirmed' | 'guest';
 
@@ -30,16 +31,19 @@ const NAME_LINE_WORDS = Object.freeze({
 });
 
 /**
- * Characters that show nothing and that no name is spelled with anywhere: every format character (Unicode's Cf: the soft
- * hyphen, the zero-width space, the direction marks, embeddings, overrides and isolates, the word joiner and invisible
- * operators, the byte-order mark, the interlinear annotation marks, the language tag, the Arabic, Syriac, Kaithi, Egyptian,
- * shorthand and musical format marks) but the two joiners and the tag characters, which spell real names and go only
- * where they spell nothing (below); the combining grapheme joiner, the Khmer inherent vowels and the Hangul fillers. Written
- * out, never as a Unicode property escape (\p{Cf}): core loads at app start on old Android engines, where those throw
- * (search-terms.ts). A test checks every \p{Cf} as Node knows it (name-line.test.ts).
+ * The format characters (Unicode's Cf) that are not among those that show nothing (shows-nothing.ts): the Arabic, Syriac,
+ * Kaithi and Egyptian format marks and the interlinear annotation marks. They change how the text around them is drawn,
+ * and no name is spelled with one. Written out, as the list is (search-terms.ts).
  */
-// eslint-disable-next-line no-misleading-character-class -- these characters are what it removes
-const INVISIBLE = /[\u00AD\u034F\u0600-\u0605\u061C\u06DD\u070F\u0890\u0891\u08E2\u115F\u1160\u17B4\u17B5\u180E\u200B\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\u3164\uFEFF\uFFA0\uFFF9-\uFFFB\u{110BD}\u{110CD}\u{13430}-\u{1343F}\u{1BCA0}-\u{1BCA3}\u{1D173}-\u{1D17A}\u{E0001}]/gu;
+const FORMAT_MARKS = '\\u0600-\\u0605\\u06DD\\u070F\\u0890\\u0891\\u08E2\\uFFF9-\\uFFFB\\u{110BD}\\u{110CD}\\u{13430}-\\u{1343F}';
+
+/**
+ * Characters that show nothing (core's one list, shows-nothing.ts: Unicode's Default_Ignorable_Code_Point and the blank
+ * braille cell) and the format marks above. All of them go, but the two joiners, the variation selectors and the tag
+ * characters, which spell real names and go only where they spell nothing (below). Tests check every \p{Cf} and every
+ * \p{DI} as Node knows them (name-line.test.ts).
+ */
+const INVISIBLE = new RegExp(`[${SHOWS_NOTHING_CHARS}${FORMAT_MARKS}]`, 'gu');
 
 /**
  * The tag characters (U+E0020 to U+E007F), kept only as a flag's own: the black flag, a region's code in tag letters and
@@ -49,8 +53,11 @@ const TAGS = /(\u{1F3F4}[\u{E0030}-\u{E0039}\u{E0061}-\u{E007A}]{2,7}\u{E007F})|
 const TAG = /[\u{E0020}-\u{E007F}]/u;
 /** The zero-width non-joiner and joiner: Persian and Urdu spell names with the first, emoji and Indic conjuncts with the second. */
 const JOINER = /[\u200C\u200D]/u;
-/** The variation selectors, which pick how the character before them looks: an emoji's or a text's, a kanji's form. */
-const SELECTOR = /[\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/u;
+/**
+ * The variation selectors, which pick how the character before them looks: an emoji's or a text's, a kanji's form, and
+ * Mongolian's free variation selectors, a letter's form in a word.
+ */
+const SELECTOR = /[\u180B-\u180D\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/u;
 /** The Indic viramas: a joiner after one makes a half form or a chillu, at a word's end too (Malayalam's older spelling). */
 const VIRAMA = /[\u094D\u09CD\u0A4D\u0ACD\u0B4D\u0BCD\u0C4D\u0CCD\u0D3B\u0D3C\u0D4D\u0DCA]/u;
 /** One space of its own kind between two words is kept as written: a no-break space, Japanese's ideographic space. */
@@ -74,7 +81,8 @@ function shows(ch: string | undefined): boolean {
  */
 export function cleanName(name: unknown): string {
     if (typeof name !== 'string') return '';
-    const chars = Array.from(name.replace(INVISIBLE, '').replace(TAGS, (_tag: string, flag: string | undefined) => flag ?? ''));
+    const shown = name.replace(INVISIBLE, (ch: string) => (JOINER.test(ch) || SELECTOR.test(ch) || TAG.test(ch) ? ch : ''));
+    const chars = Array.from(shown.replace(TAGS, (_tag: string, flag: string | undefined) => flag ?? ''));
     const kept = chars.filter((ch, i) => {
         const before = chars[i - 1], after = chars[i + 1];
         if (SELECTOR.test(ch)) return shows(before);

@@ -7,6 +7,7 @@
  * A tag is the member's own words in their own language: shown as typed, found by its own letters, never translated.
  */
 import { replaceLoneSurrogates } from '../text-limits.js';
+import { SHOWS_NOTHING_CHARS } from '../shows-nothing.js';
 import { word, type WordKey } from '../words.js';
 
 /** The most a listing carries, beside its five from the library. */
@@ -75,12 +76,10 @@ const HIDDEN = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b\u200e\u200f\
 const WEB_ADDRESS = /:\/\/|[^\s.]\.[a-z]{2,}/i;
 // The full stops a browser reads as a dot in a host name that NFKC leaves alone: "example。com" opens example.com.
 const IDEOGRAPHIC_STOPS = /[\u3002\uff61]/g;
-// What shows as nothing, so a contact is read past it ("0412\u200c345678" looks like the number it is): U+200C and U+200D,
-// which a tag may hold, the variation selectors emoji are written with, the fillers, a blank braille cell. Only here: the
-// tag keeps them. The fallback holds those in one UTF-16 unit.
-const SHOWS_NOTHING = byProperty('[\\p{DI}\\u2800]',
-    // eslint-disable-next-line no-misleading-character-class -- each is looked for alone, none joined to the one before it
-    /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8]/g);
+// What shows as nothing, so a contact is read past it ("0412\u200c345678" looks like the number it is): core's one list
+// (shows-nothing.ts), with U+200C and U+200D, which a tag may hold, the variation selectors emoji are written with, the
+// fillers, a blank braille cell. Only here: the tag keeps them. Written out, so every engine reads the same list.
+const SHOWS_NOTHING = new RegExp(`[${SHOWS_NOTHING_CHARS}]`, 'gu');
 
 function looksLikeContact(tag: string): boolean {
     // Compatibility forms too: a full-width "＠" or "０４１２" is still an address or a number.

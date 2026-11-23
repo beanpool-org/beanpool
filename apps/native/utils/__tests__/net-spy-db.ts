@@ -25,9 +25,10 @@ export function dbExportNames(): { functions: string[]; classes: string[]; strin
     const classes = [...source.matchAll(/^export class (\w+)/gm)].map(m => m[1]);
     const strings: Record<string, string> = {};
     for (const m of source.matchAll(/^export const (\w+)\s*=\s*'([^']*)'/gm)) strings[m[1]] = m[2];
-    // A whole-number constant (COPY_SCHEMA, the copy's schema number) stands in as itself.
+    // A whole-number constant (COPY_SCHEMA, the copy's schema number) stands in as itself, written with or without
+    // separators (READ_DEADLINE_MS = 12_000).
     const numbers: Record<string, number> = {};
-    for (const m of source.matchAll(/^export const (\w+)\s*=\s*(\d+);/gm)) numbers[m[1]] = Number(m[2]);
+    for (const m of source.matchAll(/^export const (\w+)\s*=\s*(\d[\d_]*);/gm)) numbers[m[1]] = Number(m[2].replace(/_/g, ''));
     const otherConsts = [...source.matchAll(/^export (?:const|let|var) (\w+)/gm)].map(m => m[1]).filter(n => !(n in strings) && !(n in numbers));
     if (otherConsts.length) throw new Error(`net-spy-db: utils/db exports ${otherConsts.join(', ')}, which this stand-in doesn't know how to stand in for`);
     return { functions, classes, strings, numbers };

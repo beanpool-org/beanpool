@@ -6411,11 +6411,15 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
 
         // Separate budgets: one shared controller let a slow conversations response use up the directory fetch's time
         // too, so it was aborted by us rather than by the network. Each covers its answer's body too (readWithDeadline): a
-        // deadline cleared once the headers came left a body that never ended holding the pass.
+        // deadline cleared once the headers came left a body that never ended holding the pass. Each body is read straight
+        // after its own answer, never across another read: the list's 10 s run while the directory's 30 s read waited
+        // would cost the chat list whenever the directory is slow (#3376 decide).
         let convRes;
+        let convData: any = null;
         const decidedBefore = _requestDecisions;
         try {
             convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { deadlineMs: SYNC_LIST_READ_MS, anchorUrl });
+            if (convRes.ok) convData = await convRes.json();
         } catch (e) {
             console.warn('[DB] conversations fetch failed:', e);
             return false;
@@ -6458,9 +6462,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         }
 
         if (!convRes.ok) return false;
-
-        const convData = await convRes.json();
-        if (!convData.conversations) return false;
+        if (!convData?.conversations) return false;
 
         // Identity, so we can attribute the peer's read cursor (read receipts): the account that asked, still the phone's,
         // with no copy cleared since, or nothing of this list is written or kept (ownListRead).
@@ -12178,16 +12180,22 @@ async function localGroups(filter?: { category?: string; memberPubkey?: string; 
 export async function fetchGroupDetails(id: string, community?: ChatCommunity): Promise<{ group: GroupItem; members: GroupMemberItem[] | null; rosterRefused?: boolean } | null> {
     try {
         const anchorUrl = await groupAddressOf(id, community);
-        const [groupRes, membersRes] = await Promise.all([
-            signedGet(`/api/groups/${encodeURIComponent(id)}`, { anchorUrl }),
+        // Each body read straight after its own answer, never after the other read (#3376 decide): a busy network's wait on
+        // the group's read let the roster's deadline run out before its body was read, and the whole card went with it.
+        const [groupRead, membersRead] = await Promise.all([
+            signedGet(`/api/groups/${encodeURIComponent(id)}`, { anchorUrl })
+                .then(async (res) => ({ ok: res.ok, body: res.ok ? await res.json() : null })),
             signedGet(`/api/groups/${encodeURIComponent(id)}/members`, { anchorUrl })
+                .then(async (res) => ({
+                    ok: res.ok,
+                    body: res.ok ? await res.json() : null,
+                    // Where anyone can join in a minute, the roster is its members': anyone else is told to join (join_to_see).
+                    refusal: !res.ok && res.status === 403 ? await res.json().catch(() => null) : null,
+                })),
         ]);
-        if (groupRes.ok) {
-            const group = await groupRes.json();
-            const members = membersRes.ok ? await membersRes.json() : null;
-            // Where anyone can join in a minute, the roster is its members': anyone else is told to join (join_to_see).
-            const refusal = !membersRes.ok && membersRes.status === 403 ? await membersRes.json().catch(() => null) : null;
-            return { group, members: Array.isArray(members) ? members : null, rosterRefused: refusal?.code === 'join_to_see' };
+        if (groupRead.ok) {
+            const members = membersRead.body;
+            return { group: groupRead.body, members: Array.isArray(members) ? members : null, rosterRefused: membersRead.refusal?.code === 'join_to_see' };
         }
     } catch (e) {
         console.warn('[Groups] Failed to fetch group detail:', e);

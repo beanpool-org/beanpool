@@ -260,6 +260,108 @@ describe('every list the phone reads gives up at its deadline, on its answer and
     });
 });
 
+// ── One read's wait never spends another's deadline (#3376 decide) ─────────────────────────────────────────────────────
+
+/**
+ * `call` on a fake clock (setTimeout's), with the real deadlines (10 s for the chat list, 30 s for the directory, 5 s for a
+ * page, 12 s for the rest): one deadline for every read, as the table above sets, would hide a read that waits on another.
+ * The clock turns 250 ms at a time, with a real turn of the loop between (a dynamic import, the file system), until the
+ * call settles or `capMs` has passed. `tookMs`: the fake time it took.
+ */
+async function onFakeClock<T>(call: () => Promise<T>, capMs: number): Promise<{ value?: T; error?: unknown; tookMs: number }> {
+    db._setReadDeadlineForTests(null);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+        const out: { done?: { value?: T; error?: unknown } } = {};
+        call().then((value) => { out.done = { value }; }, (error) => { out.done = { error }; });
+        let tookMs = 0;
+        while (!out.done && tookMs < capMs) {
+            await vi.advanceTimersByTimeAsync(250);
+            tookMs += 250;
+            await new Promise((r) => setImmediate(r));
+        }
+        if (!out.done) throw new Error(`still waiting after ${capMs} ms`);
+        return { ...out.done, tookMs };
+    } finally {
+        vi.useRealTimers();
+    }
+}
+
+/** A fake-clock wait of `ms`, then `then()`. */
+const after = <T,>(ms: number, then: () => T) => new Promise<T>((r) => setTimeout(() => r(then()), ms));
+
+const LINE = 'Hello from chat-1';
+/** The node at once, for every read but the directory's, which `directory` answers: the chat list, chat-1's page with one line. */
+function nodeWithDirectory(directory: () => Promise<any>) {
+    return vi.fn(async (url: string) => {
+        const u = new URL(url);
+        node.asked.push(u.pathname);
+        if (u.pathname === '/api/members') return directory();
+        if (u.pathname === '/api/messages/chat-1') {
+            return answer(200, {
+                conversation: { id: 'chat-1', type: 'group_thread', participants: [h.me.publicKey, PEER] },
+                messages: [{
+                    id: 'chat-1-line', conversationId: 'chat-1', authorPubkey: PEER, ciphertext: Buffer.from(LINE).toString('base64'),
+                    nonce: 'plaintext-v1', type: 'text', systemType: null, metadata: null, timestamp: '2026-11-20T06:00:00.000Z', editedAt: null,
+                }],
+            });
+        }
+        return quick(u.pathname);
+    });
+}
+
+describe('a slow read never costs another read its body: each body is read straight after its own answer (#3376 decide)', () => {
+    it('syncMessages: the directory answers after 25 s, the chat list at once: the chat list and its page are read (true), and the line is on the phone', async () => {
+        h.profile = { features: {} };
+        (globalThis as any).fetch = nodeWithDirectory(() => after(25_000, () => answer(200, [{ publicKey: PEER, callsign: 'Rhea' }])));
+        const { value, error, tookMs } = await onFakeClock(() => db.syncMessages(h.me.publicKey), 60_000);
+        expect(error).toBeUndefined();
+        // The directory was asked and waited for (the row is not vacuous): past the chat list's 10 s.
+        expect(node.asked).toContain('/api/members');
+        expect(tookMs).toBeGreaterThanOrEqual(25_000);
+        expect(value, 'the read worked').toBe(true);
+        expect(node.asked).toContain('/api/messages/chat-1');
+        expect((await db.getMessages('chat-1')).map((m: any) => m.text)).toEqual([LINE]);
+        // And the directory's answer was written too.
+        const held = await (await db.getDb()).getFirstAsync<{ callsign: string }>('SELECT callsign FROM members WHERE public_key = ?', [PEER]);
+        expect(held?.callsign).toBe('Rhea');
+    });
+
+    it('syncMessages: a directory that never answers is let go at its 30 s, and the chat list and each chat\'s page still come through (true)', async () => {
+        h.profile = { features: {} };
+        (globalThis as any).fetch = nodeWithDirectory(never);
+        const { value, error, tookMs } = await onFakeClock(() => db.syncMessages(h.me.publicKey), 60_000);
+        expect(error).toBeUndefined();
+        expect(node.asked).toContain('/api/members');
+        // Ended by the directory's own deadline, not the chat list's.
+        expect(tookMs).toBeGreaterThanOrEqual(30_000);
+        expect(value, 'the read worked').toBe(true);
+        expect(node.asked).toContain('/api/messages/chat-1');
+        expect((await db.getMessages('chat-1')).map((m: any) => m.text)).toEqual([LINE]);
+        expect(db._syncLockHeldForTests(), 'the sync lock').toBe(false);
+    });
+
+    it('fetchGroupDetails: a busy network\'s 20 s wait on the group\'s read never costs the roster, read at once, its body', async () => {
+        const busy = { ok: false, status: 429, headers: { get: (k: string) => (k === 'Retry-After' ? '20' : null) }, text: async () => '<html>error code: 1015</html>', json: async () => { throw new SyntaxError('not JSON'); } } as any;
+        busy.clone = () => ({ ...busy });
+        let groupAsks = 0;
+        (globalThis as any).fetch = vi.fn(async (url: string) => {
+            const u = new URL(url);
+            node.asked.push(u.pathname);
+            if (u.pathname === '/api/groups/g1') return ++groupAsks === 1 ? busy : answer(200, { id: 'g1', name: 'Garden' });
+            if (u.pathname === '/api/groups/g1/members') return answer(200, [{ publicKey: PEER, role: 'member' }]);
+            return quick(u.pathname);
+        });
+        const { value, error, tookMs } = await onFakeClock(() => db.fetchGroupDetails('g1'), 60_000);
+        expect(error).toBeUndefined();
+        // The wait and the second ask happened (the row is not vacuous): past the roster's 12 s.
+        expect(groupAsks).toBe(2);
+        expect(tookMs).toBeGreaterThanOrEqual(20_000);
+        expect((value as any)?.group?.name).toBe('Garden');
+        expect((value as any)?.members?.map((m: any) => m.publicKey)).toEqual([PEER]);
+    });
+});
+
 // ── The class, in the source ──────────────────────────────────────────────────────────────────────────────────────────
 
 describe('the class, in utils/db.ts: no read the phone makes there is left without a deadline', () => {
@@ -273,6 +375,43 @@ describe('the class, in utils/db.ts: no read the phone makes there is left witho
         expect(body).toContain('options?.deadlineMs === null ? ask(signal) : readWithDeadline(ask, { signal, deadlineMs: options?.deadlineMs });');
         expect(body.match(/\bask\(/g)?.length, 'ask is called only through once').toBe(1);
         expect(body.match(/\bonce\(options\?\.signal\)/g)?.length).toBe(2);
+    });
+
+    it('each answer\'s body is read before any other read is asked (#3376 decide): a read\'s deadline never runs on through another\'s', () => {
+        const isRead = (l: string) => /\b(signedGet|readWithDeadline)\(/.test(l) && !/^\s*(\/\/|\*)/.test(l) && !/function (signedGet|readWithDeadline)\(/.test(l);
+        const across: string[] = [];
+        let answers = 0;
+        lines.forEach((l, i) => {
+            const m = l.match(/(\w+)\s*=\s*await\s+(?:untilAborted\()?(?:signedGet|readWithDeadline)\(/);
+            if (!m) return;
+            answers++;
+            const body = new RegExp(`\\b${m[1]}\\b\\s*\\??\\.\\s*(json|text|arrayBuffer|blob|clone)\\(`);
+            // The answer dropped for another in its place (getDecisions' unsigned read after a 401): its body is never read.
+            const replaced = new RegExp(`(^|[^.\\w])${m[1]}\\s*=\\s*await\\s+(signedGet|readWithDeadline)\\(`);
+            for (let j = i + 1; j < Math.min(lines.length, i + 80) && !/^(export )?(async )?function /.test(lines[j]); j++) {
+                if (body.test(lines[j]) || replaced.test(lines[j])) break;
+                if (isRead(lines[j])) { across.push(`${i + 1} (${m[1]}) waits on ${j + 1}: ${lines[j].trim()}`); break; }
+            }
+        });
+        expect(answers, 'the answers this reads (not vacuous)').toBeGreaterThan(40);
+        expect(across).toEqual([]);
+        // Reads asked together (fetchGroupDetails): each one's body in its own .then, never after the others are in.
+        /** The array handed to Promise.all, to its own closing bracket. */
+        const handed = (rest: string) => {
+            let depth = 1;
+            for (let k = 0; k < rest.length; k++) {
+                if (rest[k] === '[') depth++;
+                else if (rest[k] === ']' && --depth === 0) return rest.slice(0, k);
+            }
+            return rest;
+        };
+        const together = source.split('Promise.all([').slice(1).map(handed).filter((b) => /\bsignedGet\(/.test(b));
+        expect(together.length, 'fetchGroupDetails asks its two reads together (not vacuous)').toBeGreaterThanOrEqual(1);
+        for (const block of together) {
+            for (const ask of block.split(/\bsignedGet\(/).slice(1)) {
+                expect(ask, 'a read asked together reads its body in its own .then').toMatch(/\.then\(async \(res\) =>[\s\S]*\bres\.json\(/);
+            }
+        }
     });
 
     it('only a photo\'s or a voice line\'s bytes are read with no deadline', () => {

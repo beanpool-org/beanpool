@@ -86,7 +86,7 @@ import {
 } from '../utils/your-groups';
 import {
     buildChatListItems, chatActionErrorMessage, chatListIndexOf, formatMessageTime, hasAnyAction, isTombstone, messageActions, messageTime,
-    pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneWords,
+    pendingAfterRead, shouldFollowNewMessages, takenAtOf, unsentToKeep, showsAuthorName, tombstoneWords,
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
 // The key and line code above never reaches the words layer: what it writes is translated where it is shown.
@@ -156,6 +156,8 @@ interface PendingMessage {
     replyToId: string | null;
     state: 'sending' | 'failed';
     timestamp: string;
+    /** The node's time of its line once the node's answer carried it (null: it named none); until then, none (takenAtOf). */
+    takenAt?: string | null;
 }
 
 export function GroupChatView({ kind, id, justCreated, initialName, openInfo, inPlace }: Props) {
@@ -318,7 +320,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     useEffect(() => {
         const file = unsentFile.current;
         if (!unsentRead || !me || !file) return;
-        void keepUnsent(AsyncStorage, me, file, id, pending.map(({ clientId, text, replyToId, timestamp }) => ({ clientId, text, replyToId, timestamp })));
+        // Only the lines the node never said it took (#3370 decide): one it took is the node's, never "not delivered" at the next open.
+        void keepUnsent(AsyncStorage, me, file, id, unsentToKeep(pending).map(({ clientId, text, replyToId, timestamp }) => ({ clientId, text, replyToId, timestamp })));
     }, [pending, unsentRead, me, id]);
 
     // The list this chat's row is in: that community's own in place, never the community in use's.
@@ -570,17 +573,22 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
     /** Deliver one message. Shared by a first send and by a Resend, so both are the same code path. */
     const deliver = useCallback(async (p: PendingMessage) => {
         try {
+            let answer: unknown;
             if (kind === 'group') {
                 const lastSealed = [...rawMessages].reverse().find(m => isSealedGroupLine(m));
                 // Held until it settles: a line sent as the chat is left still goes to its own community, or says it didn't.
-                await whileChatInPlace(at, () => postGroupChatMessage(id, p.text, p.clientId, p.replyToId, locked ? {
+                answer = await whileChatInPlace(at, () => postGroupChatMessage(id, p.text, p.clientId, p.replyToId, locked ? {
                     after: lastSealed ? String(lastSealed.id) : null,
                     mentionCandidates: rosterRows.map(r => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
                     onProgress: (done, total) => setSecuring(total >= 10 && done < total ? { done, total } : null),
                 } : undefined, at));
                 setSecuring(null);
                 setKeyNotice(null);
-            } else if (!at) await postEnterpriseChatMessage(id, p.text, p.clientId);
+            } else if (!at) answer = await postEnterpriseChatMessage(id, p.text, p.clientId);
+            // The node took it (its answer carries this line): never kept as unsent, and retired once a whole page has come
+            // after it (pendingAfterRead). An answer without it (not the node's) leaves the line as it was, kept with Resend.
+            const takenAt = takenAtOf(answer, p.clientId);
+            setPending(prev => prev.map(x => (x.clientId === p.clientId ? { ...x, takenAt } : x)));
             // A poll may be mid-flight with the chat as it was before this message; wait for it, then read again.
             while (inFlight.current) await new Promise(r => setTimeout(r, 100));
             const msgs = await load();

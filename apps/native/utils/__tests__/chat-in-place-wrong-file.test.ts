@@ -1323,6 +1323,20 @@ describe('a direct chat read in place: its lines leave that community\'s number 
         await db.leaveChatInPlace(A);
     });
 
+    it('two marks read at once for that chat (a joiner of its poll runs the poll\'s follow-up again, #3370 decide): its line comes off A\'s number once, 3 to 2, never 1', async () => {
+        const { noteServerUnread, readNoticeCounts } = await import('../notice-counts');
+        h.store.set('beanpool_saved_nodes', JSON.stringify([{ url: A }, { url: B }]));
+        await noteServerUnread(storage, A, 3, 3);
+        db.enterChatInPlace(A);
+        hold = holdFor((m, p) => m === 'POST' && p === '/api/messages/mark-read');
+        await Promise.all([db.markConversationRead(dm.id, me.publicKey, A), db.markConversationRead(dm.id, me.publicKey, A)]);
+        await hold.seen;
+        hold.release();
+        await settle();
+        expect(await readNoticeCounts(storage)).toEqual({ [A]: 2 });
+        await db.leaveChatInPlace(A);
+    });
+
     it('a message request for me read in place (slice S3): its server never counted it, so A\'s number stays as A said it', async () => {
         const { noteServerUnread, readNoticeCounts } = await import('../notice-counts');
         h.store.set('beanpool_saved_nodes', JSON.stringify([{ url: A }, { url: B }]));

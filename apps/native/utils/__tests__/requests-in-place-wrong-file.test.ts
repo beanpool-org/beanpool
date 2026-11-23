@@ -833,10 +833,17 @@ describe('a blocked person, by every key A\'s copy knows them by, pinned DM or n
         for (const k of keys) sql.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(id, k);
         sql.close();
     }
+    function dropRow(id: string, key: string): void {
+        const sql = new DatabaseSync(fileOn(A_FILE));
+        sql.prepare('DELETE FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').run(id, key);
+        sql.close();
+    }
 
-    type By = 'the listing\'s key' | 'the pin\'s key' | 'a key in the copy\'s own rows' | 'nobody of theirs';
+    // 'the pin\'s key alone': the pin's key's own participant row gone from A's copy (its rows [me] only), so the pin is the
+    // only place the copy knows that key by, and the pin's part of the check has a row of its own (#3309 re-check M1).
+    type By = 'the listing\'s key' | 'the pin\'s key' | 'the pin\'s key alone' | 'a key in the copy\'s own rows' | 'nobody of theirs';
     const ROWS: Array<['pinned' | 'unpinned', By, boolean]> = [
-        ['pinned', 'the listing\'s key', true], ['pinned', 'the pin\'s key', true], ['pinned', 'a key in the copy\'s own rows', true], ['pinned', 'nobody of theirs', false],
+        ['pinned', 'the listing\'s key', true], ['pinned', 'the pin\'s key', true], ['pinned', 'the pin\'s key alone', true], ['pinned', 'a key in the copy\'s own rows', true], ['pinned', 'nobody of theirs', false],
         ['unpinned', 'the listing\'s key', true], ['unpinned', 'a key in the copy\'s own rows', true], ['unpinned', 'nobody of theirs', false],
     ];
     it.each(ROWS)('%s DM, blocked by %s: card hidden %s', async (pinning, by, hidden) => {
@@ -847,14 +854,16 @@ describe('a blocked person, by every key A\'s copy knows them by, pinned DM or n
             // A's copy pinned its DM with peer at the seed; for the copy-row case a stray key sits in its rows beside the pin's.
             chat = dm.id;
             if (by === 'a key in the copy\'s own rows') addRows(chat, [kRow], false);
+            if (by === 'the pin\'s key alone') dropRow(chat, peer.publicKey);
         } else {
             // A DM A's copy holds with no pin: written into A's file after its pins were seeded, its rows [kRow, me].
             chat = randomUUID();
             addRows(chat, [kRow, me.publicKey], true);
         }
         const rowsBefore = peopleOf(chat);
+        if (by === 'the pin\'s key alone') expect(rowsBefore, 'the pin\'s key in no row of A\'s copy').toEqual([me.publicKey]);
         const blockedKey = {
-            'the listing\'s key': kNew, 'the pin\'s key': peer.publicKey, 'a key in the copy\'s own rows': kRow, 'nobody of theirs': person().publicKey,
+            'the listing\'s key': kNew, 'the pin\'s key': peer.publicKey, 'the pin\'s key alone': peer.publicKey, 'a key in the copy\'s own rows': kRow, 'nobody of theirs': person().publicKey,
         }[by];
         vi.mocked(getBlockedUsers).mockResolvedValue([blockedKey]);
         // A lists the chat as a request from the person's new key.

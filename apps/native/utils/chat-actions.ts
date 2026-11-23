@@ -527,6 +527,9 @@ export function isAtBottom(offsetY: number): boolean {
     return offsetY <= AT_BOTTOM_SLACK_PX;
 }
 
+/** The lines a group's or an enterprise's chat reads at a time, newest first (db.ts getGroupChat, getEnterpriseChat). */
+export const CHAT_PAGE_LINES = 50;
+
 /**
  * The bubbles this phone still owes after a read of the node. A node keeps the phone's `clientId` as the
  * message id, so a message that came back in the read is the phone's own bubble arriving home and stops being
@@ -536,14 +539,48 @@ export function isAtBottom(offsetY: number): boolean {
  * flight. A send whose POST succeeded but whose follow-up read did not must keep its bubble: retiring it on a
  * read that never answered takes the sender's message off the screen although the node holds it, and only the
  * next poll brings it back.
+ *
+ * A bubble's `takenAt` is the node's time of its line, as the node's answer to its send gave it (the node's clock, never
+ * the phone's): the node holds it. A full page (`pageSize` lines, the most a read brings) whose oldest line is newer than
+ * that can't list it, so it stops being pending there too (#3370 decide): kept, it came back on every open although the
+ * node held it, past the page no read would ever bring back. A bubble the node never said it took stays until the node
+ * lists it, or the member resends or discards it: a Resend of a line the node never took posts it now, at the bottom, so
+ * it is never too old to send; one the node did take is answered with the line it holds, stored once under its id.
  */
-export function pendingAfterRead<T extends { clientId: string }>(
+export function pendingAfterRead<T extends { clientId: string; takenAt?: string | null }>(
     pending: T[],
-    nodeMessages: { id: string | number }[] | null | undefined,
+    nodeMessages: { id: string | number; timestamp?: unknown }[] | null | undefined,
+    pageSize: number = CHAT_PAGE_LINES,
 ): T[] {
     if (!nodeMessages) return pending;
     const held = new Set(nodeMessages.map(m => String(m.id)));
-    return pending.filter(p => !held.has(p.clientId));
+    const times = nodeMessages.map(m => m.timestamp);
+    const oldest = nodeMessages.length >= pageSize && times.every((at): at is string => typeof at === 'string' && at.length > 0)
+        ? times.reduce((a, b) => (b < a ? b : a))
+        : null;
+    return pending.filter(p => !held.has(p.clientId) && !(oldest !== null && typeof p.takenAt === 'string' && oldest > p.takenAt));
+}
+
+/**
+ * The node's time of its line from its answer to the send of `clientId` (`{ message: { id, timestamp } }`, the id the
+ * line is stored under), as a bubble's `takenAt`: null when that line comes back with no time (the node took it; where
+ * it sits isn't known). Undefined, never taken, when the answer doesn't carry that line (#3376 max review N3): a 2xx that
+ * isn't the node's (a captive portal's page, which the sealed send reads as {}) or no send at all. Such a line is kept
+ * with Resend, as before; a Resend of a line the node did hold is answered with it, stored once.
+ */
+export function takenAtOf(answer: unknown, clientId: string): string | null | undefined {
+    const line = (answer as { message?: { id?: unknown; timestamp?: unknown } } | null | undefined)?.message;
+    if (!line || (typeof line.id !== 'string' && typeof line.id !== 'number')) return undefined;
+    if (String(line.id).toLowerCase() !== clientId.toLowerCase()) return undefined;
+    return typeof line.timestamp === 'string' && line.timestamp.length > 0 ? line.timestamp : null;
+}
+
+/**
+ * The bubbles kept on this phone across a relaunch as never sent (utils/group-unsent.ts): only those the node never said it
+ * took. One it took is the node's: kept, it came back "not delivered" at the next open although the node held it.
+ */
+export function unsentToKeep<T extends { takenAt?: string | null }>(pending: T[]): T[] {
+    return pending.filter(p => p.takenAt === undefined);
 }
 
 /**

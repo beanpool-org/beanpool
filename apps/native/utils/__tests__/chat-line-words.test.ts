@@ -116,6 +116,11 @@ describe('every sentence the key and line code writes is in the table', () => {
         // signedRequestWithMethod's refusal with no words of the node's, by its status.
         expect(db).toContain('`Request failed: ${res.status}`');
         expect(known('Request failed: 502')).toBe(true);
+        // A read its deadline ended (readWithDeadline, #3376 max review N4): the words for no answer, never a raw "timed out".
+        expect(db).toContain("const READ_GAVE_UP_TEXT = 'Could not reach the node.';");
+        expect(db).toContain('return new Error(READ_GAVE_UP_TEXT);');
+        expect(chatLineWords('Could not reach the node.')).toBe('Could not reach the node.');
+        expect(known('Could not reach the node.')).toBe(true);
         setLanguage('pt', [{ 'You are off-grid. Please connect to a BeanPool Node to send messages.': 'Está sem ligação. Ligue-se a um nó BeanPool para enviar mensagens.' }]);
         expect(chatLineWords('You are off-grid. Please connect to a BeanPool Node to send messages.')).toBe('Está sem ligação. Ligue-se a um nó BeanPool para enviar mensagens.');
     });

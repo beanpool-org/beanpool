@@ -54,6 +54,8 @@ const IN_PLACE = [
     'quietlyLetIn',
     // Slice N3: how long the oldest unread line waited (the fact line), read there before the chat marks itself read.
     'oldestUnreadAt',
+    // A chat's marks read one after another (#3370 decide): each one's own run, with the community it was asked for.
+    'markReadLocallyOnce',
     // Slice S6, groups in place: the group's own context, its reads, its sends and its refusals' own asks.
     'groupContextFor', 'groupAddressOf', 'groupKeyringFor', 'groupScreenKeyringFor', 'isHeldGroupChat', 'heldGroupRefusal',
     'nodeChatAnswer', 'nodeChatIsUnlocked', 'editRefusal', 'getGroupChat', 'fetchGroupDetails', 'postGroupChatMessage',

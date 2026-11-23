@@ -311,6 +311,9 @@ function nodeWithDirectory(directory: () => Promise<any>) {
 }
 
 describe('a slow read never costs another read its body: each body is read straight after its own answer (#3376 decide)', () => {
+    // No member held from an earlier row: each row that reads the directory shows its own write.
+    beforeEach(async () => { await (await db.getDb()).execAsync('DELETE FROM members'); });
+
     it('syncMessages: the directory answers after 25 s, the chat list at once: the chat list and its page are read (true), and the line is on the phone', async () => {
         h.profile = { features: {} };
         (globalThis as any).fetch = nodeWithDirectory(() => after(25_000, () => answer(200, [{ publicKey: PEER, callsign: 'Rhea' }])));
@@ -339,6 +342,22 @@ describe('a slow read never costs another read its body: each body is read strai
         expect(node.asked).toContain('/api/messages/chat-1');
         expect((await db.getMessages('chat-1')).map((m: any) => m.text)).toEqual([LINE]);
         expect(db._syncLockHeldForTests(), 'the sync lock').toBe(false);
+    });
+
+    it('syncMessages: a chat list whose body never ends is let go at its 10 s, and the directory is still read and written (false)', async () => {
+        h.profile = { features: {} };
+        const base = nodeWithDirectory(async () => answer(200, [{ publicKey: PEER, callsign: 'Rhea' }]));
+        (globalThis as any).fetch = vi.fn(async (url: string) => {
+            if (/^\/api\/messages\/conversations\//.test(new URL(url).pathname)) { node.asked.push(new URL(url).pathname); node.hang = 'never ends the body'; return hung(); }
+            return base(url);
+        });
+        const { value, error, tookMs } = await onFakeClock(() => db.syncMessages(h.me.publicKey), 60_000);
+        expect(error).toBeUndefined();
+        expect(tookMs).toBeGreaterThanOrEqual(10_000);
+        expect(value, 'the chat list was not read').toBe(false);
+        expect(node.asked).not.toContain('/api/messages/chat-1');
+        const held = await (await db.getDb()).getFirstAsync<{ callsign: string }>('SELECT callsign FROM members WHERE public_key = ?', [PEER]);
+        expect(held?.callsign, 'the directory, read after the list gave up').toBe('Rhea');
     });
 
     it('fetchGroupDetails: a busy network\'s 20 s wait on the group\'s read never costs the roster, read at once, its body', async () => {

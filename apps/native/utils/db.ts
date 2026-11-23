@@ -6415,15 +6415,17 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         // after its own answer, never across another read: the list's 10 s run while the directory's 30 s read waited
         // would cost the chat list whenever the directory is slow (#3376 decide).
         let convRes;
-        let convData: any = null;
         const decidedBefore = _requestDecisions;
         try {
             convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { deadlineMs: SYNC_LIST_READ_MS, anchorUrl });
-            if (convRes.ok) convData = await convRes.json();
         } catch (e) {
             console.warn('[DB] conversations fetch failed:', e);
             return false;
         }
+        // A list whose body can't be read is a list not read, as a not-ok one is: the directory is still read below.
+        const convData = convRes.ok
+            ? await convRes.json().catch((e: unknown) => { console.warn('[DB] conversations read failed:', e); return null; })
+            : null;
 
         let dirRes = null;
         if (shouldFetchMembers) {

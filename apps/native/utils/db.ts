@@ -6360,17 +6360,22 @@ async function blankLinesOfDeletedAccounts(database: SQLite.SQLiteDatabase, keys
     return blanked.length;
 }
 
+/** syncMessages' read of the member's conversations: 10 s, body included. */
+const SYNC_LIST_READ_MS = 10_000;
+/**
+ * syncMessages' read of the whole members' directory, the biggest list the phone reads: 30 s, body included. Its 10 s was
+ * for the answer alone; a full directory on a slow link takes longer to arrive, and one cut off is read again each tick.
+ */
+const SYNC_DIRECTORY_READ_MS = 30_000;
+/** syncMessages' read of one chat's page: 5 s, body included. */
+const SYNC_PAGE_READ_MS = 5_000;
+
 /**
  * The member's conversations and each one's newest lines, from the node into this phone. Failures are swallowed, so it
  * says whether the read worked: true when the list and every chat's page it asked for came back 2xx, false when any
  * didn't (a 503 while the node is full, a timeout on a weak link). The tabs' backstop counts only a read that worked, and
  * reads again on the next tick after one that didn't (app/(tabs)/_layout.tsx, review of #2558).
  */
-/** syncMessages' list reads (the conversations, the members' directory): 10 s each, body included. */
-const SYNC_LIST_READ_MS = 10_000;
-/** syncMessages' read of one chat's page: 5 s, body included. */
-const SYNC_PAGE_READ_MS = 5_000;
-
 export async function syncMessages(publicKey: string): Promise<boolean> {
     try {
         // The community asked and its file, taken together: every answer below is written into that file only, and none
@@ -6404,9 +6409,9 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
                                    localMembersCount === 0);
 
-        // Separate 10s budgets: one shared controller let a slow conversations response use up the
-        // directory fetch's time too, so it was aborted by us rather than by the network. Each covers its answer's body
-        // too (readWithDeadline): a deadline cleared once the headers came left a body that never ended holding the pass.
+        // Separate budgets: one shared controller let a slow conversations response use up the directory fetch's time
+        // too, so it was aborted by us rather than by the network. Each covers its answer's body too (readWithDeadline): a
+        // deadline cleared once the headers came left a body that never ended holding the pass.
         let convRes;
         const decidedBefore = _requestDecisions;
         try {
@@ -6419,7 +6424,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         let dirRes = null;
         if (shouldFetchMembers) {
             try {
-                dirRes = await signedGet('/api/members', { deadlineMs: SYNC_LIST_READ_MS, anchorUrl });
+                dirRes = await signedGet('/api/members', { deadlineMs: SYNC_DIRECTORY_READ_MS, anchorUrl });
             } catch (e) {
                 console.warn('[DB] members fetch failed:', e);
             }

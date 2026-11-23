@@ -540,15 +540,14 @@ export const CHAT_PAGE_LINES = 50;
  * read that never answered takes the sender's message off the screen although the node holds it, and only the
  * next poll brings it back.
  *
- * A bubble's `after` is the node's time of the newest line the chat showed as it was written ('' when it showed none):
- * the node's clock, never the phone's. A full page (`pageSize` lines, the most a read brings) whose oldest line is
- * newer than that is a page of lines that all came after it, so it can't list the bubble's own line: the node took it
- * and it is older than the page, or the node never took it and a page of the chat has gone by since. Either way it
- * stops being pending (#3370 decide): kept, it came back "not delivered" on every open although the node held it, and
- * its Resend (stored once under its id) would bring back only that same page. A bubble with no `after` (written
- * before the chat had answered) is retired only by the node's own copy, as before.
+ * A bubble's `takenAt` is the node's time of its line, as the node's answer to its send gave it (the node's clock, never
+ * the phone's): the node holds it. A full page (`pageSize` lines, the most a read brings) whose oldest line is newer than
+ * that can't list it, so it stops being pending there too (#3370 decide): kept, it came back on every open although the
+ * node held it, past the page no read would ever bring back. A bubble the node never said it took stays until the node
+ * lists it, or the member resends or discards it: a Resend of a line the node never took posts it now, at the bottom, so
+ * it is never too old to send; one the node did take is answered with the line it holds, stored once under its id.
  */
-export function pendingAfterRead<T extends { clientId: string; after?: string }>(
+export function pendingAfterRead<T extends { clientId: string; takenAt?: string | null }>(
     pending: T[],
     nodeMessages: { id: string | number; timestamp?: unknown }[] | null | undefined,
     pageSize: number = CHAT_PAGE_LINES,
@@ -559,14 +558,24 @@ export function pendingAfterRead<T extends { clientId: string; after?: string }>
     const oldest = nodeMessages.length >= pageSize && times.every((at): at is string => typeof at === 'string' && at.length > 0)
         ? times.reduce((a, b) => (b < a ? b : a))
         : null;
-    return pending.filter(p => !held.has(p.clientId) && !(oldest !== null && typeof p.after === 'string' && oldest > p.after));
+    return pending.filter(p => !held.has(p.clientId) && !(oldest !== null && typeof p.takenAt === 'string' && oldest > p.takenAt));
 }
 
-/** The node's time of the newest line `nodeMessages` hold ('' for none), as a bubble's `after` (pendingAfterRead). */
-export function newestLineAt(nodeMessages: { timestamp?: unknown }[]): string {
-    let newest = '';
-    for (const m of nodeMessages) if (typeof m.timestamp === 'string' && m.timestamp > newest) newest = m.timestamp;
-    return newest;
+/**
+ * The node's time of its line from its answer to a send (`{ message: { timestamp } }`), as a bubble's `takenAt`: null when
+ * the answer names none (the node took it; where it sits isn't known).
+ */
+export function takenAtOf(answer: unknown): string | null {
+    const at = (answer as { message?: { timestamp?: unknown } } | null | undefined)?.message?.timestamp;
+    return typeof at === 'string' && at.length > 0 ? at : null;
+}
+
+/**
+ * The bubbles kept on this phone across a relaunch as never sent (utils/group-unsent.ts): only those the node never said it
+ * took. One it took is the node's: kept, it came back "not delivered" at the next open although the node held it.
+ */
+export function unsentToKeep<T extends { takenAt?: string | null }>(pending: T[]): T[] {
+    return pending.filter(p => p.takenAt === undefined);
 }
 
 /**

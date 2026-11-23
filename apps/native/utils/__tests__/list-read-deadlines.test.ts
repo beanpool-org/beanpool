@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
     cacheDir: '',
     store: new Map<string, string>(),
     me: { publicKey: 'pk-me', privateKey: '' },
+    /** This phone's copy of the node's profile: none, unless a row reads the whole members' directory. */
+    profile: null as null | { features: Record<string, unknown> },
 }));
 
 vi.mock('expo-sqlite', async () => {
@@ -72,6 +74,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
+vi.mock('../node-profile', async (orig) => ({ ...(await orig<any>()), getCachedNodeProfile: vi.fn(async () => h.profile) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
@@ -144,6 +147,7 @@ beforeEach(async () => {
     node.hang = 'never answers';
     node.asked = [];
     node.signedOnly = false;
+    h.profile = null;
     (globalThis as any).fetch = fetchMock;
     db._setReadDeadlineForTests(DEADLINE_MS);
     await db.getDb();
@@ -156,6 +160,7 @@ type Row = [string, () => Promise<unknown>, RegExp, (() => void)?];
 const ROWS: Row[] = [
     ['syncMessages: the chat list', () => db.syncMessages(h.me.publicKey), /^\/api\/messages\/conversations\/pk-me$/],
     ['syncMessages: a chat\'s page', () => db.syncMessages(h.me.publicKey), /^\/api\/messages\/chat-1$/],
+    ['syncMessages: the whole members\' directory', () => db.syncMessages(h.me.publicKey), /^\/api\/members$/, () => { h.profile = { features: {} }; }],
     ['syncSingleConversation: the chat\'s page', () => db.syncSingleConversation('chat-1'), /^\/api\/messages\/chat-1$/],
     ['fetchGroups', () => db.fetchGroups(), /^\/api\/groups$/],
     ['fetchYourGroups', () => db.fetchYourGroups(), /^\/api\/your-groups$/],

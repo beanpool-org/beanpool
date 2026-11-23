@@ -14,7 +14,7 @@ import {
     REMOVED_BY_KEEPER_TEXT, NOT_AVAILABLE_YET,
     buildChatListItems, canDeleteMessage, canEditMessage, canReactToMessage, canRemoveMessage, canReportMessage,
     canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator, isEditClosed, isOldLinesLabel,
-    isSystemLine, isTombstone, messageActions, newestLineAt, normaliseThreadMessage, pendingAfterRead, reactionSummary, CHAT_PAGE_LINES,
+    isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary, CHAT_PAGE_LINES, takenAtOf, unsentToKeep,
     shouldFollowNewMessages, shouldShowChatLoadError, showsAuthorName, threadMessageDisplayText, tombstoneText,
     type ChatMessage, type ChatViewer, type MessageActions,
 } from '../chat-actions';
@@ -681,20 +681,21 @@ describe('which bubbles a read of the node retires', () => {
         expect(pendingAfterRead(pending, [])).toEqual(pending);
     });
 
-    // #3370 decide: a kept line the node took, older than the newest page, came back "not delivered" on every open. Its
-    // `after` is the node's time of the newest line shown as it was written; a full page all newer than that can't list it.
+    // #3370 decide: a line the node took (its answer to the send gave its time, the node's clock), past the newest page, came
+    // back "not delivered" on every open. A full page all newer than its time can't list it. One the node never said it took
+    // stays for the member's Resend or Discard, whatever the page: a Resend posts it now, so it is never too old to send.
     const at = (n: number) => `2026-11-2${n}T00:00:00.000Z`;
     const page = (count: number, from: number) => Array.from({ length: count }, (_x, i) => ({ id: `n${i}`, timestamp: at(from) }));
-    const ROWS: Array<[string, { after?: string }, { id: string; timestamp?: unknown }[] | null, number, boolean]> = [
-        ['a full page, all after the line\'s newest line shown', { after: at(1) }, page(50, 2), 50, true],
-        ['a full page, the chat empty as the line was written', { after: '' }, page(50, 2), 50, true],
-        ['a page not full (the chat holds no more): it would be listed if the node had it', { after: at(1) }, page(49, 2), 50, false],
-        ['a full page whose oldest line is the line\'s newest shown', { after: at(2) }, page(50, 2), 50, false],
-        ['a full page older than the line\'s newest shown', { after: at(3) }, page(50, 2), 50, false],
-        ['no `after` (written before the chat answered)', {}, page(50, 2), 50, false],
-        ['a full page with a line whose time can\'t be read', { after: at(1) }, [...page(49, 2), { id: 'x' }], 50, false],
-        ['the read did not happen', { after: at(1) }, null, 50, false],
-        ['a smaller page size, full', { after: at(1) }, page(3, 2), 3, true],
+    const ROWS: Array<[string, { takenAt?: string | null }, { id: string; timestamp?: unknown }[] | null, number, boolean]> = [
+        ['taken, a full page all after it', { takenAt: at(1) }, page(50, 2), 50, true],
+        ['taken, a smaller page size, full, all after it', { takenAt: at(1) }, page(3, 2), 3, true],
+        ['taken, a page not full (the chat holds no more): it would be listed', { takenAt: at(1) }, page(49, 2), 50, false],
+        ['taken, a full page whose oldest line is its own time', { takenAt: at(2) }, page(50, 2), 50, false],
+        ['taken, a full page older than it', { takenAt: at(3) }, page(50, 2), 50, false],
+        ['taken, its time not named by the node', { takenAt: null }, page(50, 2), 50, false],
+        ['taken, a full page with a line whose time can\'t be read', { takenAt: at(1) }, [...page(49, 2), { id: 'x' }], 50, false],
+        ['taken, the read did not happen', { takenAt: at(1) }, null, 50, false],
+        ['never said taken (a send that failed, a line kept from before a relaunch), a full page all after it', {}, page(50, 2), 50, false],
     ];
     it.each(ROWS.map(([row, ...rest]) => [`${row}: ${rest[3] ? 'retired' : 'kept'}`, ...rest] as const))('%s', (_row, line, nodeMessages, pageSize, retired) => {
         const left = pendingAfterRead([{ clientId: 'kept', ...line }], nodeMessages, pageSize);
@@ -708,8 +709,24 @@ describe('which bubbles a read of the node retires', () => {
         expect(db).toMatch(/export async function getEnterpriseChat\(treasury: string, limit = 50\)/);
     });
 
-    it('newestLineAt: the node\'s newest time on the page, \'\' for none', () => {
-        expect(newestLineAt([{ timestamp: at(2) }, { timestamp: at(4) }, { timestamp: at(3) }, {}])).toBe(at(4));
-        expect(newestLineAt([])).toBe('');
+    it('takenAtOf: the node\'s time of the line from its answer to the send; null when it names none', () => {
+        expect(takenAtOf({ success: true, message: { id: 'c1', timestamp: at(4) } })).toBe(at(4));
+        for (const answer of [{ success: true }, { message: { timestamp: '' } }, { message: { timestamp: 7 } }, null, undefined, 'ok']) {
+            expect(takenAtOf(answer), JSON.stringify(answer)).toBeNull();
+        }
+    });
+
+    it('kept across a relaunch as never sent: only the lines the node never said it took (unsentToKeep)', () => {
+        const lines = [{ clientId: 'a' }, { clientId: 'b', takenAt: at(1) }, { clientId: 'c', takenAt: null }, { clientId: 'd' }];
+        expect(unsentToKeep(lines).map((l) => l.clientId)).toEqual(['a', 'd']);
+    });
+
+    it('the group chat keeps only those, and marks a line taken from the node\'s answer to its send (the wiring)', () => {
+        const view = readFileSync(join(NATIVE_ROOT, 'components', 'GroupChatView.tsx'), 'utf8');
+        expect(view).toContain('void keepUnsent(AsyncStorage, me, file, id, unsentToKeep(pending).map(');
+        expect(view).toContain('answer = await whileChatInPlace(at, () => postGroupChatMessage(');
+        expect(view).toContain('} else if (!at) answer = await postEnterpriseChatMessage(id, p.text, p.clientId);');
+        expect(view).toContain('const takenAt = takenAtOf(answer);');
+        expect(view.match(/keepUnsent\(/g)?.length).toBe(1);
     });
 });

@@ -150,14 +150,6 @@ describe('a group line never sent is kept across a relaunch (utils/group-unsent.
         expect(s.m.size).toBe(0);
     });
 
-    it('a line\'s `after` (the node\'s time of the newest line shown as it was written) is kept and read back; one of any other type is none', async () => {
-        const s = store();
-        await keepUnsent(s, ME, 'f.db', 'g1', [{ ...line(1), after: '2026-11-22T10:00:00.000Z' }, { ...line(2), after: '' }, line(3)]);
-        expect(await readUnsent(s, ME, 'f.db', 'g1')).toEqual([{ ...line(1), after: '2026-11-22T10:00:00.000Z' }, { ...line(2), after: '' }, line(3)]);
-        s.m.set(groupUnsentStoreKey(ME, 'f.db'), JSON.stringify({ g1: [{ ...line(4), after: 7 }] }));
-        expect(await readUnsent(s, ME, 'f.db', 'g1')).toEqual([line(4)]);
-    });
-
     it('the newest only, past the limit; a chat id of any other shape, or a value that can\'t be read, keeps and reads nothing', async () => {
         const s = store();
         const many = Array.from({ length: UNSENT_MAX_A_CHAT + 5 }, (_x, i) => line(i));

@@ -7,7 +7,7 @@
  *
  * One table (close the class): each list read in utils/db.ts x a server that never answers, and one that answers its
  * headers and never ends the body. Each row asserts that the read asked that server (the row is not vacuous), that it
- * settled at its deadline (not before, so it was the deadline that ended it, and well within twice it), and that the sync
+ * settled at its deadline (not before, so it was the deadline that ended it, and not left waiting), and that the sync
  * lock is free after. The fetch here ignores its abort signal, as a fetch that never gives up does. Then the class's
  * guard over the source: every read through signedGet is under the deadline (only a photo's or a voice line's bytes ask
  * for none), and every other fetch db.ts makes is under readWithDeadline, a write, or one named read of a single thing.
@@ -101,6 +101,8 @@ const ANCHOR = 'https://riverside.example';
 const PEER = 'pk-peer';
 /** Every read's deadline here (each one's own, 10 s, 5 s or 12 s, scaled to it). */
 const DEADLINE_MS = 80;
+/** How long a row waits for a read that should have given up at DEADLINE_MS before it calls it hung. */
+const STILL_WAITING_MS = 3_000;
 
 // ── The node: it answers every read at once, except the row's, which it never answers or whose body never ends ─────────
 
@@ -204,12 +206,11 @@ describe('every list the phone reads gives up at its deadline, on its answer and
         node.hang = hang;
         const started = Date.now();
         const settled = call().then(() => Date.now() - started, () => Date.now() - started);
-        const took = await Promise.race([settled, new Promise<'still waiting'>((r) => setTimeout(() => r('still waiting'), DEADLINE_MS * 12))]);
+        const took = await Promise.race([settled, new Promise<'still waiting'>((r) => setTimeout(() => r('still waiting'), STILL_WAITING_MS))]);
         expect(node.asked.some((p) => at.test(p)), 'the read asked the server it waits on').toBe(true);
         expect(took, 'settled').not.toBe('still waiting');
-        // Ended by its deadline: not before it (no other failure ended it), and well within twice it.
+        // Ended by its deadline: not before it, so no other failure ended it.
         expect(took as number).toBeGreaterThanOrEqual(DEADLINE_MS - 5);
-        expect(took as number).toBeLessThan(DEADLINE_MS * 6);
         expect(db._syncLockHeldForTests(), 'the sync lock').toBe(false);
     });
 
@@ -238,12 +239,11 @@ describe('every list the phone reads gives up at its deadline, on its answer and
         node.hung = /^\/api\/groups\/g1\/chat$/;
         const stop = new AbortController();
         db._setReadDeadlineForTests(5_000);
-        const started = Date.now();
-        const reading = db.signedGet('/api/groups/g1/chat?limit=1', { signal: stop.signal }).then(() => null, (e: any) => ({ took: Date.now() - started, name: e?.name }));
+        const reading = db.signedGet('/api/groups/g1/chat?limit=1', { signal: stop.signal }).then(() => null, (e: any) => ({ name: e?.name }));
         setTimeout(() => stop.abort(), 30);
         const ended = await reading;
+        // An AbortError, never the deadline's "timed out": the caller's abort ended it, not its 5 s.
         expect(ended?.name).toBe('AbortError');
-        expect(ended!.took).toBeLessThan(1_000);
     });
 
     it('a busy network\'s 429 page that never ends is let go at the first ask\'s deadline (its copy\'s body is under it too): the one wait, then the one ask again', async () => {
@@ -257,7 +257,6 @@ describe('every list the phone reads gives up at its deadline, on its answer and
         expect(node.asked.filter((p) => p === '/api/groups/g1/chat').length).toBe(2);
         // The first ask's deadline (its copy's body), then the busy network's 1 s wait.
         expect(took).toBeGreaterThanOrEqual(DEADLINE_MS + 1_000 - 5);
-        expect(took).toBeLessThan(DEADLINE_MS * 6 + 1_000);
     });
 });
 

@@ -23,6 +23,7 @@
 // openDmOldLinePart: old chat's card (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
 import { openDmLine, openDmOldLinePart, sealDmLine, type DmKeyContext, type DmKeys, type DmPayload } from './dm-crypto.js';
 import { beansPriceWords } from './event-copy.js';
+import { isPriceUnit, type PriceUnit } from './price-units.js';
 import { t, word } from './words.js';
 
 /** The metadata key the sealed reference rides under. */
@@ -76,9 +77,9 @@ function kindOf(type: unknown): ChatAboutKind | null {
     return typeof type === 'string' && (KINDS as readonly string[]).includes(type) ? (type as ChatAboutKind) : null;
 }
 
-function perOf(post: AboutPostLike): 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' {
+function perOf(post: AboutPostLike): PriceUnit {
     const per = post.priceType ?? post.price_type;
-    return per === 'hourly' || per === 'daily' || per === 'weekly' || per === 'monthly' ? per : 'fixed';
+    return isPriceUnit(per) ? per : 'fixed';
 }
 
 /**

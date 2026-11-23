@@ -16,18 +16,26 @@ import {
     ITEM_COUNT_MAX, LOT_UNITS_MIN, itemColumnsRefusal, itemsAmount, perItemLines, perItemOffered, perItemRefusalText,
     type ItemLot, type PerItemRefusalOf,
 } from './per-item.js';
+import { kgYearPriceUnitsOffered, type PriceUnit } from './price-units.js';
 
 /**
  * The price units a create or edit form offers, in the order the unit button cycles and the web's list reads: Total, then
- * Each (right after Total, §2.4), then per hour, day, week and month. Each only on an Offer, and only where the node's features
- * answer says it takes up an Offer priced for each one (`perItem`, absent until every slice is merged): until then the list is
- * the five it always was. Pass `keep` (an edit of a listing already priced each) so the unit it has is never taken away.
+ * Each (right after Total, §2.4), then per hour, day, week, month, year and kilo. Each only on an Offer and only where the
+ * node's features answer says `perItem`; per year and per kilo on Needs and Offers only where the node's features answer says
+ * `priceUnitsKgYear`. Older nodes that don't advertise them get the five units they always had. Pass `keep` (an edit of a
+ * listing already priced with a gated unit) so the unit it holds is never taken away.
  */
 export function priceUnitsOffered(
-    features: { perItem?: unknown } | null | undefined, type: string | null | undefined, keep?: string | null,
-): readonly ('fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly')[] {
+    features: { perItem?: unknown; priceUnitsKgYear?: unknown } | null | undefined, type: string | null | undefined, keep?: string | null,
+): readonly PriceUnit[] {
     const each = type === 'offer' && (perItemOffered(features) || keep === 'each');
-    return each ? ['fixed', 'each', 'hourly', 'daily', 'weekly', 'monthly'] : ['fixed', 'hourly', 'daily', 'weekly', 'monthly'];
+    const kgYear = kgYearPriceUnitsOffered(features);
+    const out: PriceUnit[] = ['fixed'];
+    if (each) out.push('each');
+    out.push('hourly', 'daily', 'weekly', 'monthly');
+    if (kgYear || keep === 'yearly') out.push('yearly');
+    if (kgYear || keep === 'per_kg') out.push('per_kg');
+    return out;
 }
 
 /** The three boxes as a member typed them. */

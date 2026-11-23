@@ -24,6 +24,7 @@ import { randomBytes } from '@noble/hashes/utils.js';
 import { audienceOf, signedRequestBytes, toBase64, type Signer } from './request-signing.js';
 import { t, tn } from './words.js';
 import { formatHundredths, isHundredths, parseHundredths, type Hundredths } from './hundredths.js';
+import { isPriceUnit } from './price-units.js';
 
 /** The two periods a standing deal runs by. */
 export type StandingPeriodUnit = 'week' | 'month';
@@ -49,11 +50,28 @@ export function standingWarnAheadMs(unit: StandingPeriodUnit): number {
 /** How far ahead a standing deal may start ("up to 30 days ahead"). */
 export const STANDING_START_AHEAD_MS = 30 * 86_400_000;
 
-/** The listing's price unit that makes a standing deal (decision 1), or null for one that makes a one-off deal. */
+/**
+ * The listing's price unit that makes a standing deal (decision 1), or null for one that makes a one-off deal.
+ * `yearly` stays one-off and is refused by standing deals because `standing_deals.period_unit` has
+ * `CHECK (period_unit IN ('week', 'month'))` and the standing authorisation text only names `'week'` or `'month'`.
+ */
 export function standingUnitOf(priceType: string | null | undefined): StandingPeriodUnit | null {
-    if (priceType === 'weekly') return 'week';
-    if (priceType === 'monthly') return 'month';
-    return null;
+    if (!isPriceUnit(priceType)) return null;
+    switch (priceType) {
+        case 'weekly': return 'week';
+        case 'monthly': return 'month';
+        case 'fixed':
+        case 'each':
+        case 'hourly':
+        case 'daily':
+        case 'yearly':
+        case 'per_kg':
+            return null;
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /**

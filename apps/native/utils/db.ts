@@ -3227,7 +3227,7 @@ export async function getTransactions(pubkey: string) {
     AsyncStorage.getItem('beanpool_anchor_url').then(async (anchorUrl: string | null) => {
         if (!anchorUrl) return;
         try {
-            const res = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubkey}&limit=20`);
+            const res = await readWithDeadline((signal) => fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubkey}&limit=20`, { signal }));
             if (res.ok) {
                 const txns = await res.json();
                 if (Array.isArray(txns) && txns.length > 0) {
@@ -3515,12 +3515,8 @@ export async function getReachablePeers(): Promise<{ peerId: string; callsign: s
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return [];
         const cleanUrl = anchorUrl.trim().replace(/\/+$/, '');
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const res = await fetch(`${cleanUrl}/api/federation/reachable-peers`, {
-            signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+        // 10 s, its body included (readWithDeadline).
+        const res = await readWithDeadline((signal) => fetch(`${cleanUrl}/api/federation/reachable-peers`, { signal }), { deadlineMs: 10_000 });
         if (!res.ok) return [];
         const json = await res.json();
         return Array.isArray(json?.peers)
@@ -4366,7 +4362,7 @@ export async function getTreasuries(): Promise<TreasurySummary[]> {
     if (!rawUrl) return [];
     const anchorUrl = rawUrl.replace(/\/$/, '');
     try {
-        const res = await fetch(`${anchorUrl}/api/treasuries`);
+        const res = await readWithDeadline((signal) => fetch(`${anchorUrl}/api/treasuries`, { signal }));
         if (!res.ok) return [];
         const data = await res.json();
         return data.treasuries || [];
@@ -5145,7 +5141,7 @@ export async function getDecisions(status?: string): Promise<{ decisions: Decisi
         let res = await signedGet(path);
         // A phone whose clock is off gets 401 for the signature; the list still loads unsigned, just without "you voted".
         const signed = res.status !== 401;
-        if (!signed) res = await fetch(`${rawUrl}${path}`, { headers: { 'Accept': 'application/json' } });
+        if (!signed) res = await readWithDeadline((signal) => fetch(`${rawUrl}${path}`, { headers: { 'Accept': 'application/json' }, signal }));
         if (!res.ok) return { decisions: [], myPoolVoting: null, canPropose: null };
         const data = await res.json();
         return {
@@ -6370,6 +6366,11 @@ async function blankLinesOfDeletedAccounts(database: SQLite.SQLiteDatabase, keys
  * didn't (a 503 while the node is full, a timeout on a weak link). The tabs' backstop counts only a read that worked, and
  * reads again on the next tick after one that didn't (app/(tabs)/_layout.tsx, review of #2558).
  */
+/** syncMessages' list reads (the conversations, the members' directory): 10 s each, body included. */
+const SYNC_LIST_READ_MS = 10_000;
+/** syncMessages' read of one chat's page: 5 s, body included. */
+const SYNC_PAGE_READ_MS = 5_000;
+
 export async function syncMessages(publicKey: string): Promise<boolean> {
     try {
         // The community asked and its file, taken together: every answer below is written into that file only, and none
@@ -6404,32 +6405,25 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                                    localMembersCount === 0);
 
         // Separate 10s budgets: one shared controller let a slow conversations response use up the
-        // directory fetch's time too, so it was aborted by us rather than by the network.
-        const controller1 = new AbortController();
-        const timeout1 = setTimeout(() => controller1.abort(), 10000);
-        
+        // directory fetch's time too, so it was aborted by us rather than by the network. Each covers its answer's body
+        // too (readWithDeadline): a deadline cleared once the headers came left a body that never ended holding the pass.
         let convRes;
         const decidedBefore = _requestDecisions;
         try {
-            convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { signal: controller1.signal, anchorUrl });
+            convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { deadlineMs: SYNC_LIST_READ_MS, anchorUrl });
         } catch (e) {
             console.warn('[DB] conversations fetch failed:', e);
-            clearTimeout(timeout1);
             return false;
         }
-        clearTimeout(timeout1);
 
         let dirRes = null;
-        const dirController = new AbortController();
-        const dirTimeout = setTimeout(() => dirController.abort(), 10000);
         if (shouldFetchMembers) {
             try {
-                dirRes = await signedGet('/api/members', { signal: dirController.signal, anchorUrl });
+                dirRes = await signedGet('/api/members', { deadlineMs: SYNC_LIST_READ_MS, anchorUrl });
             } catch (e) {
                 console.warn('[DB] members fetch failed:', e);
             }
         }
-        clearTimeout(dirTimeout);
         
         if (dirRes && dirRes.ok) {
             try {
@@ -6676,21 +6670,17 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             }
             }
 
-            const controller2 = new AbortController();
-            const timeout2 = setTimeout(() => controller2.abort(), 5000);
-            let msgRes;
+            // 5 s for the page, its body included: one that never ends is a page not read, and the pass goes on.
+            let msgData;
             try {
-                msgRes = await signedGet(`/api/messages/${conv.id}`, { signal: controller2.signal, anchorUrl });
+                const msgRes = await signedGet(`/api/messages/${conv.id}`, { deadlineMs: SYNC_PAGE_READ_MS, anchorUrl });
+                if (!msgRes.ok) { everyPageRead = false; continue; }
+                msgData = await msgRes.json();
             } catch (err) {
-                clearTimeout(timeout2);
                 everyPageRead = false;
                 continue;
             }
-            clearTimeout(timeout2);
-            if (!msgRes.ok) { everyPageRead = false; continue; }
-            
-            const msgData = await msgRes.json();
-            const messages = msgData.messages;
+            const messages = msgData?.messages;
             if (!Array.isArray(messages)) continue;
             if (!(await onThisCopy(database))) return false;
             for (const m of messages) {
@@ -9358,7 +9348,7 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
         // 3. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk), bound as its words are and
         //    and signed by that sender (format 4), so neither a photo from another line nor one the other person sealed in
         //    the sender's name can stand in.
-        const res = await signedGet(`/api/messages/${messageId}/attachment`, { anchorUrl: here.anchorUrl });
+        const res = await signedGet(`/api/messages/${messageId}/attachment`, { anchorUrl: here.anchorUrl, deadlineMs: ATTACHMENT_NO_DEADLINE });
         if (!res.ok) return null;
         const { data, nonce } = await res.json();
         const decrypted = openDmLine({ ciphertext: data, nonce }, words.keys, { ...ref, senderPubHex: words.senderPubHex, part: 'attachment' }).text;
@@ -9522,7 +9512,7 @@ export async function getDecryptedVoice(conversationId: string, messageId: strin
     const kept = await keptVoice(messageId);
     if (kept) return { kind: 'ok', voice: kept };
     let res: Response;
-    try { res = await signedGet(`/api/messages/${encodeURIComponent(messageId)}/attachment`, { anchorUrl: here.anchorUrl }); } catch { return { kind: 'unavailable' }; }
+    try { res = await signedGet(`/api/messages/${encodeURIComponent(messageId)}/attachment`, { anchorUrl: here.anchorUrl, deadlineMs: ATTACHMENT_NO_DEADLINE }); } catch { return { kind: 'unavailable' }; }
     if (isGoneStatus(res.status)) return { kind: 'gone' };
     if (!res.ok) return { kind: 'unavailable' };
     try {
@@ -9564,7 +9554,7 @@ async function oldLinePhoto(
     const cached = await FileSystem.getInfoAsync(cachePath);
     if (cached.exists) return cachePath;
     // `anchorUrl`: a chat open in place's own community (slice S2); left out, the community in use.
-    const res = await signedGet(`/api/messages/${ref.messageId}/attachment`, { anchorUrl });
+    const res = await signedGet(`/api/messages/${ref.messageId}/attachment`, { anchorUrl, deadlineMs: ATTACHMENT_NO_DEADLINE });
     if (!res.ok) return null;
     const { data, nonce } = await res.json();
     const m = openDmOldPhoto(words, { ciphertext: data, nonce }, keys, line, dmCtx.formerPeers).match(/^data:image\/\w+;base64,(.*)$/);
@@ -10600,12 +10590,12 @@ export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ig
  * Under ENFORCE_READ_AUTH=true, gated GET endpoints require signed headers with an empty body.
  * `anchorUrl`: the community asked (a chat request's own, chatCopyForRequest); left out, the one the phone is on now.
  */
-export async function signedGet(path: string, options?: { signal?: AbortSignal; customHeaders?: Record<string, string>; anchorUrl?: string | null }): Promise<Response> {
+export async function signedGet(path: string, options?: { signal?: AbortSignal; customHeaders?: Record<string, string>; anchorUrl?: string | null; deadlineMs?: number | null }): Promise<Response> {
     const anchorUrl = options?.anchorUrl !== undefined ? options.anchorUrl : await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
     // One ask: signed afresh each time (a signature carries its own nonce, so an ask is never sent twice as it was).
-    const ask = async (): Promise<Response> => {
+    const ask = async (signal: AbortSignal | undefined): Promise<Response> => {
         // The language this phone writes in, as on a signed POST: a refused read comes back in it too (not signed, not stored).
         let headers: Record<string, string> = { 'Accept': 'application/json', ...languageHeader(), ...(options?.customHeaders || {}) };
         const identity = await loadIdentity();
@@ -10624,18 +10614,114 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
         const res = await fetch(`${anchorUrl}${path}`, {
             method: 'GET',
             headers,
-            signal: options?.signal,
+            signal,
         });
         if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res, signed);
         return res;
     };
 
-    const first = await ask();
+    // Each ask under a deadline on its answer and its body (readWithDeadline); only a photo's or a voice line's bytes ask for
+    // none (null), as they always had. A busy network's wait sits between the two asks, under the caller's own abort alone.
+    const once = (signal: AbortSignal | undefined): Promise<Response> =>
+        options?.deadlineMs === null ? ask(signal) : readWithDeadline(ask, { signal, deadlineMs: options?.deadlineMs });
+    const first = await once(options?.signal);
     // A busy network's 429 (not the node's own JSON one): a read is safe to ask again, ONCE, after the wait it named (core
-    // busy-answer.ts). A second 429 is handed back as it is, for the caller's own not-ok path; never a loop.
+    // busy-answer.ts, at most 30 s). A second 429 is handed back as it is, for the caller's own not-ok path; never a loop.
     if (first.ok || !isBusyStatus(first.status) || !(await answerIsBusy(first))) return first;
     await waitBeforeRetry(retryAfterMs(first.headers?.get?.('Retry-After')), options?.signal);
-    return ask();
+    return once(options?.signal);
+}
+
+/** A photo's or a voice line's bytes: no list, and a slow link may take longer than a list's deadline; none, as before. */
+const ATTACHMENT_NO_DEADLINE = null;
+
+/** A read's deadline, on its answer and the answer's body (signedGet, readWithDeadline): as the chat's poll, 12 s. */
+export const READ_DEADLINE_MS = 12_000;
+let readDeadlineForTests: number | null = null;
+/** For tests: every read's deadline, its own `deadlineMs` too, shortened to `ms` (null: each its own again). */
+export function _setReadDeadlineForTests(ms: number | null): void {
+    readDeadlineForTests = ms;
+}
+/** For tests: whether the sync lock is held now. */
+export function _syncLockHeldForTests(): boolean {
+    return syncLockHeld;
+}
+
+/** On a body read put under a deadline (readWithDeadline): the body's own read. */
+const BODY_READ = Symbol('body read');
+const BODY_READS = ['json', 'text', 'arrayBuffer', 'blob'] as const;
+
+/**
+ * `read` (a fetch, handed the signal it gives up on), ended `deadlineMs` after it was asked (12 s when none is named), or
+ * when the caller's own `signal` aborts, whichever comes first: on its answer AND on that answer's body (and a copy's,
+ * clone()), whose json(), text(), arrayBuffer() and blob() throw once it has passed. React Native's fetch never gives up
+ * by itself, and a deadline cleared once the headers came left a body that never ended holding its caller (and what it
+ * held) for good (#3309 re-check). The caller's abort throws an AbortError, as the fetch's own would; the deadline throws
+ * "timed out". Its timer is let go once the body is read, or at the deadline when nobody reads it.
+ */
+export async function readWithDeadline(read: (signal: AbortSignal) => Promise<Response>, opts?: { signal?: AbortSignal; deadlineMs?: number }): Promise<Response> {
+    const stop = new AbortController();
+    const outer = opts?.signal;
+    const onOuter = () => stop.abort();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const letGo = () => {
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+        outer?.removeEventListener('abort', onOuter);
+    };
+    timer = setTimeout(() => { stop.abort(); letGo(); }, readDeadlineForTests ?? opts?.deadlineMs ?? READ_DEADLINE_MS);
+    if (outer?.aborted) stop.abort();
+    else outer?.addEventListener('abort', onOuter, { once: true });
+    const gaveUp = (): Error => {
+        if (!outer?.aborted) return new Error('timed out');
+        const why: any = (outer as any).reason;
+        return why instanceof Error || why?.name === 'AbortError' ? why : Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    };
+    // `work`, or a throw once the read stops: ended by the deadline even where a fetch doesn't give up on its abort.
+    const within = <T,>(work: Promise<T>): Promise<T> => new Promise<T>((resolve, reject) => {
+        const stopped = () => reject(gaveUp());
+        if (stop.signal.aborted) { work.catch(() => {}); stopped(); return; }
+        stop.signal.addEventListener('abort', stopped, { once: true });
+        work.then(
+            (v) => { stop.signal.removeEventListener('abort', stopped); resolve(v); },
+            (e) => { stop.signal.removeEventListener('abort', stopped); reject(e); },
+        );
+    });
+    // Each body read of `answer` under this read's deadline: the answer's own lets the timer go once it is read.
+    const bounded = (answer: any, own: boolean): any => {
+        for (const name of BODY_READS) {
+            const held = answer[name];
+            if (typeof held !== 'function') continue;
+            // The body's own read, never another deadline's: an answer handed back twice is under this read's alone.
+            const body = held[BODY_READ] ?? held;
+            const reading = () => {
+                const r = within<any>(body.call(answer));
+                if (own) r.then(letGo, letGo);
+                return r;
+            };
+            (reading as any)[BODY_READ] = body;
+            answer[name] = reading;
+        }
+        const clone = answer.clone;
+        if (typeof clone === 'function') {
+            const original = clone[BODY_READ] ?? clone;
+            const copy = () => {
+                const made = original.call(answer);
+                return made === answer ? answer : bounded(made, false);
+            };
+            (copy as any)[BODY_READ] = original;
+            answer.clone = copy;
+        }
+        return answer;
+    };
+    let res: Response;
+    try {
+        res = await within(read(stop.signal));
+    } catch (e) {
+        letGo();
+        throw e;
+    }
+    return bounded(res, true);
 }
 
 /** Whether a 429 is the busy network's, not the node's own: read from a copy, so the caller's body is untouched. */
@@ -11939,7 +12025,7 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
     const bodyString = payload !== undefined ? JSON.stringify(payload) : '';
     const headers = await buildSignedHeaders(method, `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey);
 
-    const res = await fetch(`${anchorUrl}${endpoint}`, {
+    const ask = (signal: AbortSignal | undefined) => fetch(`${anchorUrl}${endpoint}`, {
         method,
         headers: {
             'Content-Type': 'application/json',
@@ -11948,8 +12034,10 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
             ...languageHeader(),
         },
         body: payload !== undefined ? bodyString : undefined,
-        ...(opts?.signal ? { signal: opts.signal } : {}),
+        ...(signal ? { signal } : {}),
     });
+    // A read (the forum's search) under a read's deadline, on its answer and its body (readWithDeadline), as signedGet's are.
+    const res = method === 'GET' ? await readWithDeadline(ask, { signal: opts?.signal }) : await ask(opts?.signal);
 
     if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));

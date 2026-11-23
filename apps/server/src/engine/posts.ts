@@ -553,7 +553,7 @@ export function createPost(
     title: string,
     description: string,
     price_c: number,
-    priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string,
+    priceType: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'per_kg' | string,
     authorPublicKey: string,
     lat?: number,
     lng?: number,

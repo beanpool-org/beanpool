@@ -466,6 +466,10 @@ export interface NodeFeatures {
      *  engine/per-item.ts): the create and edit forms offer the unit Each only where it is (@beanpool/core perItemOffered).
      *  Present on every node from 1.4.1 (PER_ITEM_BUILT); absent on an older one, so a phone's forms offer Each only there. */
     perItem?: true;
+    /** Present, and true, on every node of this build: it accepts `yearly` (per year) and `per_kg` (per kilo) as listing
+     *  price units on Needs and Offers (@beanpool/core kgYearPriceUnitsOffered). Absent on an older node that refuses them,
+     *  so the apps hide both units there. */
+    priceUnitsKgYear?: true;
     /** True on every node of this build: it stores a voice line as one (engine/voice-lines.ts, DESIGN-cross-chat-voice-fable.md
      *  §5.4, slice V2), in a direct chat and in a locked group's. The apps offer the microphone only where it is
      *  (@beanpool/core voiceLinesOn). A node from before V2 says nothing, and stores a voice line as a text line carrying a
@@ -760,6 +764,8 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.bills ? { bills: true as const } : {}),
         // A capability of the build, as pins are: on every node from 1.4.1.
         ...(PER_ITEM_BUILT ? { perItem: true as const } : {}),
+        // Per year (`yearly`) and per kilo (`per_kg`) price units on Needs and Offers (core kgYearPriceUnitsOffered).
+        priceUnitsKgYear: true as const,
         // And voice lines (engine/voice-lines.ts): every profile stores one. The apps offer the microphone only where it is said.
         voiceLines: true,
         ...(s.forum ? { forum: true as const } : {}),

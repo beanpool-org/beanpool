@@ -42,7 +42,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
 import { admitAgentCreate, agentPostsPerDay, AGENT_LIST_MAX, returnAgentCreate } from './limits.js';
 import {
-    AGENT_POST_CATEGORIES, AGENT_POST_PHOTOS_MAX, assertAssistantDay, recordMade, assistantPostsToday, createdViaOf, dayFull, enterpriseRef, enterprisesOff, gate, heldTags,
+    AGENT_POST_CATEGORIES, AGENT_POST_PHOTOS_MAX, AGENT_PRICE_TYPES, assertAssistantDay, recordMade, assistantPostsToday, createdViaOf, dayFull, enterpriseRef, enterprisesOff, gate, heldTags,
     NO_TAGS_HERE, NOT_TICKED, notAFlag, num, OWNERS_POST_WORDS, PHOTO_PROPS, photosFrom, REFUSED_TAG_CHARS, refusalText, statusOf, TAG_PROPS, TAGS_WORDS, withPhotos,
     type PhotoRule,
 } from './owner-posts.js';
@@ -176,9 +176,14 @@ async function createGroupPost(grant: AgentGrant, args: Record<string, unknown>)
         try {
             assertNotMuted(owner);
             assertMayPost(owner, Math.min(photos.photos.length, 5));
+            const rawPriceType = args.price_type === undefined ? 'fixed' : args.price_type;
+            if (typeof rawPriceType !== 'string' || !(AGENT_PRICE_TYPES as readonly string[]).includes(rawPriceType)) {
+                returnAgentCreate(grant.id);
+                return { ok: false, error: `price_type must be one of ${AGENT_PRICE_TYPES.join(', ')}` };
+            }
             // No pin: the group form sends none, and the post reaches the group's members, not the map.
             const post = createPost(kind, category, (args.title as string).trim(), typeof args.description === 'string' ? args.description.trim() : '', credits,
-                args.price_type === 'hourly' ? 'hourly' : 'fixed', owner, undefined, undefined, photos.photos, args.repeatable === true, undefined, args.cash_also_needed === true,
+                rawPriceType, owner, undefined, undefined, photos.photos, args.repeatable === true, undefined, args.cash_also_needed === true,
                 { audienceScope: 'group', targetGroupId: groupId, beforeWrite: () => assertAssistantDay(grant), createdVia: createdViaOf(grant), ...tagged.fields });
             if (!post) {
                 returnAgentCreate(grant.id);
@@ -384,7 +389,7 @@ export const OWNER_SEED_TOOLS: AgentTool[] = [
                     beans: beansOn
                         ? { type: 'number', minimum: 0, description: "the listing's price in Beans (0 is free), as the group form asks: a price, never a payment" }
                         : { type: 'number', minimum: 0, maximum: 0, description: 'none: this community has no Beans' },
-                    price_type: { type: 'string', enum: ['fixed', 'hourly'], description: 'fixed (default) or hourly' },
+                    price_type: { type: 'string', enum: AGENT_PRICE_TYPES, description: `how the price is counted: ${AGENT_PRICE_TYPES.join(', ')} (default fixed)` },
                     repeatable: { type: 'boolean', description: 'stays up after each trade' },
                     cash_also_needed: { type: 'boolean', description: 'a real cash outlay is attached (fuel, materials)' },
                     ...TAG_PROPS,

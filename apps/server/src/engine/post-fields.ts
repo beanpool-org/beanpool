@@ -24,7 +24,7 @@ import {
     LEND_MAX_DAYS_MAX, LEND_TERMS_LIMIT, REPLACEMENT_VALUE_LIMIT,
     POST_TAGS_CHARS, POST_TAGS_MAX, isTagId, postTagsOf, storedPostTags, word, wordsFor,
     FREE_TAGS_CHARS, FREE_TAGS_MAX, FREE_TAGS_TOO_LONG_TOGETHER, FREE_TAGS_TOO_MANY, freeTagRefusal, freeTagStored, freeTagsOf, storedFreeTags,
-    beans, isHundredths,
+    beans, isHundredths, PRICE_UNITS,
 } from '@beanpool/core';
 
 // The deal arithmetic is core's, so the apps show the figure the node holds (packages/beanpool-core/src/hundredths.ts).
@@ -47,10 +47,10 @@ export const POST_HOURS_MAX = 10_000;
  */
 export const POST_HOURS_MIN = 0.01;
 /**
- * How a price is counted: once, or per unit. The set the apps offer (native treasury-post, PWA) and escrow handles, and
- * `each`, the price for one of several (@beanpool/core per-item.ts; engine/per-item.ts holds its count and price for all).
+ * How a price is counted: once, or per unit. Canonical list from @beanpool/core (PRICE_UNITS): Total, Each (Offers only,
+ * engine/per-item.ts), per hour, per day, per week, per month, per year, per kilo.
  */
-export const POST_PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly', 'each'] as const;
+export const POST_PRICE_TYPES = PRICE_UNITS;
 
 /** The fields this checks, as a create or an edit carries them. An edit names only what it changes. */
 export interface PostFieldsIn {

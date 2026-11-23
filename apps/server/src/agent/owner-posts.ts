@@ -98,6 +98,8 @@ import { createEventFromBody } from '../routes/event-post.js';
 import { EVENT_PRIVATE_NOTE_MAX, type EventTimeOut } from '../engine/posts.js';
 import { copyUpdates } from '../engine/event-copy.js';
 import { assertFreeTags, POST_PRICE_TYPES } from '../engine/post-fields.js';
+/** Price units an owner's assistant may set on create or edit: every listing unit except `each` (which requires a count). */
+export const AGENT_PRICE_TYPES = POST_PRICE_TYPES.filter((p) => p !== 'each');
 import { assertMayAddPhotos, assertMayEditPhotos, assertMayPost } from '../engine/probation.js';
 import { enterprisePostLimit } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -730,7 +732,12 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
         const owner = grant.member;
         // The area rounded as the apps round a pin (@beanpool/core approximateLocation).
         const { lat, lng } = area ? approximateLocation(area.lat, area.lng) : roundedPin(args);
-        const priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
+        const rawPriceType = args.price_type === undefined ? 'fixed' : args.price_type;
+        if (typeof rawPriceType !== 'string' || !(AGENT_PRICE_TYPES as readonly string[]).includes(rawPriceType)) {
+            returnAgentCreate(grant.id);
+            return { ok: false, error: `price_type must be one of ${AGENT_PRICE_TYPES.join(', ')}` };
+        }
+        const priceType = rawPriceType;
         try {
             let post;
             if (who.enterprise) {
@@ -982,7 +989,7 @@ const LISTING_PROPS = {
     description: { type: 'string', description: `the details a member reads; ${NO_TAGS_HERE}` },
     category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: 'the Market category, as the apps offer them' },
     beans: { type: 'number', minimum: 0, description: 'the price in Beans (0 is free); required where this community has Beans, none where it has not' },
-    price_type: { type: 'string', enum: ['fixed', 'hourly'], description: 'fixed (default) or hourly' },
+    price_type: { type: 'string', enum: AGENT_PRICE_TYPES, description: `how the price is counted: ${AGENT_PRICE_TYPES.join(', ')} (default fixed)` },
     repeatable: { type: 'boolean', description: 'stays up after each trade' },
     lat: { type: 'number', description: 'latitude of the place on the map, rounded to about 100 m as the apps do; required unless use_my_area' },
     lng: { type: 'number', description: 'longitude of the place on the map, rounded the same; required unless use_my_area' },
@@ -1886,7 +1893,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
                 beans: { type: 'number', minimum: 0, description: "an Offer's or a Need's new price in Beans (an enterprise's more than 0)" },
                 // Not `each` (a price for each one, with a count): the assistant can't send a count, so it does not make one (§7 of
                 // DESIGN-per-item-price-fable.md leaves that for later).
-                price_type: { type: 'string', enum: POST_PRICE_TYPES.filter((p) => p !== 'each'), description: "an Offer's or a Need's: how the price is counted; a lent Offer's is fixed, daily or weekly" },
+                price_type: { type: 'string', enum: AGENT_PRICE_TYPES, description: "an Offer's or a Need's: how the price is counted; a lent Offer's is fixed, daily or weekly" },
                 lat: { type: 'number', description: 'the new latitude, with lng, rounded to about 100 m as the apps do; not on an online event' },
                 lng: { type: 'number', description: 'the new longitude, with lat, rounded the same' },
                 use_my_area: { type: 'boolean', description: "an Offer's or a Need's as you: true puts it at your own area, in place of lat and lng" },

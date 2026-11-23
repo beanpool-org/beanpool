@@ -27,7 +27,7 @@ import { placeAs } from '../config/community-place.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { fence, isMadeId, MEMBER_TEXT_NOTICE, timeCell, type Fenced } from './fence.js';
 import { AGENT_LIST_MAX } from './limits.js';
-import { categoryRead, enterpriseRef, libraryTagsFor, OWNER_TEND_TOOLS, POLL_DAYS } from './owner-posts.js';
+import { AGENT_PRICE_TYPES, categoryRead, enterpriseRef, libraryTagsFor, OWNER_TEND_TOOLS, POLL_DAYS } from './owner-posts.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 const NOT_TICKED = 'This assistant was connected without "May post for me": it reads what the other tools read, and nothing for seeding.';
@@ -185,7 +185,7 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
                 ok: true, rows: PRICING_CATEGORIES.length,
                 result: {
                     categories: PRICING_CATEGORIES.map((c) => ({ id: c.id, label: c.label, emoji: c.emoji })),
-                    kinds: [...KINDS], priceTypes: ['fixed', 'hourly'], pollDays: [...POLL_DAYS], beans: getProfileSwitches().beans === true,
+                    kinds: [...KINDS], priceTypes: [...AGENT_PRICE_TYPES], pollDays: [...POLL_DAYS], beans: getProfileSwitches().beans === true,
                 },
             };
         },

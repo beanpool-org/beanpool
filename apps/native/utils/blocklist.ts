@@ -1040,7 +1040,8 @@ async function planChange(owner: string, community: string, tried: Set<string>):
 
 /**
  * Whether `community` is owed a change now ({@link planChange}'s plan, worked out and not written down): what the background
- * sync asks before it sends anything ({@link syncOwedBlocks}). Only inside {@link serially}.
+ * sync asks before it sends anything ({@link syncOwedBlocks}), and the round of an across chat ({@link blocksOwedAt}). Only
+ * inside {@link serially}.
  */
 async function owes(owner: string, community: string): Promise<boolean> {
     const blocks = await readBlocks(owner);
@@ -1061,9 +1062,7 @@ function peopleAt(blocks: Blocks, at: BlocksAt): Set<string>[] {
 /**
  * The key of the next unblock a community with record `at` is owed, or null: a key this phone put on its list (`on`), or
  * sent there with no answer back (`sent`), of a person the member no longer blocks, by the member's latest change of any of
- * their keys ({@link derive}), skipping keys already `tried` this sync. What {@link nextChange} sends first, and what
- * {@link blocksOwedAt} counts as owed beside an unanswered block: one rule, so the latest of a block and an unblock wins
- * at each community, whichever round brings it there.
+ * their keys ({@link derive}), skipping keys already `tried` this sync. What {@link nextChange} sends first.
  */
 function unblockDue(people: readonly Set<string>[], blocks: Blocks, at: BlocksAt, tried: ReadonlySet<string>): string | null {
     for (const person of people) {
@@ -1473,27 +1472,25 @@ async function tellRecord(publicKey: string, community: string, heard: { keepsNo
 }
 
 /**
- * Whether `community` (a saved address: another community this phone holds, carrying an across chat) is owed a change the
- * phone tried and that never landed: a block that went there and whose answer never came (no connection, a timeout, the
- * minute's limit), the account's record there still having it as sent; or an unblock, of a person this phone put on its
- * list there whom the member has since unblocked, the unblock's own request at the tap not having reached it
- * ({@link unblockDue}; triage 23 Nov item 43). The round of that community's across mail sends it ({@link syncBlocksAt};
+ * Whether `community` (a saved address: another community this phone holds, carrying an across chat) is owed a change now,
+ * by the sync's own plan ({@link owes}, {@link nextChange}): one rule with the background sync's, so the latest of a block
+ * and an unblock wins at each community, whichever round brings it there. An unblock, of a person this phone put on its list
+ * there (or sent, its answer lost) whom the member has since unblocked, the unblock's own request at the tap not having
+ * reached it (triage 23 Nov item 43); a block of a person the member blocks whom its answers don't show it holds: one whose
+ * answer never came (no connection, a timeout, the minute's limit), or one never tried there, made while it was off the
+ * phone (review of #3372, N3). The round of that community's across mail sends it ({@link syncBlocksAt};
  * utils/outside-chat-live.ts, #3310 r3 review F1), signed for that community's name and on its own queue, as soon as that
- * round runs, before the next of the rounds that reach every held community ({@link syncBlocks}); a community still waited
- * for after a refusal is sent nothing even so (the sync's plan keeps its waits). False on a guest's look, with no account,
- * or on any failure.
+ * round runs, before the next of the rounds that reach every held community ({@link syncBlocks}). A community waited for
+ * after a refusal is owed nothing the plan would hold back (its blocks for a day after it refused one; everything after a
+ * refused unblock, a "no member" answer, or no block list), so its round asks nothing of it. False on a guest's look, with
+ * no account, or on any failure.
  */
 export async function blocksOwedAt(community: string): Promise<boolean> {
     try {
         const owner = await accountOnPhone();
         const at = owner ? await communityToSyncAt(community) : null;
         if (!owner || !at) return false;
-        return await serially(async () => {
-            const { at: record } = await recordOf(owner, at);
-            if (record.sent.length > 0) return true;
-            const blocks = await readBlocks(owner);
-            return unblockDue(peopleAt(blocks, record), blocks, record, new Set()) !== null;
-        });
+        return await serially(() => owes(owner, at));
     } catch {
         return false;
     }

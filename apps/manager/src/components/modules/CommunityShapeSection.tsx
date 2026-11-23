@@ -23,6 +23,7 @@ import {
     coreLocked,
     coreAwaitsOwner,
     isCoreSetting,
+    isCoreLogLine,
     typedWordFor,
 } from '../../lib/community-shape';
 import { RowControls, ShapeRow, joinDisplay, logSettingName, ADVICE_LINE_PREFIX } from './ShapeRows';
@@ -254,9 +255,11 @@ export function CommunityShapeSection({
 
     const { settings, kind, standby, log } = shape;
     const canEdit = isOwner && !standby;
-    const coreLog = log.filter((l) => {
+    // A Core setting's lines, by the server's rule (isCoreLogLine): pausing new members, and un-pausing to the door the
+    // community had, are everyday changes, shown under Invites & QR and never here.
+    const coreLog = log.filter((l, i) => {
         const base = l.setting.split('.')[0];
-        return isCoreSetting(base) || base === 'core' || (l.setting.startsWith(ADVICE_LINE_PREFIX) && isCoreSetting(l.setting.slice(ADVICE_LINE_PREFIX.length)));
+        return (isCoreSetting(base) && isCoreLogLine(log, i)) || base === 'core' || (l.setting.startsWith(ADVICE_LINE_PREFIX) && isCoreSetting(l.setting.slice(ADVICE_LINE_PREFIX.length)));
     });
 
     // ── The lock line and the button under a locked Core row ──

@@ -81,7 +81,7 @@ Cuộc trò chuyện của nhóm hoạt động giống hệt như cuộc trò c
 - **Xóa** (dành cho điều hành viên), trên tin nhắn của bất kỳ ai khác. Ứng dụng sẽ hỏi một lần, và tin nhắn sau đó sẽ hiển thị **Đã bị người điều hành gỡ**. Với tin nhắn của chính bạn, **Xóa** là thao tác xóa thông thường, không phải thao tác của điều hành viên.
 - **Báo cáo** (một lá cờ), trên tin nhắn của bất kỳ ai khác. Chọn một lý do, thêm vài lời nếu muốn, rồi nhấn **Gửi báo cáo**. Người kiểm duyệt của cộng đồng bạn chỉ nhận được đúng tin nhắn đó, kèm ảnh nếu có, và người đã gửi nó, ngoài ra không có gì khác trong cuộc trò chuyện. Xem "Báo cáo vấn đề".
 
-Hai hoặc nhiều tin nhắn liên tiếp bị tác giả xóa sẽ hiển thị thành một dòng, chẳng hạn như **3 tin nhắn đã bị xóa**. Hai hoặc nhiều tin nhắn bị điều hành viên gỡ sẽ hiển thị thành **3 tin nhắn đã bị điều phối viên xóa**.
+Hai hoặc nhiều tin nhắn liên tiếp bị tác giả xóa sẽ hiển thị thành một dòng, chẳng hạn như **3 tin nhắn đã bị xóa**. Hai hoặc nhiều tin nhắn bị điều hành viên gỡ sẽ hiển thị thành **3 tin nhắn đã bị điều hành viên xóa**.
 
 Bên dưới tin nhắn của chính bạn: hình đồng hồ trong khi đang gửi, dấu tích khi máy chủ của nhóm đã nhận được, hoặc **! chưa được gửi** nếu không thể gửi — nhấn vào đó để **Gửi lại** hoặc **Hủy bỏ**, hoặc trong ứng dụng web hãy dùng **Thử lại** hoặc **Hủy bỏ** trên tin nhắn. Không có hai dấu tích màu xanh lam trong một nhóm: một nhóm không có một người đọc đơn lẻ.
 

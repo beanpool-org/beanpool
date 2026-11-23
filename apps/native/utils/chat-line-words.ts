@@ -68,6 +68,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Could not open this enterprise chat.': word('Could not open this enterprise chat.'),
     'Could not open this event chat.': word('Could not open this event chat.'),
     'This phone has switched community since this chat was opened.': word('This phone has switched community since this chat was opened.'),
+    // utils/db.ts readWithDeadline (READ_GAVE_UP_TEXT): a read the node never finished answering in time.
+    'Could not reach the node.': word('Could not reach the node.'),
     // utils/db.ts dealStep and _signedRequest: a deal's step begun for another account than the one on the phone now (slice S6c).
     'The account on this phone has changed since this chat was opened. Nothing was sent.': word('The account on this phone has changed since this chat was opened. Nothing was sent.'),
     "It isn't sealed, so nothing shows who wrote it.": word("It isn't sealed, so nothing shows who wrote it."),

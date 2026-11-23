@@ -562,12 +562,17 @@ export function pendingAfterRead<T extends { clientId: string; takenAt?: string 
 }
 
 /**
- * The node's time of its line from its answer to a send (`{ message: { timestamp } }`), as a bubble's `takenAt`: null when
- * the answer names none (the node took it; where it sits isn't known).
+ * The node's time of its line from its answer to the send of `clientId` (`{ message: { id, timestamp } }`, the id the
+ * line is stored under), as a bubble's `takenAt`: null when that line comes back with no time (the node took it; where
+ * it sits isn't known). Undefined, never taken, when the answer doesn't carry that line (#3376 max review N3): a 2xx that
+ * isn't the node's (a captive portal's page, which the sealed send reads as {}) or no send at all. Such a line is kept
+ * with Resend, as before; a Resend of a line the node did hold is answered with it, stored once.
  */
-export function takenAtOf(answer: unknown): string | null {
-    const at = (answer as { message?: { timestamp?: unknown } } | null | undefined)?.message?.timestamp;
-    return typeof at === 'string' && at.length > 0 ? at : null;
+export function takenAtOf(answer: unknown, clientId: string): string | null | undefined {
+    const line = (answer as { message?: { id?: unknown; timestamp?: unknown } } | null | undefined)?.message;
+    if (!line || (typeof line.id !== 'string' && typeof line.id !== 'number')) return undefined;
+    if (String(line.id).toLowerCase() !== clientId.toLowerCase()) return undefined;
+    return typeof line.timestamp === 'string' && line.timestamp.length > 0 ? line.timestamp : null;
 }
 
 /**

@@ -156,7 +156,7 @@ interface PendingMessage {
     replyToId: string | null;
     state: 'sending' | 'failed';
     timestamp: string;
-    /** The node's time of its line once the node answered its send (null: it named none); until then, none (pendingAfterRead). */
+    /** The node's time of its line once the node's answer carried it (null: it named none); until then, none (takenAtOf). */
     takenAt?: string | null;
 }
 
@@ -585,8 +585,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo, in
                 setSecuring(null);
                 setKeyNotice(null);
             } else if (!at) answer = await postEnterpriseChatMessage(id, p.text, p.clientId);
-            // The node took it: never kept as unsent, and retired once a whole page has come after it (pendingAfterRead).
-            const takenAt = takenAtOf(answer);
+            // The node took it (its answer carries this line): never kept as unsent, and retired once a whole page has come
+            // after it (pendingAfterRead). An answer without it (not the node's) leaves the line as it was, kept with Resend.
+            const takenAt = takenAtOf(answer, p.clientId);
             setPending(prev => prev.map(x => (x.clientId === p.clientId ? { ...x, takenAt } : x)));
             // A poll may be mid-flight with the chat as it was before this message; wait for it, then read again.
             while (inFlight.current) await new Promise(r => setTimeout(r, 100));

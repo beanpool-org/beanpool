@@ -103,7 +103,7 @@ export type MyShopRead = { state: 'none' } | { state: 'open'; shop: MyShop } | {
  */
 export const SHOP_TOGGLE_READ_MS = 5_000;
 
-/** `timeoutMs`: past it, the read is let go and is no answer (offline). Without one, the read's own deadline (db.ts READ_DEADLINE_MS). */
+/** `timeoutMs`: past it, the read is let go and is no answer (offline). Without one, a read's backstop (db.ts LIST_READ_BACKSTOP_MS). */
 export async function readMyShop(options: { timeoutMs?: number } = {}): Promise<MyShopRead> {
     const stop = options.timeoutMs ? new AbortController() : null;
     const timer = stop ? setTimeout(() => stop.abort(), options.timeoutMs) : null;

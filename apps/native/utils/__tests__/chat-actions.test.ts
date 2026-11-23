@@ -709,11 +709,36 @@ describe('which bubbles a read of the node retires', () => {
         expect(db).toMatch(/export async function getEnterpriseChat\(treasury: string, limit = 50\)/);
     });
 
-    it('takenAtOf: the node\'s time of the line from its answer to the send; null when it names none', () => {
-        expect(takenAtOf({ success: true, message: { id: 'c1', timestamp: at(4) } })).toBe(at(4));
-        for (const answer of [{ success: true }, { message: { timestamp: '' } }, { message: { timestamp: 7 } }, null, undefined, 'ok']) {
-            expect(takenAtOf(answer), JSON.stringify(answer)).toBeNull();
+    it('takenAtOf: the node\'s time of the line from its answer to the send; null when the line comes back with none', () => {
+        expect(takenAtOf({ success: true, message: { id: 'c1', timestamp: at(4) } }, 'c1')).toBe(at(4));
+        // The sealed send stores the line under the client id written lower-case.
+        expect(takenAtOf({ success: true, message: { id: 'abc-1', timestamp: at(4) } }, 'ABC-1')).toBe(at(4));
+        for (const answer of [{ message: { id: 'c1', timestamp: '' } }, { message: { id: 'c1', timestamp: 7 } }, { message: { id: 'c1' } }]) {
+            expect(takenAtOf(answer, 'c1'), JSON.stringify(answer)).toBeNull();
         }
+    });
+
+    // #3376 max review N3: the sealed send reads a 2xx body that isn't JSON as {} and hands it back (group-chat-lines.ts
+    // sendSealedGroupLine). Counted as taken, the line left the kept lines and was gone at the next relaunch, although the
+    // node never took it. Only an answer that carries this very line says the node took it.
+    it('takenAtOf: an answer that doesn\'t carry this line is never taken (a 2xx that isn\'t the node\'s, another line, no send)', () => {
+        for (const answer of [{}, { success: true }, { message: { id: 'other', timestamp: at(4) } }, { message: { timestamp: at(4) } }, { message: null }, null, undefined, 'ok', '<html>Sign in to the Wi-Fi</html>']) {
+            expect(takenAtOf(answer, 'c1'), JSON.stringify(answer)).toBeUndefined();
+        }
+    });
+
+    it('a sealed send answered 2xx with a body that isn\'t the node\'s JSON keeps the line: kept across a relaunch, never retired by a page', () => {
+        // The answer that send hands back, from its source: a body that doesn't parse is {}, and a 2xx returns it.
+        const lines = readFileSync(join(NATIVE_ROOT, 'utils', 'group-chat-lines.ts'), 'utf8');
+        const send = lines.slice(lines.indexOf('export async function sendSealedGroupLine('), lines.indexOf('export const GROUP_EDIT_NO_KEY_TEXT'));
+        expect(send).toContain('const body = await res.json().catch(() => ({}));');
+        expect(send).toContain('if (res.ok) return body;');
+        const sent = { clientId: 'c1', takenAt: takenAtOf({}, 'c1') };
+        expect(unsentToKeep([sent]).map((l) => l.clientId), 'kept across a relaunch').toEqual(['c1']);
+        expect(pendingAfterRead([sent], page(50, 2)).map((l) => l.clientId), 'a full page all newer leaves it').toEqual(['c1']);
+        // And the node's own answer for it does count it taken.
+        const taken = { clientId: 'c1', takenAt: takenAtOf({ success: true, message: { id: 'c1', timestamp: at(1) } }, 'c1') };
+        expect(unsentToKeep([taken])).toEqual([]);
     });
 
     it('kept across a relaunch as never sent: only the lines the node never said it took (unsentToKeep)', () => {
@@ -726,7 +751,7 @@ describe('which bubbles a read of the node retires', () => {
         expect(view).toContain('void keepUnsent(AsyncStorage, me, file, id, unsentToKeep(pending).map(');
         expect(view).toContain('answer = await whileChatInPlace(at, () => postGroupChatMessage(');
         expect(view).toContain('} else if (!at) answer = await postEnterpriseChatMessage(id, p.text, p.clientId);');
-        expect(view).toContain('const takenAt = takenAtOf(answer);');
+        expect(view).toContain('const takenAt = takenAtOf(answer, p.clientId);');
         expect(view.match(/keepUnsent\(/g)?.length).toBe(1);
     });
 });

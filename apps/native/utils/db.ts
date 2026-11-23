@@ -6360,16 +6360,6 @@ async function blankLinesOfDeletedAccounts(database: SQLite.SQLiteDatabase, keys
     return blanked.length;
 }
 
-/** syncMessages' read of the member's conversations: 10 s, body included. */
-const SYNC_LIST_READ_MS = 10_000;
-/**
- * syncMessages' read of the whole members' directory, the biggest list the phone reads: 30 s, body included. Its 10 s was
- * for the answer alone; a full directory on a slow link takes longer to arrive, and one cut off is read again each tick.
- */
-const SYNC_DIRECTORY_READ_MS = 30_000;
-/** syncMessages' read of one chat's page: 5 s, body included. */
-const SYNC_PAGE_READ_MS = 5_000;
-
 /**
  * The member's conversations and each one's newest lines, from the node into this phone. Failures are swallowed, so it
  * says whether the read worked: true when the list and every chat's page it asked for came back 2xx, false when any
@@ -6409,32 +6399,33 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
                                    localMembersCount === 0);
 
-        // Separate budgets: one shared controller let a slow conversations response use up the directory fetch's time
-        // too, so it was aborted by us rather than by the network. Each covers its answer's body too (readWithDeadline): a
-        // deadline cleared once the headers came left a body that never ended holding the pass. Each body is read straight
-        // after its own answer, never across another read: the list's 10 s run while the directory's 30 s read waited
-        // would cost the chat list whenever the directory is slow (#3376 decide).
+        // Separate 10s budgets: one shared controller let a slow conversations response use up the
+        // directory fetch's time too, so it was aborted by us rather than by the network.
+        const controller1 = new AbortController();
+        const timeout1 = setTimeout(() => controller1.abort(), 10000);
+        
         let convRes;
         const decidedBefore = _requestDecisions;
         try {
-            convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { deadlineMs: SYNC_LIST_READ_MS, anchorUrl });
+            convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { signal: controller1.signal, anchorUrl });
         } catch (e) {
             console.warn('[DB] conversations fetch failed:', e);
+            clearTimeout(timeout1);
             return false;
         }
-        // A list whose body can't be read is a list not read, as a not-ok one is: the directory is still read below.
-        const convData = convRes.ok
-            ? await convRes.json().catch((e: unknown) => { console.warn('[DB] conversations read failed:', e); return null; })
-            : null;
+        clearTimeout(timeout1);
 
         let dirRes = null;
+        const dirController = new AbortController();
+        const dirTimeout = setTimeout(() => dirController.abort(), 10000);
         if (shouldFetchMembers) {
             try {
-                dirRes = await signedGet('/api/members', { deadlineMs: SYNC_DIRECTORY_READ_MS, anchorUrl });
+                dirRes = await signedGet('/api/members', { signal: dirController.signal, anchorUrl });
             } catch (e) {
                 console.warn('[DB] members fetch failed:', e);
             }
         }
+        clearTimeout(dirTimeout);
         
         if (dirRes && dirRes.ok) {
             try {
@@ -6464,7 +6455,9 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         }
 
         if (!convRes.ok) return false;
-        if (!convData?.conversations) return false;
+
+        const convData = await convRes.json();
+        if (!convData.conversations) return false;
 
         // Identity, so we can attribute the peer's read cursor (read receipts): the account that asked, still the phone's,
         // with no copy cleared since, or nothing of this list is written or kept (ownListRead).
@@ -6679,17 +6672,21 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             }
             }
 
-            // 5 s for the page, its body included: one that never ends is a page not read, and the pass goes on.
-            let msgData;
+            const controller2 = new AbortController();
+            const timeout2 = setTimeout(() => controller2.abort(), 5000);
+            let msgRes;
             try {
-                const msgRes = await signedGet(`/api/messages/${conv.id}`, { deadlineMs: SYNC_PAGE_READ_MS, anchorUrl });
-                if (!msgRes.ok) { everyPageRead = false; continue; }
-                msgData = await msgRes.json();
+                msgRes = await signedGet(`/api/messages/${conv.id}`, { signal: controller2.signal, anchorUrl });
             } catch (err) {
+                clearTimeout(timeout2);
                 everyPageRead = false;
                 continue;
             }
-            const messages = msgData?.messages;
+            clearTimeout(timeout2);
+            if (!msgRes.ok) { everyPageRead = false; continue; }
+            
+            const msgData = await msgRes.json();
+            const messages = msgData.messages;
             if (!Array.isArray(messages)) continue;
             if (!(await onThisCopy(database))) return false;
             for (const m of messages) {
@@ -10629,10 +10626,14 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
         return res;
     };
 
-    // Each ask under a deadline on its answer and its body (readWithDeadline); only a photo's or a voice line's bytes ask for
-    // none (null), as they always had. A busy network's wait sits between the two asks, under the caller's own abort alone.
+    // A read its caller bounds (its own signal, or its own `deadlineMs`) keeps that budget and no other, as before: core's
+    // 30 s for a tool's copy and its deals (TOOL_COPY_ANSWER_MS), syncMessages' 10 s and 5 s, a busy network's wait cut at
+    // them too (#3376 max review B1, N2). One with neither had no deadline at all: it gets the backstop
+    // (LIST_READ_BACKSTOP_MS), on its answer and its body. A photo's or a voice line's bytes (null) get none, as before.
+    // A busy network's wait sits between the two asks, under the caller's own abort alone.
+    const deadlineMs = options?.deadlineMs;
     const once = (signal: AbortSignal | undefined): Promise<Response> =>
-        options?.deadlineMs === null ? ask(signal) : readWithDeadline(ask, { signal, deadlineMs: options?.deadlineMs });
+        deadlineMs === null || (deadlineMs === undefined && signal) ? ask(signal) : readWithDeadline(ask, { signal, deadlineMs });
     const first = await once(options?.signal);
     // A busy network's 429 (not the node's own JSON one): a read is safe to ask again, ONCE, after the wait it named (core
     // busy-answer.ts, at most 30 s). A second 429 is handed back as it is, for the caller's own not-ok path; never a loop.
@@ -10644,8 +10645,14 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
 /** A photo's or a voice line's bytes: no list, and a slow link may take longer than a list's deadline; none, as before. */
 const ATTACHMENT_NO_DEADLINE = null;
 
-/** A read's deadline, on its answer and the answer's body (signedGet, readWithDeadline): as the chat's poll, 12 s. */
-export const READ_DEADLINE_MS = 12_000;
+/**
+ * The backstop on a read that names no budget of its own (signedGet, readWithDeadline), on its answer and its body: 60 s.
+ * Long enough that no real list misses it on a slow line (a treasury's whole ledger, a big roster the node may hold up to
+ * 6 s first); it is there only so that a read the network never answers lets its caller go (#3376 max review N1).
+ */
+export const LIST_READ_BACKSTOP_MS = 60_000;
+/** What a read that the backstop or its own deadline ended throws: the words both screens already show for no answer. */
+const READ_GAVE_UP_TEXT = 'Could not reach the node.';
 let readDeadlineForTests: number | null = null;
 /** For tests: every read's deadline, its own `deadlineMs` too, shortened to `ms` (null: each its own again). */
 export function _setReadDeadlineForTests(ms: number | null): void {
@@ -10661,12 +10668,14 @@ const BODY_READ = Symbol('body read');
 const BODY_READS = ['json', 'text', 'arrayBuffer', 'blob'] as const;
 
 /**
- * `read` (a fetch, handed the signal it gives up on), ended `deadlineMs` after it was asked (12 s when none is named), or
- * when the caller's own `signal` aborts, whichever comes first: on its answer AND on that answer's body (and a copy's,
- * clone()), whose json(), text(), arrayBuffer() and blob() throw once it has passed. React Native's fetch never gives up
- * by itself, and a deadline cleared once the headers came left a body that never ended holding its caller (and what it
- * held) for good (#3309 re-check). The caller's abort throws an AbortError, as the fetch's own would; the deadline throws
- * "timed out". Its timer is let go once the body is read, or at the deadline when nobody reads it.
+ * `read` (a fetch, handed the signal it gives up on), ended `deadlineMs` after it was asked (LIST_READ_BACKSTOP_MS when
+ * none is named), or when the caller's own `signal` aborts, whichever comes first: on its answer AND on that answer's body
+ * (and a copy's, clone()), whose json(), text(), arrayBuffer() and blob() throw once it has passed. React Native's fetch
+ * never gives up by itself, so a read asked with no budget held its caller for as long as the network did (#3309
+ * re-check). (Its fetch resolves only once the whole body has arrived, so on the phone the answer's deadline is the
+ * body's; the body reads are bounded too for a fetch that streams.) The caller's abort throws an AbortError, as the
+ * fetch's own would; the deadline throws READ_GAVE_UP_TEXT, never a raw "timed out" (#3376 max review N4). Its timer is
+ * let go once the body is read, or at the deadline when nobody reads it.
  */
 export async function readWithDeadline(read: (signal: AbortSignal) => Promise<Response>, opts?: { signal?: AbortSignal; deadlineMs?: number }): Promise<Response> {
     const stop = new AbortController();
@@ -10678,11 +10687,11 @@ export async function readWithDeadline(read: (signal: AbortSignal) => Promise<Re
         timer = null;
         outer?.removeEventListener('abort', onOuter);
     };
-    timer = setTimeout(() => { stop.abort(); letGo(); }, readDeadlineForTests ?? opts?.deadlineMs ?? READ_DEADLINE_MS);
+    timer = setTimeout(() => { stop.abort(); letGo(); }, readDeadlineForTests ?? opts?.deadlineMs ?? LIST_READ_BACKSTOP_MS);
     if (outer?.aborted) stop.abort();
     else outer?.addEventListener('abort', onOuter, { once: true });
     const gaveUp = (): Error => {
-        if (!outer?.aborted) return new Error('timed out');
+        if (!outer?.aborted) return new Error(READ_GAVE_UP_TEXT);
         const why: any = (outer as any).reason;
         return why instanceof Error || why?.name === 'AbortError' ? why : Object.assign(new Error('Aborted'), { name: 'AbortError' });
     };
@@ -12045,8 +12054,9 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
         body: payload !== undefined ? bodyString : undefined,
         ...(signal ? { signal } : {}),
     });
-    // A read (the forum's search) under a read's deadline, on its answer and its body (readWithDeadline), as signedGet's are.
-    const res = method === 'GET' ? await readWithDeadline(ask, { signal: opts?.signal }) : await ask(opts?.signal);
+    // A read with no budget of its own (every forum read, utils/forum.ts; its search; the label's) under the backstop, as
+    // signedGet's are; one its caller bounds with its own signal keeps that alone, as before.
+    const res = method === 'GET' && !opts?.signal ? await readWithDeadline(ask) : await ask(opts?.signal);
 
     if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
@@ -12184,6 +12194,9 @@ export async function fetchGroupDetails(id: string, community?: ChatCommunity): 
         const anchorUrl = await groupAddressOf(id, community);
         // Each body read straight after its own answer, never after the other read (#3376 decide): a busy network's wait on
         // the group's read let the roster's deadline run out before its body was read, and the whole card went with it.
+        // A roster read that gives up (its deadline, no answer, a body that isn't the node's) is a roster not read: the card
+        // still shows without it (members null, which both group screens keep the roster they had for), never the whole
+        // card gone with it (#3376 max review N1).
         const [groupRead, membersRead] = await Promise.all([
             signedGet(`/api/groups/${encodeURIComponent(id)}`, { anchorUrl })
                 .then(async (res) => ({ ok: res.ok, body: res.ok ? await res.json() : null })),
@@ -12193,7 +12206,11 @@ export async function fetchGroupDetails(id: string, community?: ChatCommunity): 
                     body: res.ok ? await res.json() : null,
                     // Where anyone can join in a minute, the roster is its members': anyone else is told to join (join_to_see).
                     refusal: !res.ok && res.status === 403 ? await res.json().catch(() => null) : null,
-                })),
+                }))
+                .catch((e: unknown) => {
+                    console.warn('[Groups] roster not read:', e);
+                    return { ok: false, body: null, refusal: null };
+                }),
         ]);
         if (groupRead.ok) {
             const members = membersRead.body;

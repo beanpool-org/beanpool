@@ -940,6 +940,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editLng, setEditLng] = useState<number | null>(null);
     const [editReach, setEditReach] = useState<PostReach>('local');
     const [editReachPeers, setEditReachPeers] = useState<string[]>([]);
+    const editReachTouchedRef = useRef(false);
     const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     // A listing priced for each one (DESIGN-per-item-price-fable.md §2.5): the two boxes, the count and price for all of them the
     // node held when the form opened (what the count is saved against), whether the seller touched the price-for-all box, and
@@ -3272,6 +3273,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditLng(typeof selectedPost.lng === 'number' ? selectedPost.lng : null);
                                         setEditReach(selectedPost.reach === 'peers' || selectedPost.reach === 'everywhere' ? selectedPost.reach : 'local');
                                         setEditReachPeers(Array.isArray(selectedPost.reachPeers) ? selectedPost.reachPeers : []);
+                                        editReachTouchedRef.current = false;
                                         // Priced for each one: its count and price for all of them are read from the node now, and the count
                                         // read is the one the save is made against (a list read a while ago may have been sold from since).
                                         setEditItemCount(''); setEditItemLot(''); setEditLotTouched(false); setEditItemRefusal(null); setEditItemStored(null);
@@ -3339,7 +3341,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 void getMarketplacePosts({ id: targetPostId })
                                                     .then((found) => {
                                                         const fresh = found.find((p) => p.id === targetPostId);
-                                                        if (selectedPostRef.current?.id === targetPostId && Array.isArray(fresh?.reachPeers)) {
+                                                        if (selectedPostRef.current?.id === targetPostId && !editReachTouchedRef.current && Array.isArray(fresh?.reachPeers)) {
                                                             setEditReachPeers(fresh.reachPeers);
                                                         }
                                                     })
@@ -3573,9 +3575,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {isEditPublicLocal && (
                                     <ListingReachField
                                         reach={editReach}
-                                        onReachChange={setEditReach}
+                                        onReachChange={(next) => { editReachTouchedRef.current = true; setEditReach(next); }}
                                         reachPeers={editReachPeers}
-                                        onReachPeersChange={setEditReachPeers}
+                                        onReachPeersChange={(next) => { editReachTouchedRef.current = true; setEditReachPeers(next); }}
                                         peerList={reachablePeerList}
                                         labelId="edit-reach-chooser-label"
                                         testId="edit-reach"
@@ -3696,7 +3698,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     repeatable: editEach ? false : (isEditLendable ? true : editRepeatable),
                                                     cashAlsoNeeded: editCashAlsoNeeded,
                                                     ...(editLat != null && editLng != null ? { lat: editLat, lng: editLng } : {}),
-                                                    ...(isEditPublicLocal && reachablePeerList.length > 0 ? {
+                                                    ...(isEditPublicLocal && reachablePeerList.length > 0 && editReachTouchedRef.current ? {
                                                         reach: effectiveReach,
                                                         ...(effectiveReach === 'peers' ? { reachPeers: editReachPeers } : {}),
                                                     } : {}),

@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MarketplacePage } from './MarketplacePage';
+import { ListingLocationField } from '../components/ListingLocationField';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -248,5 +249,96 @@ describe('web Edit Post form behaviour', () => {
         expect(screen.getByTestId('edit-price-frozen-reason')).toHaveTextContent('This post has a deal in progress');
         expect((screen.getByLabelText('Price') as HTMLInputElement).disabled).toBe(true);
         expect((screen.getByLabelText('Price unit') as HTMLSelectElement).disabled).toBe(true);
+    });
+
+    it('omits reach and reachPeers when untouched on a peers listing whose reachPeers were absent', async () => {
+        const listing = basePost({ reach: 'peers', reachPeers: undefined });
+        const update = vi.spyOn(api, 'updateMarketplacePost').mockResolvedValue({ success: true, post: listing as any });
+        await openEdit(listing, { peers: [{ peerId: 'peer-riverside', callsign: 'Riverside' } as any] });
+
+        await act(async () => { fireEvent.click(screen.getByText('💾 Save')); });
+        await waitFor(() => expect(update).toHaveBeenCalled());
+        const sent = update.mock.calls[0][2] as Record<string, unknown>;
+        expect(sent).not.toHaveProperty('reach');
+        expect(sent).not.toHaveProperty('reachPeers');
+    });
+
+    it('does not let a late reachPeers refetch clobber peer edits made before it resolves', async () => {
+        const listing = basePost({ reach: 'peers', reachPeers: undefined });
+        const update = vi.spyOn(api, 'updateMarketplacePost').mockResolvedValue({ success: true, post: listing as any });
+        let resolveLateFetch!: (rows: any[]) => void;
+        let byIdCalls = 0;
+        stubNode(listing, [
+            { peerId: 'peer-a', callsign: 'Alpha' } as any,
+            { peerId: 'peer-b', callsign: 'Beta' } as any,
+        ]);
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(((f?: any) => {
+            if (f?.id) {
+                byIdCalls += 1;
+                if (byIdCalls === 1) return Promise.resolve([listing]);
+                return new Promise((resolve) => { resolveLateFetch = resolve; });
+            }
+            return Promise.resolve(f?.author ? [] : [listing]);
+        }) as any);
+
+        render(<MarketplacePage identity={identity} isMember={true} openPostId={String(listing.id)} onPostOpened={() => {}} transactions={[]} onRefreshTransactions={vi.fn()} />);
+        await screen.findByRole('heading', { name: new RegExp(String(listing.title)) });
+        await settle();
+        await waitFor(() => expect(screen.getByText('✏️ Edit Post')).toBeInTheDocument());
+        await act(async () => { fireEvent.click(screen.getByText('✏️ Edit Post')); });
+        await settle();
+
+        // User chooses Beta before the fallback fetch returns Alpha
+        fireEvent.click(screen.getByRole('button', { name: 'Beta' }));
+        await act(async () => {
+            resolveLateFetch?.([{ ...listing, reachPeers: ['peer-a'] }]);
+        });
+        await settle();
+
+        await act(async () => { fireEvent.click(screen.getByText('💾 Save')); });
+        await waitFor(() => expect(update).toHaveBeenCalled());
+        expect(update.mock.calls[0][2]).toMatchObject({ reach: 'peers', reachPeers: ['peer-b'] });
+    });
+
+    it('renders the inline Drop a pin map container with relative z-0 stacking context', async () => {
+        const listing = basePost();
+        await openEdit(listing);
+        fireEvent.click(screen.getByTestId('edit-location-drop-pin'));
+        const mapEl = screen.getByTestId('edit-location-map');
+        expect(mapEl.className).toContain('relative');
+        expect(mapEl.className).toContain('z-0');
+    });
+
+    it('ListingLocationField respects updated openMembership in async geolocation and ignores results after unmount', () => {
+        let onSuccess!: (pos: any) => void;
+        Object.defineProperty(navigator, 'geolocation', {
+            configurable: true,
+            value: {
+                getCurrentPosition: (ok: (pos: any) => void) => { onSuccess = ok; },
+            },
+        });
+        const onChange = vi.fn();
+        const { rerender, unmount } = render(
+            <ListingLocationField lat={null} lng={null} onChange={onChange} openMembership={false} />,
+        );
+        // Trigger geolocation before communityInfo settles openMembership=true
+        fireEvent.click(screen.getByTestId('edit-location-my-location'));
+        rerender(<ListingLocationField lat={null} lng={null} onChange={onChange} openMembership={true} />);
+        act(() => {
+            onSuccess({ coords: { latitude: -28.61234, longitude: 153.61234 } });
+        });
+        expect(onChange).toHaveBeenCalledTimes(1);
+        const [savedLat, savedLng] = onChange.mock.calls[0];
+        // ~100m approximation rounds away from the 4-decimal exact coordinate
+        expect(savedLat === -28.6123 && savedLng === 153.6123).toBe(false);
+
+        // Unmount while geolocation is in flight must not call onChange
+        onChange.mockClear();
+        fireEvent.click(screen.getByTestId('edit-location-my-location'));
+        unmount();
+        act(() => {
+            onSuccess({ coords: { latitude: -28.70001, longitude: 153.70001 } });
+        });
+        expect(onChange).not.toHaveBeenCalled();
     });
 });

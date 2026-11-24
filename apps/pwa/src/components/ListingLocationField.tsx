@@ -31,23 +31,31 @@ export function ListingLocationField({
     const mapRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
     const leafletRef = useRef<any>(null);
+    const openMembershipRef = useRef(openMembership);
+    openMembershipRef.current = openMembership;
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
+    const mountedRef = useRef(true);
+    useEffect(() => () => { mountedRef.current = false; }, []);
 
     const hasPin = lat != null && lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
 
     const applyFreshPin = (nextLat: number, nextLng: number) => {
         const rLat = Math.round(nextLat * 10000) / 10000;
         const rLng = Math.round(nextLng * 10000) / 10000;
-        if (openMembership) {
+        if (openMembershipRef.current) {
             exactPinRef.current = { lat: rLat, lng: rLng };
             const approx = approximateLocation(rLat, rLng);
             setApproximate(true);
-            onChange(approx.lat, approx.lng);
+            onChangeRef.current(approx.lat, approx.lng);
         } else {
             exactPinRef.current = null;
             setApproximate(false);
-            onChange(rLat, rLng);
+            onChangeRef.current(rLat, rLng);
         }
     };
+    const applyFreshPinRef = useRef(applyFreshPin);
+    applyFreshPinRef.current = applyFreshPin;
 
     const handleMyLocation = () => {
         setGeoError(null);
@@ -58,11 +66,13 @@ export function ListingLocationField({
         setLocating(true);
         navigator.geolocation.getCurrentPosition(
             (pos) => {
+                if (!mountedRef.current) return;
                 setLocating(false);
-                applyFreshPin(pos.coords.latitude, pos.coords.longitude);
+                applyFreshPinRef.current(pos.coords.latitude, pos.coords.longitude);
                 setPinDropOpen(false);
             },
             () => {
+                if (!mountedRef.current) return;
                 setLocating(false);
                 setGeoError(t("Could not get your location. Try 'Drop a pin' instead."));
                 setPinDropOpen(true);
@@ -76,20 +86,20 @@ export function ListingLocationField({
         if (!approximate) exactPinRef.current = { lat: lat!, lng: lng! };
         const approx = approximateLocation(lat!, lng!);
         setApproximate(true);
-        onChange(approx.lat, approx.lng);
+        onChangeRef.current(approx.lat, approx.lng);
     };
 
     const handleExactSpot = () => {
         const exact = exactPinRef.current;
         if (!exact) return;
         setApproximate(false);
-        onChange(exact.lat, exact.lng);
+        onChangeRef.current(exact.lat, exact.lng);
     };
 
     useEffect(() => {
         if (!pinDropOpen || !mapContainerRef.current) return;
         let cancelled = false;
-        void import('leaflet').then((mod) => {
+        void Promise.all([import('leaflet'), import('leaflet/dist/leaflet.css')]).then(([mod]) => {
             if (cancelled || !mapContainerRef.current || mapRef.current) return;
             const L = mod.default ?? mod;
             leafletRef.current = L;
@@ -104,13 +114,13 @@ export function ListingLocationField({
                     maxZoom: 18,
                 }).addTo(map);
                 map.on('click', (e: any) => {
-                    applyFreshPin(e.latlng.lat, e.latlng.lng);
+                    applyFreshPinRef.current(e.latlng.lat, e.latlng.lng);
                 });
                 if (hasPin) {
                     const m = L.marker(center, { draggable: true }).addTo(map);
                     m.on('dragend', (e: any) => {
                         const next = e.target.getLatLng();
-                        applyFreshPin(next.lat, next.lng);
+                        applyFreshPinRef.current(next.lat, next.lng);
                     });
                     markerRef.current = m;
                 }
@@ -141,7 +151,7 @@ export function ListingLocationField({
                 const m = L.marker(pos, { draggable: true }).addTo(map);
                 m.on('dragend', (e: any) => {
                     const next = e.target.getLatLng();
-                    applyFreshPin(next.lat, next.lng);
+                    applyFreshPinRef.current(next.lat, next.lng);
                 });
                 markerRef.current = m;
             }
@@ -194,7 +204,7 @@ export function ListingLocationField({
                     <div
                         ref={mapContainerRef}
                         data-testid={`${testId}-map`}
-                        className="w-full h-52 rounded-xl overflow-hidden border border-nature-200 dark:border-nature-700 bg-nature-100 dark:bg-nature-800"
+                        className="relative z-0 w-full h-52 rounded-xl overflow-hidden border border-nature-200 dark:border-nature-700 bg-nature-100 dark:bg-nature-800"
                     />
                 </div>
             )}

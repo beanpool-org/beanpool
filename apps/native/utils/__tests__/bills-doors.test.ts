@@ -35,6 +35,6 @@ describe('a bill opens on Your deals → Bills, with its sheet', () => {
         }
     });
     it('Home asks for the bill lines (lands=bills)', () => {
-        expect(homePath(['needs'])).toBe('/api/home?cards=needs&lands=enterprise,group,invite,people,asks,first-need,words,bills');
+        expect(homePath(['needs'])).toBe('/api/home?cards=needs&lands=enterprise,group,invite,people,asks,first-need,words,bills,learn');
     });
 });

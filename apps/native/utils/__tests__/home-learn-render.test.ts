@@ -285,9 +285,9 @@ describe('the card that arrives on an arranged Home', () => {
     });
     const ctx = { interests: ['food'], tuneOpen: false, safetyUp: false, now: NOW };
 
-    it('this build draws it; the phone opens the form (K4) but not To check yet (K4 part 2), so only the first-page row is drawn', () => {
+    it('this build draws it and opens both To check and the form, matching the web app', () => {
         expect(HOME_DRAWN.has('learn')).toBe(true);
-        expect(LEARN_OPENS).toEqual({ addFirst: true });
+        expect(LEARN_OPENS).toEqual({ toCheck: true, addFirst: true });
     });
 
     it("is drawn once, after the member's own cards, while it has a page to show; asked while it arrives", () => {
@@ -297,10 +297,9 @@ describe('the card that arrives on an arranged Home', () => {
         expect(cardOrder(home).filter((c) => c.type === 'learn')).toHaveLength(1);
         expect(cardsToAsk(home)).toContain('learn');
         expect(ids(cardsToDraw(answer({ community: { name: 'Riverside', members: 9 }, learn: { rows: THREE } }), home, ctx))).toContain('learn');
-        // A member with nothing to show gets no card, arriving or not; an owner's "N to check" needs To check, which this build
-        // hasn't yet (K4 part 2); their first-page row opens the form (K4), so it is drawn; Learn off: none.
+        // A member with nothing to show gets no card, arriving or not; an owner's "N to check" and first-page rows both draw the card; Learn off: none.
         expect(ids(cardsToDraw(answer({ community: { name: 'R', members: 9 }, learn: { rows: [] } }), home, ctx))).not.toContain('learn');
-        expect(ids(cardsToDraw(answer({ community: { name: 'R', members: 9 }, learn: { rows: [], toCheck: 3 } }), home, ctx))).not.toContain('learn');
+        expect(ids(cardsToDraw(answer({ community: { name: 'R', members: 9 }, learn: { rows: [], toCheck: 3 } }), home, ctx))).toContain('learn');
         expect(ids(cardsToDraw(answer({ community: { name: 'R', members: 9 }, learn: { rows: [], toCheck: 3, first: true } }), home, ctx))).toContain('learn');
         expect(ids(cardsToDraw(answer({ community: { name: 'R', members: 9 }, learn: { rows: THREE } }, false), home, ctx))).not.toContain('learn');
         // Never for a list that holds it, nor once stamped.

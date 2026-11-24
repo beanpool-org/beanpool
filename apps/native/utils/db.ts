@@ -5241,17 +5241,29 @@ export async function updatePost(id: string, updates: any) {
 
     // Named only when the member changed them: absent leaves them on the node and in the copy, [] clears them.
     const freeTags: string[] | undefined = updates.freeTags !== undefined ? freeTagsOf(updates.freeTags) : undefined;
+    const parseBool = (v: unknown): boolean => v === true || v === 1 || v === 'true';
     const cashAlsoNeeded: boolean | undefined = updates.cash_also_needed !== undefined
-        ? Boolean(updates.cash_also_needed)
-        : updates.cashAlsoNeeded !== undefined ? Boolean(updates.cashAlsoNeeded) : undefined;
+        ? parseBool(updates.cash_also_needed)
+        : updates.cashAlsoNeeded !== undefined ? parseBool(updates.cashAlsoNeeded) : undefined;
     const hasLat = updates.lat !== undefined;
     const hasLng = updates.lng !== undefined;
     const hasReach = updates.reach !== undefined;
     const reachPeersRaw = updates.reachPeers !== undefined ? updates.reachPeers : updates.reach_peers;
-    const reachPeers: string[] | undefined = Array.isArray(reachPeersRaw) ? reachPeersRaw : undefined;
+    const reachPeers: string[] | undefined = Array.isArray(reachPeersRaw)
+        ? reachPeersRaw.filter((p: unknown): p is string => typeof p === 'string')
+        : typeof reachPeersRaw === 'string' && reachPeersRaw.trim()
+            ? (() => {
+                try {
+                    const parsed = JSON.parse(reachPeersRaw);
+                    return Array.isArray(parsed) ? parsed.filter((p: unknown): p is string => typeof p === 'string') : undefined;
+                } catch {
+                    return undefined;
+                }
+            })()
+            : undefined;
 
     // 1. Broadcast UPDATE to remote network
-    await _signedRequest('/api/marketplace/posts/update', { 
+    const res = await _signedRequest('/api/marketplace/posts/update', { 
         id, 
         authorPublicKey: identity.publicKey, 
         category: updates.category,
@@ -5265,7 +5277,7 @@ export async function updatePost(id: string, updates: any) {
         ...(hasLat ? { lat: updates.lat } : {}),
         ...(hasLng ? { lng: updates.lng } : {}),
         ...(hasReach ? { reach: updates.reach } : {}),
-        ...(hasReach && updates.reach === 'peers' && reachPeers !== undefined ? { reachPeers } : {}),
+        ...((!hasReach || updates.reach === 'peers') && reachPeers !== undefined ? { reachPeers } : {}),
         photos,
         // A listing priced for each one (§4.6): the count, the count the screen read, and the price for all of them
         // (`{ price_c }` sets it, null clears it, absent keeps it).
@@ -5283,6 +5295,7 @@ export async function updatePost(id: string, updates: any) {
 
     // 2. Update local SQLite cache (type is immutable on the node, so never overwritten here).
     const database = await getDb();
+    const serverPost = res?.post;
     const extraCols: string[] = [];
     const extraArgs: any[] = [];
     if (photos !== undefined) {
@@ -5301,10 +5314,33 @@ export async function updatePost(id: string, updates: any) {
         extraCols.push('lng = ?');
         extraArgs.push(updates.lng);
     }
-    if (hasReach) {
-        const storedReach = updates.reach === 'peers' && (!reachPeers || reachPeers.length === 0) ? 'local' : updates.reach;
+    if (serverPost?.reach !== undefined) {
         extraCols.push('reach = ?', 'reach_peers = ?');
-        extraArgs.push(storedReach, storedReach === 'peers' && reachPeers ? JSON.stringify(reachPeers) : null);
+        extraArgs.push(
+            serverPost.reach,
+            serverPost.reach === 'peers' && Array.isArray(serverPost.reachPeers) ? JSON.stringify(serverPost.reachPeers) : null,
+        );
+    } else if (hasReach || reachPeers !== undefined) {
+        if (hasReach && updates.reach === 'peers' && reachPeers === undefined) {
+            extraCols.push('reach = ?');
+            extraArgs.push('peers');
+        } else if (hasReach) {
+            const cleanPeers = [...new Set((reachPeers ?? []).map((p) => p.trim()).filter(Boolean))];
+            const storedReach = updates.reach === 'everywhere'
+                ? 'everywhere'
+                : (updates.reach === 'peers' && cleanPeers.length > 0 ? 'peers' : 'local');
+            extraCols.push('reach = ?', 'reach_peers = ?');
+            extraArgs.push(storedReach, storedReach === 'peers' ? JSON.stringify(cleanPeers) : null);
+        } else if (reachPeers !== undefined) {
+            const cleanPeers = [...new Set(reachPeers.map((p) => p.trim()).filter(Boolean))];
+            if (cleanPeers.length === 0) {
+                extraCols.push('reach = ?', 'reach_peers = ?');
+                extraArgs.push('local', null);
+            } else {
+                extraCols.push('reach_peers = ?');
+                extraArgs.push(JSON.stringify(cleanPeers));
+            }
+        }
     }
     if (tags !== undefined) {
         extraCols.push('tags = ?');

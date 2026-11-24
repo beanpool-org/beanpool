@@ -327,4 +327,26 @@ describe('phone Edit Post form behaviour', () => {
         const priceInput = host.querySelector('input[aria-label="Price"]') as HTMLInputElement | null;
         expect(priceInput?.disabled).toBe(true);
     });
+
+    it('omits reach and reachPeers on save when untouched, preventing silent downgrade of peers listings', async () => {
+        await openEdit(
+            { reach: 'peers', reach_peers: null },
+            { peers: [{ peerId: 'peer-riverside', callsign: 'Riverside' }] },
+        );
+        // Save without touching reach controls
+        await click(button('💾 Save'), 'Save');
+        const saved = net.args.get('updatePost')?.[1] as Record<string, unknown>;
+        expect(saved).toBeTruthy();
+        expect(saved).not.toHaveProperty('reach');
+        expect(saved).not.toHaveProperty('reachPeers');
+    });
+
+    it('exposes lendable Repeatable toggle as a disabled checked checkbox', async () => {
+        await openEdit({ type: 'offer', lendable: 1, repeatable: 1 });
+        const toggle = host.querySelector('[data-testid="edit-repeatable-toggle"]') as HTMLButtonElement | null;
+        expect(toggle).toBeTruthy();
+        expect(toggle?.getAttribute('role')).toBe('checkbox');
+        expect(toggle?.getAttribute('aria-checked')).toBe('true');
+        expect(toggle?.disabled).toBe(true);
+    });
 });

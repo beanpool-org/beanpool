@@ -558,6 +558,7 @@ function PostDetailModal() {
     const [editPinDropVisible, setEditPinDropVisible] = useState(false);
     const [editReach, setEditReach] = useState<ReachChoice>('local');
     const [editReachPeers, setEditReachPeers] = useState<string[]>([]);
+    const [editReachTouched, setEditReachTouched] = useState(false);
     const [reachablePeerList, setReachablePeerList] = useState<ReachPeerOption[]>([]);
     // A listing priced for each one (DESIGN-per-item-price-fable.md §2.5): the two boxes, the count and price for all of them the
     // node held when the form opened (what the count is saved against), whether the seller touched the price-for-all box, and
@@ -1451,6 +1452,7 @@ function PostDetailModal() {
         setEditPinDropVisible(false);
         setEditReach(post.reach === 'peers' || post.reach === 'everywhere' ? post.reach : 'local');
         setEditReachPeers(parseStoredReachPeers(post.reach_peers ?? post.reachPeers));
+        setEditReachTouched(false);
         // Priced for each one: its count and price for all of them are read from the node now (the phone's copy doesn't keep
         // them), and the count read is the one the save is made against. A listing that is not starts with empty boxes.
         setEditItemCount(''); setEditItemLot(''); setEditLotTouched(false); setEditItemRefusal(null); setEditItemStored(null);
@@ -1538,7 +1540,7 @@ function PostDetailModal() {
                 repeatable: editEach ? false : editRepeatable,
                 cash_also_needed: editCashAlsoNeeded ? 1 : 0,
                 ...(editLat != null && editLng != null ? { lat: editLat, lng: editLng } : {}),
-                ...(isEditPublicLocal && reachablePeerList.length > 0 ? {
+                ...(isEditPublicLocal && reachablePeerList.length > 0 && editReachTouched ? {
                     reach: effectiveReach,
                     ...(effectiveReach === 'peers' ? { reachPeers: editReachPeers } : {}),
                 } : {}),
@@ -2240,12 +2242,12 @@ function PostDetailModal() {
                             ) : (
                             <View style={{ marginBottom: 10 }}>
                                 <Text style={styles.editSectionLabel}>{upperCase(editEach ? perItemLines.priceForOne() : t('Price'))} <Text style={styles.requiredStar}>*</Text></Text>
-                                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                                     <TextInput
                                         ref={editPriceRef}
                                         accessibilityLabel={editEach ? perItemLines.priceForOne() : t('Price')}
                                         editable={!hasOpenNonStandingDeal}
-                                        style={[styles.editInput, { flex: 1, marginBottom: 0 }, hasOpenNonStandingDeal && styles.editInputDisabled]}
+                                        style={[styles.editInput, { flex: 1, minWidth: 96, marginBottom: 0 }, hasOpenNonStandingDeal && styles.editInputDisabled]}
                                         value={editCredits}
                                         onChangeText={setEditCredits}
                                         placeholder="0"
@@ -2311,8 +2313,8 @@ function PostDetailModal() {
                             {/* Repeatable Toggle: not on Each, where the count takes its place (DESIGN-per-item-price-fable.md D4) */}
                             {!editEach && (
                             <Pressable
-                                accessibilityRole="button"
-                                accessibilityState={{ selected: editRepeatable }}
+                                accessibilityRole="checkbox"
+                                accessibilityState={{ checked: editRepeatable, selected: editRepeatable, disabled: isEditLendable }}
                                 disabled={isEditLendable}
                                 onPress={() => setEditRepeatable(!editRepeatable)}
                                 testID="edit-repeatable-toggle"
@@ -2347,9 +2349,9 @@ function PostDetailModal() {
                             {isEditPublicLocal && (
                                 <ListingReachField
                                     reach={editReach}
-                                    onReachChange={setEditReach}
+                                    onReachChange={(next) => { setEditReach(next); setEditReachTouched(true); }}
                                     reachPeers={editReachPeers}
-                                    onReachPeersChange={setEditReachPeers}
+                                    onReachPeersChange={(next) => { setEditReachPeers(next); setEditReachTouched(true); }}
                                     peerList={reachablePeerList}
                                     testID="edit-reach-field"
                                 />

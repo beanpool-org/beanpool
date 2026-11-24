@@ -6,7 +6,7 @@
  * rules, and central colour tokens (dark mode + 320 dp × 1.3 font).
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { t, upperCase, word } from '@beanpool/core';
@@ -367,6 +367,17 @@ export function ListingPinDropModal({
         return () => { cancelled = true; };
     }, [visible, initialLat, initialLng]);
 
+    useEffect(() => {
+        if (visible && nodeRadius && initialLat == null && pickedLat == null) {
+            mapRef.current?.animateToRegion({
+                latitude: nodeRadius.lat,
+                longitude: nodeRadius.lng,
+                latitudeDelta: 0.0922,
+                longitudeDelta: 0.0421,
+            }, 300);
+        }
+    }, [visible, nodeRadius, initialLat, pickedLat]);
+
     const styles = useStyles(({ colors }) => StyleSheet.create({
         wrap: { flex: 1, backgroundColor: colors.surface.app },
         map: { flex: 1 },
@@ -393,8 +404,8 @@ export function ListingPinDropModal({
 
     if (!visible) return null;
 
-    const initialRegion = pickedLat != null && pickedLng != null
-        ? { latitude: pickedLat, longitude: pickedLng, latitudeDelta: 0.04, longitudeDelta: 0.02 }
+    const initialRegion = initialLat != null && initialLng != null
+        ? { latitude: initialLat, longitude: initialLng, latitudeDelta: 0.04, longitudeDelta: 0.02 }
         : nodeRadius
             ? { latitude: nodeRadius.lat, longitude: nodeRadius.lng, latitudeDelta: 0.0922, longitudeDelta: 0.0421 }
             : PIN_MAP_DEFAULT;
@@ -412,7 +423,16 @@ export function ListingPinDropModal({
     return (
         <Modal visible={visible} animationType="slide" onRequestClose={onCancel}>
             <View style={styles.wrap} testID="edit-pin-drop-modal">
-                {HAS_MAPS_KEY && MapViewComp ? (
+                {!HAS_MAPS_KEY ? (
+                    <View style={styles.fallback}>
+                        <Text style={styles.fallbackTitle}>{t('Google Maps is not configured')}</Text>
+                        <Text style={styles.fallbackSub}>{t('API key is missing in build config.')}</Text>
+                    </View>
+                ) : !MapViewComp ? (
+                    <View style={styles.fallback} testID="edit-pin-drop-loading">
+                        <ActivityIndicator color={colors.brand.primary} />
+                    </View>
+                ) : (
                     <MapViewComp
                         key={mapSchemeKey(Platform.OS, theme === 'dark')}
                         ref={mapRef}
@@ -434,21 +454,16 @@ export function ListingPinDropModal({
                             <MarkerComp
                                 coordinate={{ latitude: pickedLat, longitude: pickedLng }}
                                 pinColor={postType === 'offer' ? colors.brand.fill : colors.action.fab}
+                                draggable
+                                onDragEnd={handlePress}
                             />
                         )}
                     </MapViewComp>
-                ) : (
-                    <View style={styles.fallback}>
-                        <Text style={styles.fallbackTitle}>{t('Google Maps is not configured')}</Text>
-                        <Text style={styles.fallbackSub}>{t('API key is missing in build config.')}</Text>
-                    </View>
                 )}
 
-                {pickedLat == null && (
-                    <View style={[styles.banner, { top: insets.top + 16 }]}>
-                        <Text style={styles.bannerText}>{t('📌 Tap the map to place your pin')}</Text>
-                    </View>
-                )}
+                <View style={[styles.banner, { top: insets.top + 16 }]} pointerEvents="none">
+                    <Text style={styles.bannerText}>{t('📌 Tap the map to place your pin')}</Text>
+                </View>
 
                 <SafeAreaView style={styles.footerWrap} edges={['bottom']} pointerEvents="box-none">
                     <View style={styles.footer}>
@@ -457,6 +472,7 @@ export function ListingPinDropModal({
                         </Pressable>
                         <Pressable
                             accessibilityRole="button"
+                            accessibilityState={{ disabled: pickedLat == null || pickedLng == null }}
                             style={[styles.confirmBtn, pickedLat == null && styles.confirmBtnDisabled]}
                             disabled={pickedLat == null || pickedLng == null}
                             onPress={() => { if (pickedLat != null && pickedLng != null) onConfirm(pickedLat, pickedLng); }}

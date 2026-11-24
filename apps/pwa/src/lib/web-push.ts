@@ -55,8 +55,8 @@ export const WEB_PUSH_FAILURE_WORDS = {
     nodeUnreachable: word("This community couldn't be reached right now. Try again in a moment."),
     network: word("Couldn't reach this community to save your notification request. Try again in a moment."),
     rateLimited: word('Too many new browsers for this account today. Try again tomorrow.'),
-    standby: word("This community's standby can't keep browser subscriptions right now. Try again in a moment."),
-    noSealKey: word("This community can't keep browser subscriptions right now. Try again in a moment."),
+    standby: word("This server is a standby copy of the community, so it can't turn on browser notifications. Try again at the community's main address."),
+    noSealKey: word("This community can't save browser notifications right now. Try again in a moment."),
     noKey: word("This community can't send browser notifications right now. Try again in a moment."),
     noOpenRequest: word('Only members, or people with an open request to join, can turn on notifications here.'),
     featureOff: word("This community isn't taking notification requests right now."),
@@ -239,12 +239,11 @@ export function webPushFailureMessage(failure: WebPushFailure, surface: 'member'
         case 'bad_host': return t(WEB_PUSH_FAILURE_WORDS.badHost);
         case 'unsigned': return t(WEB_PUSH_FAILURE_WORDS.unsigned);
     }
-    if (failure.status === 429) return t(WEB_PUSH_FAILURE_WORDS.rateLimited);
-    if (failure.status === 503) return t(WEB_PUSH_FAILURE_WORDS.noSealKey);
-    if (failure.status === 403) return t(WEB_PUSH_FAILURE_WORDS.noOpenRequest);
-    if (failure.status === 404) return t(WEB_PUSH_FAILURE_WORDS.featureOff);
-    if (failure.status === 400) return t(WEB_PUSH_FAILURE_WORDS.badRequest);
-    if (failure.status === 401) return t(WEB_PUSH_FAILURE_WORDS.unsigned);
+    if (failure.code === null) {
+        if (failure.status === 400) return t(WEB_PUSH_FAILURE_WORDS.badRequest);
+        if (failure.status === 401) return t(WEB_PUSH_FAILURE_WORDS.unsigned);
+        if (failure.status === 503) return t(WEB_PUSH_FAILURE_WORDS.nodeUnreachable);
+    }
     return surface === 'waiting' ? t(TELL_ME_WORDS.failed) : t(WEB_PUSH_FAILURE_WORDS.fallback);
 }
 

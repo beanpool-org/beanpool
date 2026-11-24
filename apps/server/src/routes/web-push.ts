@@ -42,11 +42,22 @@ import {
 import { FEATURE_OFF, featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { ensureVapidKey, readVapidKey, type VapidKey } from '../services/web-push.js';
 import { RecoverySealKeyMissing } from '../services/recovery-seal-key.js';
+import { logger } from '../logger.js';
 import type { RouteDeps } from './types.js';
 
-function answer(ctx: any, status: number, error: string, code: string): void {
+function answer(ctx: any, status: number, error: string, code: string, extra?: Record<string, unknown>): void {
     ctx.status = status;
-    ctx.body = { error, code };
+    ctx.body = extra ? { error, code, ...extra } : { error, code };
+}
+
+/** Log a refusal of POST /api/web-push at INFO with its reason code only (never keys, endpoints or subscriptions). */
+function logPostRefusal(code: string): void {
+    logger.info('SYS', `[WebPush] POST /api/web-push refused (${code})`);
+}
+
+function refusePost(ctx: any, status: number, error: string, code: string, extra?: Record<string, unknown>): void {
+    logPostRefusal(code);
+    answer(ctx, status, error, code, extra);
 }
 
 /** This node's own address as the browser reached it, for the push's `sub`; a Host that is no host name gives none. */
@@ -81,11 +92,11 @@ export function createWebPushRoutes(_deps: RouteDeps): Router {
 
     router.post('/api/web-push', (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
-        if (!actor) return answer(ctx, 401, 'A signed request is required.', 'unsigned');
-        if (getNodeRole() !== 'primary') return answer(ctx, 503, "This community's standby takes no subscriptions.", 'standby');
+        if (!actor) return refusePost(ctx, 401, 'A signed request is required.', 'unsigned');
+        if (getNodeRole() !== 'primary') return refusePost(ctx, 503, "This community's standby takes no subscriptions.", 'standby');
         const body = (ctx as any).requestBody ?? {};
         const sub = parseBrowserSubscription(body.subscription);
-        if (!sub) return answer(ctx, 400, "'subscription' must be a browser's push subscription: its endpoint at a push service, and its keys.", 'bad_subscription');
+        if (!sub) return refusePost(ctx, 400, "'subscription' must be a browser's push subscription: its endpoint at a push service, and its keys.", 'bad_subscription');
         const member = passesReadGate(actor);
         let standing: ReturnType<typeof askerStanding> | 'member' = 'member';
         if (!member) {
@@ -93,31 +104,32 @@ export function createWebPushRoutes(_deps: RouteDeps): Router {
             const switches = getProfileSwitches();
             const off = (['invites', 'knocks'] as const).find((k) => !switches[k]);
             if (off) {
-                ctx.status = 404;
-                ctx.body = { error: featureOffMessage(off), code: FEATURE_OFF, feature: off };
-                return;
+                return refusePost(ctx, 404, featureOffMessage(off), FEATURE_OFF, { feature: off });
             }
             standing = askerStanding(actor);
         }
         if (standing === 'none') {
-            return answer(ctx, 403, 'Only a member, or someone waiting for an answer to their request to join, can be told here.', 'no_open_request');
+            return refusePost(ctx, 403, 'Only a member, or someone waiting for an answer to their request to join, can be told here.', 'no_open_request');
         }
         const contact = contactOf(ctx);
-        if (!contact) return answer(ctx, 400, 'This request did not name this community by a host name.', 'bad_host');
+        if (!contact) return refusePost(ctx, 400, 'This request did not name this community by a host name.', 'bad_host');
         const key = nodeKey(ctx, true);
-        if (!key) return;
+        if (!key) {
+            logPostRefusal('no_key');
+            return;
+        }
         let subId: string;
         try {
             const lang = typeof body.lang === 'string' ? normaliseLang(body.lang) : null;
             if (standing === 'member') {
                 const kept = putMemberSubscription(actor, sub, contact, lang);
-                if (kept === 'key_rate_limited') return answer(ctx, 429, 'Too many new browsers for this account today. Try again tomorrow.', 'key_rate_limited');
+                if (kept === 'key_rate_limited') return refusePost(ctx, 429, 'Too many new browsers for this account today. Try again tomorrow.', 'key_rate_limited');
                 subId = kept;
             } else {
                 subId = standing === 'open' ? putAskerSubscription(actor, sub, contact, lang) : webPushSubId(sub.endpoint);
             }
         } catch (e) {
-            if (e instanceof RecoverySealKeyMissing) return answer(ctx, 503, "This community can't keep browser subscriptions right now.", 'no_seal_key');
+            if (e instanceof RecoverySealKeyMissing) return refusePost(ctx, 503, "This community can't keep browser subscriptions right now.", 'no_seal_key');
             throw e;
         }
         ctx.status = 201;

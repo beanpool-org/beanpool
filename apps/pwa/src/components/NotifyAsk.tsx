@@ -15,6 +15,7 @@
  */
 import type { NotifyJoinWords } from '@beanpool/core';
 import { t } from '@beanpool/core';
+import { webPushFailureMessage, type WebPushFailure } from '../lib/web-push';
 import { StepAction } from './StepAction';
 import { WEB_PUSH_ROW_WORDS } from './WebPushRow';
 
@@ -24,15 +25,18 @@ export function NotifyAsk({ form, words, busy, failed, onTurnOn, onLater }: {
     words: NotifyJoinWords;
     /** The tap's work is out (the browser's prompt, the subscription): Turn on waits; Later never does. */
     busy: boolean;
-    /** The browser allowed and the community did not take the subscription: said, with both buttons still there. */
-    failed: boolean;
+    /** Notifications failed after permission: said by which side refused, with both buttons still there. */
+    failed: WebPushFailure | boolean | null;
     onTurnOn: () => void;
     onLater: () => void;
 }) {
     const card = form === 'card';
+    const failedMessage = failed
+        ? (typeof failed === 'object' ? webPushFailureMessage(failed) : t(WEB_PUSH_ROW_WORDS.failed))
+        : null;
     const buttons = (
         <div className="flex flex-col items-stretch">
-            {failed && <p role="alert" data-testid="notify-ask-failed" className="m-0 mb-2 text-sm text-center text-bp-ink-danger break-words">{t(WEB_PUSH_ROW_WORDS.failed)}</p>}
+            {failedMessage && <p role="alert" dir="auto" data-testid="notify-ask-failed" className="m-0 mb-2 text-sm text-center text-bp-ink-danger break-words">{failedMessage}</p>}
             <button type="button" data-testid="notify-ask-turn-on" onClick={onTurnOn} disabled={busy}
                 className="block w-full min-h-[52px] px-4 py-3 rounded-2xl border-none bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-base font-bold break-words cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand">
                 {words.turnOn}

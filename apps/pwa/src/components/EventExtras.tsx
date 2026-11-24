@@ -21,7 +21,7 @@ import {
 } from '../lib/event-extras';
 import { eventShareWhen } from '../lib/events';
 import { useLanguage } from '../lib/useLanguage';
-import { TELL_ME_WORDS, readNotifyAsk, turnOnFromAsk } from '../lib/web-push';
+import { TELL_ME_WORDS, readNotifyAsk, turnOnAsk, webPushFailureMessage } from '../lib/web-push';
 import { noteBrowserChanged, useNotifyBrowser } from './NotifyLine';
 import { WEB_PUSH_ROW_WORDS } from './WebPushRow';
 import { Sentence } from './Sentence';
@@ -278,10 +278,10 @@ export function EventReminder({ post, identity, myRsvp, choice: given }: Reminde
         if (notifyTurnOn(browser, readNotifyAsk(identity.publicKey)) === 'settings') { setSaid(t(TELL_ME_WORDS.blocked)); return; }
         setTurningOn(true);
         // The browser's prompt is the first thing this tap waits on; its answer kept as a named line's Tell me keeps it.
-        void turnOnFromAsk(identity, lang, 'line').then(r => {
+        void turnOnAsk(identity, lang, 'line').then(r => {
             setTurningOn(false);
-            if (r === 'blocked') setSaid(t(TELL_ME_WORDS.blocked));
-            else if (r === 'failed') setSaid(t(WEB_PUSH_ROW_WORDS.failed));
+            if (r.result === 'blocked') setSaid(t(TELL_ME_WORDS.blocked));
+            else if (r.result === 'failed') setSaid(webPushFailureMessage(r.failure));
             noteBrowserChanged();
         });
     };

@@ -506,7 +506,7 @@ for (const theme of ['light', 'dark'] as const) {
             expect(host.querySelector('[data-testid="standing-take-up"]')).toBeNull();
             expect(host.textContent).not.toContain('Agree and pay 0 Beans');
             expect(host.textContent).toContain('Accept this Offer?');
-            await typeInto(host.querySelector('input[aria-label="Trust commitment in hours"]') as HTMLInputElement, '2');
+            await typeInto(host.querySelector('input[aria-label="Trust commitment in months"]') as HTMLInputElement, '2');
             await press(host, 'Confirm');
             expect(asked).toEqual([['p-1', ME.publicKey, 2]]);
         });

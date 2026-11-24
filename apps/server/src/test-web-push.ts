@@ -552,21 +552,29 @@ async function main(): Promise<void> {
     ];
     for (const mc of mwCases) {
         const beforeId = (db.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM system_logs').get() as { m: number }).m;
-        const res = await mc.trigger();
+        const consoleLines: string[] = [];
+        const realLog = console.log;
+        console.log = (...args: unknown[]) => { consoleLines.push(args.map(String).join(' ')); };
+        let res: Res;
+        try {
+            res = await mc.trigger();
+        } finally {
+            console.log = realLog;
+        }
         const rowsAfter = db.prepare('SELECT level, category, message, metadata FROM system_logs WHERE id > ? ORDER BY id ASC').all(beforeId) as
             { level: string; category: string; message: string; metadata: string | null }[];
         const webPushRows = rowsAfter.filter((r) => r.message.includes('[WebPush] POST /api/web-push refused'));
         const expectedMsg = `[WebPush] POST /api/web-push refused (${mc.expectedCode})`;
-        const leaked = secrets.filter((s) => webPushRows.some((r) => r.message.includes(s) || (r.metadata ?? '').includes(s)));
+        const webPushConsole = consoleLines.filter((l) => l.includes('[WebPush] POST /api/web-push refused'));
+        const leaked = secrets.filter((s) => webPushConsole.some((l) => l.includes(s)));
         assert(
             res.status === mc.expectedStatus
-            && webPushRows.length === 1
-            && webPushRows[0].level === 'INFO'
-            && webPushRows[0].category === 'SYS'
-            && webPushRows[0].message === expectedMsg
-            && webPushRows[0].metadata === null
+            && webPushRows.length === 0
+            && webPushConsole.length === 1
+            && webPushConsole[0].includes('[INFO]')
+            && webPushConsole[0].includes(expectedMsg)
             && leaked.length === 0,
-            `POST /api/web-push middleware refusal ${mc.name}: logs once with code only, nothing secret (status=${res.status}, rows=${show(webPushRows)}, leaked=${show(leaked)})`,
+            `POST /api/web-push pre-auth middleware refusal ${mc.name}: logs once to stdout with code only, no SQLite write, nothing secret (status=${res.status}, console=${show(webPushConsole)}, dbRows=${webPushRows.length}, leaked=${show(leaked)})`,
         );
     }
 

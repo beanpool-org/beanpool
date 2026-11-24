@@ -52,48 +52,79 @@ function answer(ctx: any, status: number, error: string, code: string, extra?: R
 
 export const WEB_PUSH_REFUSAL_LOG_BUDGET = 20;
 const WEB_PUSH_REFUSAL_WINDOW_MS = 60_000;
-let refusalWindowStart = 0;
-let refusalWritten = 0;
-let refusalSuppressed = 0;
-let refusalSummaryTimer: ReturnType<typeof setTimeout> | null = null;
-const refusalSuppressedByCode = new Map<string, number>();
 
-function flushPostRefusalSummary(): void {
-    if (refusalSummaryTimer) clearTimeout(refusalSummaryTimer);
-    refusalSummaryTimer = null;
-    if (refusalSuppressed > 0) {
-        const breakdown = [...refusalSuppressedByCode.entries()].map(([k, n]) => `${k}=${n}`).join(', ');
-        logger.info('SYS', `[WebPush] POST /api/web-push refused ${refusalSuppressed} more times in that minute (${breakdown})`);
-    }
-    refusalSuppressed = 0;
-    refusalSuppressedByCode.clear();
+interface RefusalLogBucket {
+    windowStart: number;
+    written: number;
+    suppressed: number;
+    timer: ReturnType<typeof setTimeout> | null;
+    suppressedByCode: Map<string, number>;
+    emit: (message: string, now: number) => void;
 }
 
-/** Log a refusal of POST /api/web-push at INFO with its reason code only (never keys, endpoints or subscriptions), budgeted per minute. */
-export function logWebPushPostRefusal(code: string, now = Date.now()): void {
-    if (now - refusalWindowStart >= WEB_PUSH_REFUSAL_WINDOW_MS) {
-        flushPostRefusalSummary();
-        refusalWindowStart = now;
-        refusalWritten = 0;
+function makeRefusalBucket(emit: (message: string, now: number) => void): RefusalLogBucket {
+    return { windowStart: 0, written: 0, suppressed: 0, timer: null, suppressedByCode: new Map(), emit };
+}
+
+function flushBucket(bucket: RefusalLogBucket, now = Date.now()): void {
+    if (bucket.timer) clearTimeout(bucket.timer);
+    bucket.timer = null;
+    if (bucket.suppressed > 0) {
+        const breakdown = [...bucket.suppressedByCode.entries()].map(([k, n]) => `${k}=${n}`).join(', ');
+        bucket.emit(`[WebPush] POST /api/web-push refused ${bucket.suppressed} more times in that minute (${breakdown})`, now);
     }
-    if (refusalWritten < WEB_PUSH_REFUSAL_LOG_BUDGET) {
-        refusalWritten++;
-        logger.info('SYS', `[WebPush] POST /api/web-push refused (${code})`);
+    bucket.suppressed = 0;
+    bucket.suppressedByCode.clear();
+}
+
+function logIntoBucket(bucket: RefusalLogBucket, code: string, now: number): void {
+    if (now - bucket.windowStart >= WEB_PUSH_REFUSAL_WINDOW_MS) {
+        flushBucket(bucket, now);
+        bucket.windowStart = now;
+        bucket.written = 0;
+    }
+    if (bucket.written < WEB_PUSH_REFUSAL_LOG_BUDGET) {
+        bucket.written++;
+        bucket.emit(`[WebPush] POST /api/web-push refused (${code})`, now);
         return;
     }
-    refusalSuppressed++;
-    refusalSuppressedByCode.set(code, (refusalSuppressedByCode.get(code) ?? 0) + 1);
-    if (!refusalSummaryTimer) {
-        refusalSummaryTimer = setTimeout(flushPostRefusalSummary, Math.max(0, refusalWindowStart + WEB_PUSH_REFUSAL_WINDOW_MS - now));
-        refusalSummaryTimer.unref?.();
+    bucket.suppressed++;
+    bucket.suppressedByCode.set(code, (bucket.suppressedByCode.get(code) ?? 0) + 1);
+    if (!bucket.timer) {
+        bucket.timer = setTimeout(() => flushBucket(bucket), Math.max(0, bucket.windowStart + WEB_PUSH_REFUSAL_WINDOW_MS - now));
+        bucket.timer.unref?.();
     }
 }
 
-/** For tests: end the current refusal-log minute (flushing any summary line) and reset the per-minute counter. */
+const postRefusalBucket = makeRefusalBucket((msg) => {
+    logger.info('SYS', msg);
+});
+
+const preAuthRefusalBucket = makeRefusalBucket((msg, now) => {
+    console.log(`[${new Date(now).toISOString()}] [INFO] [SYS] ${msg}`);
+});
+
+/** Log a refusal of POST /api/web-push at INFO (system_logs + stdout) with its reason code only, budgeted per minute. */
+export function logWebPushPostRefusal(code: string, now = Date.now()): void {
+    logIntoBucket(postRefusalBucket, code, now);
+}
+
+/**
+ * Log a pre-auth / unauthenticated middleware refusal of POST /api/web-push to stdout (`docker logs`) only,
+ * budgeted per minute and without touching SQLite (`system_logs`), so unauthenticated/revoked/sample-id rejections
+ * never mutate database tables or consume the authenticated refusal log budget.
+ */
+export function logWebPushPreAuthRefusal(code: string, now = Date.now()): void {
+    logIntoBucket(preAuthRefusalBucket, code, now);
+}
+
+/** For tests: end the current refusal-log minute (flushing any summary lines) and reset both per-minute counters. */
 export function endWebPushRefusalLogMinute(): void {
-    flushPostRefusalSummary();
-    refusalWindowStart = 0;
-    refusalWritten = 0;
+    for (const bucket of [postRefusalBucket, preAuthRefusalBucket]) {
+        flushBucket(bucket);
+        bucket.windowStart = 0;
+        bucket.written = 0;
+    }
 }
 
 function refusePost(ctx: any, status: number, error: string, code: string, extra?: Record<string, unknown>): void {

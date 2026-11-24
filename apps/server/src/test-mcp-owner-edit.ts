@@ -373,6 +373,11 @@ async function main(): Promise<void> {
         const badType = await edit({ post_id: offerId, price_type: 'per_litre' });
         assert(flagText.isError === true && /repeatable is true or false/.test(errorText(flagText)) && row(offerId)?.repeatable === 0 && badType.isError === true && /price type must be one of/.test(errorText(badType)) && row(offerId)?.price_type === 'hourly',
             `text for a flag and a made-up price type → refused in words, unchanged (${errorText(flagText)} | ${errorText(badType)})`);
+        for (const gated of ['each', 'yearly', 'per_kg'] as const) {
+            const refused = await edit({ post_id: offerId, price_type: gated });
+            assert(refused.isError === true && /price type must be one of/.test(errorText(refused)) && row(offerId)?.price_type === 'hourly',
+                `update_post refuses ${gated} outside AGENT_PRICE_TYPES, unchanged (${errorText(refused)})`);
+        }
 
         const shop = openShop(owner.pub);
         const inShop = await edit({ post_id: offerId, shop_id: shop.id });

@@ -1394,7 +1394,12 @@ function listingEdit(row: MadeRow, grant: AgentGrant, args: Record<string, unkno
     // The engine stores no term on an Offer that isn't lent, and keeps a lent one repeatable, whatever the edit says.
     if (term && !lent) return `${term}: this Offer is not lent. Send lendable: true with it.`;
     if (lent && args.repeatable === false) return 'A lent Offer is always repeatable: it goes back on the board after each loan. Send lendable: false to stop lending it.';
-    // Held to the engine's rules by updatePost: a price type it does not take, a lending term past its limit, a shop not the author's.
+    if (args.price_type !== undefined) {
+        if (typeof args.price_type !== 'string' || !(AGENT_PRICE_TYPES as readonly string[]).includes(args.price_type)) {
+            return `The price type must be one of ${AGENT_PRICE_TYPES.join(', ')}`;
+        }
+    }
+    // price_type is held to AGENT_PRICE_TYPES above; the rest to the engine's rules by updatePost: a lending term past its limit, a shop not the author's.
     put(updates, {
         priceType: args.price_type, repeatable: args.repeatable, cashAlsoNeeded: args.cash_also_needed, lendable: args.lendable,
         lendMaxDays: args.lend_max_days === 0 ? null : args.lend_max_days, lendTerms: args.lend_terms, replacementValue: args.replacement_value,

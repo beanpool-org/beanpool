@@ -143,6 +143,7 @@ const net = vi.hoisted(() => ({ calls: [] as string[], args: new Map<string, unk
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => { net.args.set(name, args); return net.answer?.(name, args); }));
 
 import { LanguageProvider } from '../../components/LanguageProvider';
+import { ListingPinDropModal } from '../../components/ListingFormFields';
 import PostDetailScreen from '../../app/post/[id]';
 
 const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
@@ -348,5 +349,25 @@ describe('phone Edit Post form behaviour', () => {
         expect(toggle?.getAttribute('role')).toBe('checkbox');
         expect(toggle?.getAttribute('aria-checked')).toBe('true');
         expect(toggle?.disabled).toBe(true);
+    });
+
+    it('ListingPinDropModal hides the tap-to-place banner when the map is unavailable or still loading', async () => {
+        await act(async () => {
+            root.render(createElement(
+                LanguageProvider as any,
+                { deviceTags: ['en-US'], initial: 'en' },
+                createElement(ListingPinDropModal, {
+                    visible: true,
+                    initialLat: -28.55,
+                    initialLng: 153.50,
+                    postType: 'offer',
+                    onConfirm: vi.fn(),
+                    onCancel: vi.fn(),
+                }),
+            ) as any);
+        });
+        await settle(2);
+        expect(host.querySelector('[data-testid="edit-pin-drop-modal"]')).toBeTruthy();
+        expect(host.textContent).not.toContain('Tap the map to place your pin');
     });
 });

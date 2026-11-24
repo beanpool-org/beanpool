@@ -461,9 +461,11 @@ export function ListingPinDropModal({
                     </MapViewComp>
                 )}
 
-                <View style={[styles.banner, { top: insets.top + 16 }]} pointerEvents="none">
-                    <Text style={styles.bannerText}>{t('📌 Tap the map to place your pin')}</Text>
-                </View>
+                {HAS_MAPS_KEY && MapViewComp && (
+                    <View style={[styles.banner, { top: insets.top + 16 }]} pointerEvents="none">
+                        <Text style={styles.bannerText}>{t('📌 Tap the map to place your pin')}</Text>
+                    </View>
+                )}
 
                 <SafeAreaView style={styles.footerWrap} edges={['bottom']} pointerEvents="box-none">
                     <View style={styles.footer}>

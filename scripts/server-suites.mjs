@@ -687,6 +687,7 @@ export const SUITES = [
     'test-lendable-offers',
     'test-per-item-listings',
     'test-per-item-deals',
+    'test-price-units',
     'test-process-handlers',
     'test-shutdown-recovery',
     'test-clean-stop',

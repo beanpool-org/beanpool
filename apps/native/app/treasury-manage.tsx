@@ -26,7 +26,7 @@ import {
     stepDownConfirmText, removeKeeperConfirmText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
-import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, keeperWords, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
+import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, keeperWords, priceUnitTakesQuantity, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -617,7 +617,7 @@ export default function TreasuryManageScreen() {
 
     const handleCompleteDeal = (d: any) => {
         if (!treasuryKey) return;
-        if (d.price_type && d.price_type !== 'fixed') {
+        if (priceUnitTakesQuantity(d.price_type)) {
             // In the language's way ("2,5"), so it reads back as the same hours.
             setHourlyDealHours(d.hours ? formatNumber(d.hours) : '1');
             setHourlyDealPrompt(d);

@@ -15,7 +15,7 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { t, type EventCopy } from '@beanpool/core';
+import { isPriceUnit, t, type EventCopy } from '@beanpool/core';
 import { EventCard } from './EventCard';
 import { MarketCardPicture } from './MarketCardPicture';
 import { CardChip, useCardShell } from './market-card-shell';
@@ -59,13 +59,24 @@ export function MapPreviewCard({ post, copy, showsBeans, onOpen, onClose }: MapP
     );
 }
 
-/** The unit after a listing's price, as the Market's list card writes it (market.tsx `priceUnit`): per hour, day, week or month. */
+/** The unit after a listing's price, as the Market's list card writes it (market.tsx `priceUnit`): per hour, day, week, month, year or kilo. */
 function priceUnit(priceType: string | null | undefined): string {
-    if (priceType === 'hourly') return t('/Hr', undefined, 'price per hour');
-    if (priceType === 'daily') return t('/Dy', undefined, 'price per day');
-    if (priceType === 'weekly') return t('/Wk', undefined, 'price per week');
-    if (priceType === 'monthly') return t('/Mo', undefined, 'price per month');
-    return '';
+    if (!isPriceUnit(priceType)) return '';
+    switch (priceType) {
+        case 'hourly': return t('/Hr', undefined, 'price per hour');
+        case 'daily': return t('/Dy', undefined, 'price per day');
+        case 'weekly': return t('/Wk', undefined, 'price per week');
+        case 'monthly': return t('/Mo', undefined, 'price per month');
+        case 'yearly': return t('/Yr', undefined, 'price per year');
+        case 'per_kg': return t('/kg', undefined, 'price per kilo');
+        case 'fixed':
+        case 'each':
+            return '';
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 function ListingPinCard({ post, copy, showsBeans, me, onOpen }: {

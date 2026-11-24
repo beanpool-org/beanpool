@@ -12,7 +12,7 @@
 import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, POLL_DAYS_DEFAULT, pollOtherLines, pollWeekGroupNote, pollWeekNotice, type PollDays } from '@beanpool/core';
 import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
-import { carryTotalToEach, perItemCreateFields, perItemFeeLine, perItemLines, priceUnitsOffered, type PerItemField } from '@beanpool/core';
+import { carryTotalToEach, perItemCreateFields, perItemFeeLine, perItemLines, priceUnitsOffered, type PerItemField, type PriceUnit } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useLearn } from '../lib/learn';
@@ -403,16 +403,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const openMembershipRef = useRef(openMembership);
     openMembershipRef.current = openMembership;
     const eventHostLetsIn = eventHostLetsInChoice ?? openMembership;
-    const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
+    const [newPostPriceType, setNewPostPriceType] = useState<PriceUnit>('fixed');
     // A price for each one (DESIGN-per-item-price-fable.md §2.4): how many the seller has, and the optional price for all of them.
     const [newPostItemCount, setNewPostItemCount] = useState('');
     const [newPostItemLot, setNewPostItemLot] = useState('');
     /** The box a refusal of the two above is about, with its sentence under it. */
     const [itemRefusal, setItemRefusal] = useState<{ field: PerItemField; text: string } | null>(null);
     const newPostPriceRef = useRef<HTMLInputElement>(null);
-    // The units the list offers: Each (right after Total) only on an Offer and only once the node says it takes them up.
+    // The units the list offers: Each (right after Total) only on an Offer and only once the node says it takes them up;
+    // per year and per kilo only where the node's features answer says `priceUnitsKgYear`.
     const postUnits = priceUnitsOffered(nodeInfo?.features, newPostType);
-    const postUnit: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly' = postUnits.includes(newPostPriceType) ? newPostPriceType : 'fixed';
+    const postUnit: PriceUnit = postUnits.includes(newPostPriceType) ? newPostPriceType : 'fixed';
     const eachChosen = !priceMarked && postUnit === 'each';
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
@@ -3505,6 +3506,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 <option value="daily">{t('/ Dy', undefined, 'price per day')}</option>
                                 <option value="weekly">{t('/ Wk', undefined, 'price per week')}</option>
                                 <option value="monthly">{t('/ Mo', undefined, 'price per month')}</option>
+                                {postUnits.includes('yearly') && <option value="yearly">{t('/ Yr', undefined, 'price per year')}</option>}
+                                {postUnits.includes('per_kg') && <option value="per_kg">{t('/ kg', undefined, 'price per kilo')}</option>}
                             </select>
                             </>)}
                         </div>

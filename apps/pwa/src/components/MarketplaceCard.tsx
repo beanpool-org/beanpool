@@ -12,7 +12,7 @@
 import { type CSSProperties, type ReactNode } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, typeWords, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { copyPriceLine, eventCopyOf, formatNumber, freePriceWords, listingChipWords, perItemCard, pinLive, t, upperCase, type ListingChip, formatHundredths } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, formatNumber, freePriceWords, isPriceUnit, listingChipWords, perItemCard, pinLive, t, upperCase, type ListingChip, formatHundredths } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { BeansText } from './BeansText';
 import { CategoryTile } from './CategoryTile';
@@ -24,11 +24,22 @@ const GRID_CROP: CSSProperties = { objectPosition: '50% 33%' };
 
 /** The unit after a price ("/hr"), as the web card always wrote it; nothing for a fixed price. */
 function priceUnit(priceType: string | undefined): string {
-    if (priceType === 'hourly') return t('/hr', undefined, 'price per hour');
-    if (priceType === 'daily') return t('/day', undefined, 'price per day');
-    if (priceType === 'weekly') return t('/wk', undefined, 'price per week');
-    if (priceType === 'monthly') return t('/mo', undefined, 'price per month');
-    return '';
+    if (!isPriceUnit(priceType)) return '';
+    switch (priceType) {
+        case 'hourly': return t('/hr', undefined, 'price per hour');
+        case 'daily': return t('/day', undefined, 'price per day');
+        case 'weekly': return t('/wk', undefined, 'price per week');
+        case 'monthly': return t('/mo', undefined, 'price per month');
+        case 'yearly': return t('/yr', undefined, 'price per year');
+        case 'per_kg': return t('/kg', undefined, 'price per kilo');
+        case 'fixed':
+        case 'each':
+            return '';
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /** The price on a card: the language's decimal mark, English as before; "?" when the listing has none. */

@@ -14,21 +14,32 @@ import { PostPhotoRow } from '../components/PostPhotoRow';
 import { TagPicker } from '../components/TagPicker';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
-import { amountRefusalWords, formatNumber, inCapitalsOf, isAmbiguousAmount, isHundredths, isShopCategory, parseHundredths, t, word, type WordKey } from '@beanpool/core';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { amountRefusalWords, formatNumber, inCapitalsOf, isAmbiguousAmount, isHundredths, isShopCategory, parseHundredths, priceUnitsOffered, t, word, type PriceUnit, type WordKey } from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 // Operator form to post a treasury's Offer (what the enterprise sells, e.g. a dozen eggs) or a
 // Need (a tender the treasury pays for, e.g. tending the flock). Mirrors propose-project.tsx.
 // The treasury id rides the params → the signed operator route; the operator signs on the
 // treasury's behalf.
-const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 /** The price box's unit, and the type a screen reader says: marked here, translated where shown. */
-const PRICE_TYPE_LABEL: Record<string, WordKey> = {
-    fixed: word('Total', 'price unit'), hourly: word('/hr'), daily: word('/day'), weekly: word('/wk'), monthly: word('/mo'),
+const PRICE_TYPE_LABEL: Record<Exclude<PriceUnit, 'each'>, WordKey> = {
+    fixed: word('Total', 'price unit'),
+    hourly: word('/hr'),
+    daily: word('/day'),
+    weekly: word('/wk'),
+    monthly: word('/mo'),
+    yearly: word('/yr', 'price per year'),
+    per_kg: word('/kg', 'price per kilo'),
 };
-const PRICE_TYPE_SPOKEN: Record<string, WordKey> = {
-    fixed: word('fixed', 'price type'), hourly: word('hourly', 'price type'), daily: word('daily', 'price type'),
-    weekly: word('weekly', 'price type'), monthly: word('monthly', 'price type'),
+const PRICE_TYPE_SPOKEN: Record<Exclude<PriceUnit, 'each'>, WordKey> = {
+    fixed: word('fixed', 'price type'),
+    hourly: word('hourly', 'price type'),
+    daily: word('daily', 'price type'),
+    weekly: word('weekly', 'price type'),
+    monthly: word('monthly', 'price type'),
+    yearly: word('yearly', 'price type'),
+    per_kg: word('per kilo', 'price type'),
 };
 
 export default function TreasuryPostScreen() {
@@ -42,6 +53,7 @@ export default function TreasuryPostScreen() {
     // The name its members gave it, as written; with none, each sentence says "this enterprise" itself.
     const treasuryName = nameStr || null;
     const { theme, colors } = useTheme();
+    const nodeProfile = useNodeProfile();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -98,9 +110,14 @@ export default function TreasuryPostScreen() {
     };
     const fieldBorder = (field: string) => errors.has(field) ? styles.fieldError : null;
 
+    const offeredPriceTypes = priceUnitsOffered(nodeProfile?.features, isNeed ? 'need' : 'offer').filter((u): u is Exclude<PriceUnit, 'each'> => u !== 'each');
+    const activePriceType: Exclude<PriceUnit, 'each'> = (offeredPriceTypes as readonly string[]).includes(priceType)
+        ? (priceType as Exclude<PriceUnit, 'each'>)
+        : 'fixed';
+
     const cyclePriceType = () => {
-        const idx = PRICE_TYPES.indexOf(priceType as any);
-        setPriceType(PRICE_TYPES[(idx + 1) % PRICE_TYPES.length]);
+        const idx = offeredPriceTypes.indexOf(activePriceType);
+        setPriceType(offeredPriceTypes[(idx + 1) % offeredPriceTypes.length]);
     };
 
     const handleSubmit = async () => {
@@ -139,7 +156,7 @@ export default function TreasuryPostScreen() {
             description: description.trim(),
             // Whole hundredths of a Bean, as the node takes a listing's price (price_c).
             price_c: priceValue,
-            priceType,
+            priceType: activePriceType,
             repeatable,
             ...(photos.length > 0 ? { photos } : {}),
             ...(tags.length > 0 ? { tags } : {}),
@@ -262,8 +279,8 @@ export default function TreasuryPostScreen() {
                                 onChangeText={(v) => { setCredits(v); clearError('credits'); }}
                                 maxLength={6}
                             />
-                            <Pressable style={styles.priceTypeBtn} onPress={cyclePriceType} accessibilityRole="button" accessibilityLabel={t('Price type: {type}. Tap to change.', { type: t(PRICE_TYPE_SPOKEN[priceType]) })}>
-                                <Text style={styles.priceTypeText}>{t(PRICE_TYPE_LABEL[priceType])}</Text>
+                            <Pressable style={styles.priceTypeBtn} onPress={cyclePriceType} accessibilityRole="button" accessibilityLabel={t('Price type: {type}. Tap to change.', { type: t(PRICE_TYPE_SPOKEN[activePriceType]) })}>
+                                <Text style={styles.priceTypeText}>{t(PRICE_TYPE_LABEL[activePriceType])}</Text>
                             </Pressable>
                         </View>
                         <Text style={styles.hint}>{t('Tap the box on the right to switch between a fixed total and hourly/daily rates.')}</Text>

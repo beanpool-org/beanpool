@@ -28,7 +28,7 @@ import { chatLineWords } from '../lib/chat-line-words';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
-    deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isSampleId, keeperWords, parseHundredths, t, tn, word, amountRefusalWords, ANY_DECIMALS,
+    deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isSampleId, keeperWords, parseHundredths, priceUnitTakesQuantity, t, tn, word, amountRefusalWords, ANY_DECIMALS,
     isAmbiguousAmount, parseAmount, type WordKey, BANNER_PICTURE,
 } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
@@ -916,7 +916,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleCompleteDeal = async (txId: string, postTitle?: string, credits?: number, priceType?: string, initialHours?: number) => {
         let finalHours: number | undefined;
-        if (priceType && priceType !== 'fixed') {
+        if (priceUnitTakesQuantity(priceType)) {
             // The hours as typed, in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, any decimals, as before.
             const question = postTitle ? t('Enter hours worked for "{title}":', { title: postTitle }) : t('Enter hours worked for "deal":');
             const input = window.prompt(question, initialHours ? formatNumber(initialHours) : '1');

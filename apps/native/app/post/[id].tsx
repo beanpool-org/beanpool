@@ -24,8 +24,8 @@ import { PerItemFields } from '../../components/PerItemFields';
 import { chatMoment, noteNotifyMoment, useScreenShowing } from '../../components/NotifyLine';
 import { PerItemTakeUp } from '../../components/PerItemTakeUp';
 import {
-    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
-    perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
+    carryTotalToEach, isPriceUnit, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
+    perItemLotForOtherLine, perItemRefusalText, priceUnitTakesQuantity, priceUnitsOffered, type ItemLot, type PerItemField,
     ITEM_BOX_START, itemDealRow, itemDealTakenLine, itemSellerStock, itemTakeUpBox, itemTakeUpRefusalIn, type ItemBoxState,
 } from '@beanpool/core';
 import { StandingPanel, StandingTakeUp, type StandingChoice, type StandingLowerStep } from '../../components/StandingDeal';
@@ -117,6 +117,7 @@ function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n:
     if (unit === 'day') return tn(n, '{n} day', '{n} days');
     if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
     if (unit === 'month') return tn(n, '{n} month', '{n} months');
+    if (unit === 'year') return tn(n, '{n} year', '{n} years');
     if (unit === 'hour') return tn(n, '{n} hours estimated', '{n} hours estimated');
     return '';
 }
@@ -148,6 +149,14 @@ function committedOfferWords(unit: DealQuantityUnit | null, hours: number, amoun
             hours,
             'You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.',
             'You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.',
+            { credits }
+        );
+    }
+    if (unit === 'year') {
+        return tn(
+            hours,
+            'You have committed {credits} credits ({n} year) to a Trust Wallet for this offer.',
+            'You have committed {credits} credits ({n} years) to a Trust Wallet for this offer.',
             { credits }
         );
     }
@@ -188,6 +197,14 @@ function requestedNeedWords(unit: DealQuantityUnit | null, hours: number, amount
             { credits, net }
         );
     }
+    if (unit === 'year') {
+        return tn(
+            hours,
+            'You have requested to earn {credits} credits ({n} year) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
+            'You have requested to earn {credits} credits ({n} years) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
+            { credits, net }
+        );
+    }
     if (unit === 'hour') {
         return t('You have requested to earn {credits} credits ({hours} hours) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits, hours, net });
     }
@@ -202,22 +219,44 @@ function netWords(amount_c: unknown): string {
 /** Lines kept as word() elsewhere (utils/market-global.ts, core), shown here in the member's language. */
 const LINES = { noBeansEditNote: NO_BEANS_EDIT_NOTE, childSafety: CHILD_SAFETY_REASON, childSafetyHint: CHILD_SAFETY_HINT };
 
-/** The unit after a price: per hour, day, week or month, or none for a total. */
+/** The unit after a price: per hour, day, week, month, year or kilo, or none for a total. */
 function priceUnitWords(priceType: string | null | undefined): string {
-    if (priceType === 'hourly') return t('/ Hr', undefined, 'price per hour');
-    if (priceType === 'daily') return t('/ Dy', undefined, 'price per day');
-    if (priceType === 'weekly') return t('/ Wk', undefined, 'price per week');
-    if (priceType === 'monthly') return t('/ Mo', undefined, 'price per month');
-    return '';
+    if (!isPriceUnit(priceType)) return '';
+    switch (priceType) {
+        case 'hourly': return t('/ Hr', undefined, 'price per hour');
+        case 'daily': return t('/ Dy', undefined, 'price per day');
+        case 'weekly': return t('/ Wk', undefined, 'price per week');
+        case 'monthly': return t('/ Mo', undefined, 'price per month');
+        case 'yearly': return t('/ Yr', undefined, 'price per year');
+        case 'per_kg': return t('/ kg', undefined, 'price per kilo');
+        case 'fixed':
+        case 'each':
+            return '';
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
-/** The label over the time a payer confirms at Release, for a deal priced by the hour, day, week or month. */
+/** The label over the time a payer confirms at Release, for a deal priced by the hour, day, week, month or year. */
 function confirmWorkedLabel(priceType: string | null | undefined): string {
-    if (priceType === 'hourly') return t('CONFIRM ACTUAL HOURS WORKED');
-    if (priceType === 'daily') return t('CONFIRM ACTUAL DAYS WORKED');
-    if (priceType === 'weekly') return t('CONFIRM ACTUAL WEEKS WORKED');
-    if (priceType === 'monthly') return t('CONFIRM ACTUAL MONTHS WORKED');
-    return t('CONFIRM ACTUAL UNITS WORKED');
+    if (!isPriceUnit(priceType)) return t('CONFIRM ACTUAL UNITS WORKED');
+    switch (priceType) {
+        case 'hourly': return t('CONFIRM ACTUAL HOURS WORKED');
+        case 'daily': return t('CONFIRM ACTUAL DAYS WORKED');
+        case 'weekly': return t('CONFIRM ACTUAL WEEKS WORKED');
+        case 'monthly': return t('CONFIRM ACTUAL MONTHS WORKED');
+        case 'yearly': return t('CONFIRM ACTUAL YEARS WORKED');
+        case 'fixed':
+        case 'each':
+        case 'per_kg':
+            return t('CONFIRM ACTUAL UNITS WORKED');
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 function PostDetailModal() {
@@ -1094,10 +1133,10 @@ function PostDetailModal() {
     // The buyer's "How many would you like?" (DESIGN-per-item-price-fable.md §2.2, slice P3): core's box, the web's too; null for
     // any listing not priced each, which keeps its own confirm. Its Confirm sends exactly the total it shows.
     const eachTakeUp = isOffer && !isLoan ? itemTakeUpBox(post, eachState, post.author_callsign || t('Peer')) : null;
-    // A deal on a listing priced each is for a number of items, not a time: Release asks none and pays what is held (D5).
-    const asksTime = post.price_type !== 'fixed' && post.price_type !== 'each';
+    // Only time-priced units (`hourly`, `daily`, `weekly`, `monthly`, `yearly`) ask for a quantity; `fixed`, `each`, and `per_kg` pay what is held.
+    const asksTime = priceUnitTakesQuantity(post.price_type);
     // "I can do this" on a Need (cold start N4): the plain sentence under it, with the deal's own total (a price by the hour, day,
-    // week or month is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
+    // week, month or year is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
     // never an amount that isn't one. The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
     // A standing deal (DESIGN-standing-deals-fable §2.2, §4; Marty, 9 Nov: the price unit decides it): a listing priced per
     // week or per month is taken up as one, its payer signing the authorisation. A standing Need's helper offers one period.
@@ -1105,7 +1144,7 @@ function PostDetailModal() {
     const standingUnit = standingUnitForListing(post.price_type, post.price_c);
     const standingOffer = !!standingUnit && post.type === 'offer' && !post.lendable;
     const standingNeed = !!standingUnit && post.type === 'need';
-    const needQuantity = post.price_type !== 'fixed' ? parseAmount(standingNeed ? '1' : acceptHours, undefined, ANY_DECIMALS) : null;
+    const needQuantity = asksTime ? parseAmount(standingNeed ? '1' : acceptHours, undefined, ANY_DECIMALS) : null;
     // A quantity of 0 is no usable quantity (as the web's acceptHoursValue > 0): it would read "for free" on a priced Need.
     // In whole hundredths: the price times the quantity as the node holds it (core dealAmountFor). A price the phone holds
     // no figure for gives no sentence, never "for free".
@@ -2324,7 +2363,7 @@ function PostDetailModal() {
                                                 ? (post.price_c
                                                     ? t('Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.')
                                                     : t('Free to borrow. Nothing is held: the lender says yes first.'))
-                                                : post.price_type === 'fixed'
+                                                : !asksTime
                                                     ? t('By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.', { credits: formatHundredths(post.price_c) })
                                                     : t('By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.')}
                                             parts={{ owned: <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}>{t('(100% community owned)')}</Text> }}
@@ -2337,10 +2376,10 @@ function PostDetailModal() {
                                     <Text testID="need-answer-line" style={styles.needAnswerLine}>{needAnswerWords}</Text>
                                 )}
                                 {/* A standing Need asks for no time: the helper offers one period, and its author agrees to the run (§4). */}
-                                {post.price_type !== 'fixed' && !standingNeed && (
+                                {asksTime && !standingNeed && (
                                     <View style={{ marginBottom: 12 }}>
                                         <Text style={styles.confirmBoxLabel}>{t('TRUST COMMITMENT (HOURS)')}</Text>
-                                        <TextInput accessibilityLabel={t('Trust commitment in hours')} style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder={t('Hours')} placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={post.price_type !== 'fixed'} />
+                                        <TextInput accessibilityLabel={t('Trust commitment in hours')} style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder={t('Hours')} placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={asksTime} />
                                         <Text style={{ color: colors.text.muted, fontSize: 10, textAlign: 'center', marginTop: 4 }}>{t('Credits will be required upon approval.')}</Text>
                                     </View>
                                 )}
@@ -2348,11 +2387,11 @@ function PostDetailModal() {
                                     <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => setShowAcceptConfirm(false)} disabled={accepting}>
                                         <Text style={styles.cancelActionBtnText}>{t('Cancel')}</Text>
                                     </Pressable>
-                                    <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !(needQuantity?.ok && needQuantity.value > 0))} onPress={async () => {
+                                    <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (asksTime && !(needQuantity?.ok && needQuantity.value > 0))} onPress={async () => {
                                         if (accepting) return;
                                         if (!identity || !post.id) return;
                                         // Hours in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, never sent as no hours.
-                                        const hoursRead = post.price_type !== 'fixed' ? needQuantity : null;
+                                        const hoursRead = asksTime ? needQuantity : null;
                                         if (hoursRead && !hoursRead.ok) { Alert.alert(t('Error'), amountRefusalWords(hoursRead.refusal)); return; }
                                         setAccepting(true);
                                         try {
@@ -2370,8 +2409,8 @@ function PostDetailModal() {
                                                     buyer_pubkey: isLoan ? identity.publicKey : post.author_pubkey,
                                                     seller_pubkey: isLoan ? post.author_pubkey : identity.publicKey,
                                                     // What the deal holds, whole hundredths (core dealAmountFor), as the node holds it.
-                                                    amount_c: post.price_type === 'fixed' ? post.price_c : (dealAmountOrNull(post.price_c, estimatedHrs ?? 0) ?? 0),
-                                                    hours: post.price_type === 'fixed' ? null : estimatedHrs, status: 'requested'
+                                                    amount_c: !asksTime ? post.price_c : (dealAmountOrNull(post.price_c, estimatedHrs ?? 0) ?? 0),
+                                                    hours: !asksTime ? null : estimatedHrs, status: 'requested'
                                                 }]);
                                             }
                                             setShowAcceptConfirm(false);

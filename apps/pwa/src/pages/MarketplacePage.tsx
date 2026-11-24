@@ -72,8 +72,8 @@ import { forumOn, perItemCard } from '@beanpool/core';
 import { LISTING_AFTER_JOIN_WORDS } from '@beanpool/core';
 import { BeansText } from '../components/BeansText';
 import {
-    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
-    perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
+    carryTotalToEach, isPriceUnit, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
+    perItemLotForOtherLine, perItemRefusalText, priceUnitTakesQuantity, priceUnitsOffered, type ItemLot, type PerItemField, type PriceUnit,
 } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
 // The buyer's "How many would you like?" and both sides' deal lines (slice P3).
@@ -220,42 +220,86 @@ function getTimeAgo(date: Date): string {
 
 /** A listing's price unit after its amount ("/Hr"), as the phone's Market writes it; nothing for a fixed price. */
 function priceUnit(priceType: string | undefined): string {
-    if (priceType === 'hourly') return t('/Hr', undefined, 'price per hour');
-    if (priceType === 'daily') return t('/Dy', undefined, 'price per day');
-    if (priceType === 'weekly') return t('/Wk', undefined, 'price per week');
-    if (priceType === 'monthly') return t('/Mo', undefined, 'price per month');
-    return '';
+    if (!isPriceUnit(priceType)) return '';
+    switch (priceType) {
+        case 'hourly': return t('/Hr', undefined, 'price per hour');
+        case 'daily': return t('/Dy', undefined, 'price per day');
+        case 'weekly': return t('/Wk', undefined, 'price per week');
+        case 'monthly': return t('/Mo', undefined, 'price per month');
+        case 'yearly': return t('/Yr', undefined, 'price per year');
+        case 'per_kg': return t('/kg', undefined, 'price per kilo');
+        case 'fixed':
+        case 'each':
+            return '';
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /** A photo on the listing's page: a button that shows it whole in the lightbox, the frame's corners and size the caller's. */
 const PHOTO_BUTTON = 'overflow-hidden border-0 p-0 bg-nature-100 dark:bg-nature-900 cursor-zoom-in focus-visible:outline-none '
     + 'focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-nature-600 dark:focus-visible:ring-nature-300';
 
-/** The label over the hours a payer confirms when releasing a deal priced by the hour, day, week or month. */
+/** The label over the hours a payer confirms when releasing a deal priced by the hour, day, week, month or year. */
 function actualWorkedLabel(priceType: string | undefined): string {
-    if (priceType === 'hourly') return t('ACTUAL HOURS WORKED');
-    if (priceType === 'daily') return t('ACTUAL DAYS WORKED');
-    if (priceType === 'weekly') return t('ACTUAL WEEKS WORKED');
-    if (priceType === 'monthly') return t('ACTUAL MONTHS WORKED');
-    return t('ACTUAL UNITS WORKED');
+    if (!isPriceUnit(priceType)) return t('ACTUAL UNITS WORKED');
+    switch (priceType) {
+        case 'hourly': return t('ACTUAL HOURS WORKED');
+        case 'daily': return t('ACTUAL DAYS WORKED');
+        case 'weekly': return t('ACTUAL WEEKS WORKED');
+        case 'monthly': return t('ACTUAL MONTHS WORKED');
+        case 'yearly': return t('ACTUAL YEARS WORKED');
+        case 'fixed':
+        case 'each':
+        case 'per_kg':
+            return t('ACTUAL UNITS WORKED');
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
-/** The label over the estimate a member gives when accepting a listing priced by the hour, day, week or month. */
+/** The label over the estimate a member gives when accepting a listing priced by the hour, day, week, month or year. */
 function estimatedLabel(priceType: string | undefined): string {
-    if (priceType === 'hourly') return t('ESTIMATED HOURS');
-    if (priceType === 'daily') return t('ESTIMATED DAYS');
-    if (priceType === 'weekly') return t('ESTIMATED WEEKS');
-    if (priceType === 'monthly') return t('ESTIMATED MONTHS');
-    return t('ESTIMATED UNITS');
+    if (!isPriceUnit(priceType)) return t('ESTIMATED UNITS');
+    switch (priceType) {
+        case 'hourly': return t('ESTIMATED HOURS');
+        case 'daily': return t('ESTIMATED DAYS');
+        case 'weekly': return t('ESTIMATED WEEKS');
+        case 'monthly': return t('ESTIMATED MONTHS');
+        case 'yearly': return t('ESTIMATED YEARS');
+        case 'fixed':
+        case 'each':
+        case 'per_kg':
+            return t('ESTIMATED UNITS');
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /** An estimate's length in the commitment sentence ("3 hr"); null for a fixed price. */
 function estimateLength(priceType: string | undefined, n: number): string | null {
-    if (priceType === 'hourly') return t('{n} hr', { n }, 'a number of hours');
-    if (priceType === 'daily') return t('{n} d', { n }, 'a number of days');
-    if (priceType === 'weekly') return t('{n} w', { n }, 'a number of weeks');
-    if (priceType === 'monthly') return t('{n} m', { n }, 'a number of months');
-    return null;
+    if (!isPriceUnit(priceType)) return null;
+    switch (priceType) {
+        case 'hourly': return t('{n} hr', { n }, 'a number of hours');
+        case 'daily': return t('{n} d', { n }, 'a number of days');
+        case 'weekly': return t('{n} w', { n }, 'a number of weeks');
+        case 'monthly': return t('{n} m', { n }, 'a number of months');
+        case 'yearly': return t('{n} yr', { n }, 'a number of years');
+        case 'fixed':
+        case 'each':
+        case 'per_kg':
+            return null;
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /** A request's estimated length, in the listing price's own unit ("for {n} days" or "for {n} weeks" for a loan). */
@@ -267,6 +311,7 @@ function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n:
     if (unit === 'day') return tn(n, '{n} day', '{n} days');
     if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
     if (unit === 'month') return tn(n, '{n} month', '{n} months');
+    if (unit === 'year') return tn(n, '{n} year', '{n} years');
     if (unit === 'hour') return tn(n, '{n} hours estimated', '{n} hours estimated');
     return '';
 }
@@ -931,7 +976,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editTitle, setEditTitle] = useState('');
     const [editDescription, setEditDescription] = useState('');
     const [editCredits, setEditCredits] = useState('');
-    const [editPriceType, setEditPriceType] = useState<'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
+    const [editPriceType, setEditPriceType] = useState<PriceUnit>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
     // A listing priced for each one (DESIGN-per-item-price-fable.md §2.5): the two boxes, the count and price for all of them the
     // node held when the form opened (what the count is saved against), whether the seller touched the price-for-all box, and
@@ -1857,8 +1902,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const deals = listingDeals(keptDeals.length > 0 ? [...myTransactions, ...keptDeals] : myTransactions,
             { id: selectedPost.id, authorPublicKey: selectedPost.authorPublicKey, type: selectedPost.type, status: selectedPost.status }, me, keeperOf);
         const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === selectedTxId) - Number(a.tx.id === selectedTxId)) : [];
-        // A deal on a listing priced each is for a number of items, not a time: Release asks none and pays what is held (D5).
-        const asksTime = selectedPost.priceType !== 'fixed' && selectedPost.priceType !== 'each';
+        // Only time-priced units (`hourly`, `daily`, `weekly`, `monthly`, `yearly`) ask for a quantity; `fixed`, `each`, and `per_kg` pay what is held.
+        const asksTime = priceUnitTakesQuantity(selectedPost.priceType);
         // The buyer's "How many would you like?" (DESIGN-per-item-price-fable.md §2.2, slice P3): core's box, the phone's too; null for
         // any listing not priced each, which keeps its own confirm. Its Confirm sends exactly the total it shows.
         const eachTakeUp = selectedPost.type === 'offer' && !selectedPost.lendable ? itemTakeUpBox(selectedPost, eachState, selectedPost.authorCallsign) : null;
@@ -2745,7 +2790,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 </p>
 
                                 {/* A standing Need asks for no time: the helper offers one period, and its author agrees to the run (§4). */}
-                                {selectedPost.priceType !== 'fixed' && !standingNeed && (
+                                {asksTime && !standingNeed && (
                                     <div className="mb-3">
                                         <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 mb-1 uppercase tracking-wider">
                                             {estimatedLabel(selectedPost.priceType)}
@@ -2766,14 +2811,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 {/* A Need with no usable quantity yet has no sentence: no empty box either (as the phone). An ambiguous
                                     quantity still shows its refusal words in the box. */}
-                                {!(selectedPost.type === 'need' && selectedPost.priceType !== 'fixed' && !standingNeed && !(acceptHoursValue > 0)
+                                {!(selectedPost.type === 'need' && asksTime && !standingNeed && !(acceptHoursValue > 0)
                                     && (acceptHoursRead.ok || !isAmbiguousAmount(acceptHoursRead.refusal))) && (
                                 <div className="text-center mb-4 text-xs font-medium text-nature-700 dark:text-nature-300 bg-white dark:bg-nature-900 py-3 px-2 rounded-lg border border-nature-100 dark:border-nature-800">
                                     {(() => {
-                                        if (selectedPost.priceType !== 'fixed' && !standingNeed && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
+                                        if (asksTime && !standingNeed && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);
                                         const hrs = standingNeed ? 1 : (acceptHoursValue || 0);
                                         // The node's own figure (core dealAmountFor: whole hundredths, truncated once).
-                                        const tot = selectedPost.priceType !== 'fixed' ? (hrs > 0 ? dealAmountOrNull(selectedPost.price_c, hrs) : 0) : selectedPost.price_c;
+                                        const tot = asksTime ? (hrs > 0 ? dealAmountOrNull(selectedPost.price_c, hrs) : 0) : selectedPost.price_c;
                                         // A figure core can't make (a price that isn't whole hundredths, a quantity past what a deal can
                                         // hold) is no sentence, never a throw mid-render: the Accept press says why (its own try).
                                         if (!isHundredths(tot)) return null;
@@ -2784,12 +2829,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         // total and the name the Need shows. No usable quantity yet: no sentence, and never an amount that isn't one.
                                         // The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
                                         if (selectedPost.type === 'need') {
-                                            if (selectedPost.priceType !== 'fixed' && !standingNeed && !(acceptHoursValue > 0)) return null;
+                                            if (asksTime && !standingNeed && !(acceptHoursValue > 0)) return null;
                                             return needAnswerLine(tot, selectedPost.authorCallsign);
                                         }
                                         if (!isLoan && tot === 0) return t('This is a free listing (0 B). No credits transferred.');
 
-                                        const duration = selectedPost.priceType !== 'fixed' ? estimateLength(selectedPost.priceType, hrs) : null;
+                                        const duration = asksTime ? estimateLength(selectedPost.priceType, hrs) : null;
                                         const owned = <span className="text-emerald-600 dark:text-emerald-400 font-bold">{t('(100% community owned)')}</span>;
 
                                         if (isLoan) {
@@ -2843,7 +2888,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             if (!identity || !selectedPost || authorEnterpriseInactive) return;
                                             setAccepting(true);
                                             try {
-                                                const isVariable = selectedPost.priceType !== 'fixed';
+                                                const isVariable = asksTime;
                                                 const estimatedHours = isVariable ? (standingNeed ? 1 : acceptHoursValue) : undefined;
                                                 const totalCredits = isVariable ? ((estimatedHours ?? 0) > 0 ? dealAmountFor(selectedPost.price_c, estimatedHours!) : 0) : selectedPost.price_c;
 
@@ -2892,7 +2937,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAccepting(false);
                                             }
                                         }}
-                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && !standingNeed && (!acceptHours || !(acceptHoursValue > 0)))}
+                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (asksTime && !standingNeed && (!acceptHours || !(acceptHoursValue > 0)))}
                                         className={`flex-1 py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm ${
                                             accepting || isRemotePost || !!authorEnterpriseInactive
                                                 ? 'bg-bp-commit-fill cursor-not-allowed opacity-60'
@@ -3444,6 +3489,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <option value="daily">{t('/ Dy', undefined, 'price per day')}</option>
                                         <option value="weekly">{t('/ Wk', undefined, 'price per week')}</option>
                                         <option value="monthly">{t('/ Mo', undefined, 'price per month')}</option>
+                                        {editUnits.includes('yearly') && <option value="yearly">{t('/ Yr', undefined, 'price per year')}</option>}
+                                        {editUnits.includes('per_kg') && <option value="per_kg">{t('/ kg', undefined, 'price per kilo')}</option>}
                                     </select>
                                 </div>
 

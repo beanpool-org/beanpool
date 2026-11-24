@@ -18,7 +18,7 @@
  */
 
 import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
-import { copyFromLine, eventCopyOf, freePriceWords, formatHundredths } from '@beanpool/core';
+import { copyFromLine, eventCopyOf, freePriceWords, formatHundredths, isPriceUnit } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { forumPublicOn } from '@beanpool/core';
@@ -621,11 +621,22 @@ export function wayBackOf(answer: HomeAnswer, wordsKeptHere = false): WayBackOnH
  * per hour, day, week or month; none for a fixed price (a total) or a kind this build does not know.
  */
 export function askedUnit(priceType: string | null | undefined): string {
-    if (priceType === 'hourly') return t('/hr', undefined, 'price per hour');
-    if (priceType === 'daily') return t('/day', undefined, 'price per day');
-    if (priceType === 'weekly') return t('/wk', undefined, 'price per week');
-    if (priceType === 'monthly') return t('/mo', undefined, 'price per month');
-    return '';
+    if (!isPriceUnit(priceType)) return '';
+    switch (priceType) {
+        case 'hourly': return t('/hr', undefined, 'price per hour');
+        case 'daily': return t('/day', undefined, 'price per day');
+        case 'weekly': return t('/wk', undefined, 'price per week');
+        case 'monthly': return t('/mo', undefined, 'price per month');
+        case 'yearly': return t('/yr', undefined, 'price per year');
+        case 'per_kg': return t('/kg', undefined, 'price per kilo');
+        case 'fixed':
+        case 'each':
+            return '';
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /**

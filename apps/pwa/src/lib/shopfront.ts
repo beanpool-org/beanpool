@@ -13,7 +13,7 @@
  *
  * No answer is null, never an empty shop: a page says it couldn't read rather than showing nothing for sale.
  */
-import { SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, freePriceWords, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word, type ShopCategory, type TierName, type WordKey, formatHundredths } from '@beanpool/core';
+import { SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, freePriceWords, isPriceUnit, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word, type ShopCategory, type TierName, type WordKey, formatHundredths } from '@beanpool/core';
 import { getMarketplacePosts, signedFetch } from './api';
 import { MARKETPLACE_CATEGORIES_BY_ID } from './marketplace';
 import { readShop, type MyShop } from './shop';
@@ -44,7 +44,7 @@ export interface ShopfrontListing {
 }
 
 const LIVE = new Set(['active', 'pending']);
-const BY_TIME = new Set(['hourly', 'daily', 'weekly', 'monthly']);
+const BY_TIME = new Set(['hourly', 'daily', 'weekly', 'monthly', 'yearly']);
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 
 /** A listing as the node sends it; null for an event, a poll or anything else. */
@@ -130,11 +130,22 @@ export function listingPriceLine(l: ShopfrontListing, showsBeans: boolean): stri
     const free = freePriceWords(l.price_c, l.type);
     if (free) return free;
     const amount = formatHundredths(l.price_c);
-    if (l.priceType === 'hourly') return t('{amount} 🫘 an hour', { amount });
-    if (l.priceType === 'daily') return t('{amount} 🫘 a day', { amount });
-    if (l.priceType === 'weekly') return t('{amount} 🫘 a week', { amount });
-    if (l.priceType === 'monthly') return t('{amount} 🫘 a month', { amount });
-    return t('{amount} 🫘', { amount });
+    if (!isPriceUnit(l.priceType)) return t('{amount} 🫘', { amount });
+    switch (l.priceType) {
+        case 'hourly': return t('{amount} 🫘 an hour', { amount });
+        case 'daily': return t('{amount} 🫘 a day', { amount });
+        case 'weekly': return t('{amount} 🫘 a week', { amount });
+        case 'monthly': return t('{amount} 🫘 a month', { amount });
+        case 'yearly': return t('{amount} Beans a year', { amount });
+        case 'per_kg': return t('{amount} Beans a kilo', { amount });
+        case 'fixed':
+        case 'each':
+            return t('{amount} 🫘', { amount });
+        default: {
+            const _exhaustive: never = l.priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /** What one of its listings is doing now, when it is not simply on the board. */

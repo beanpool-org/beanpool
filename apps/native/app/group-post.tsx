@@ -20,21 +20,28 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { beansOn, showcaseMode } from '../utils/node-profile';
 import { NO_BEANS_EDIT_NOTE } from '../utils/market-global';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, inCapitalsOf, t, word, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, inCapitalsOf, priceUnitsOffered, t, word, type PriceUnit, type WordKey } from '@beanpool/core';
 import { groupPostPrice, groupPostPriceInvalid, groupPostMissingFields } from '../utils/beans-off';
 import { signedRequestWords } from '../components/signed-request-lines';
 
-const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 /** The price box's unit: marked here, translated where shown (the same words as an enterprise's post form). */
-const PRICE_TYPE_LABEL: Record<string, WordKey> = {
-    fixed: word('Total', 'price unit'), hourly: word('/hr'), daily: word('/day'), weekly: word('/wk'), monthly: word('/mo'),
+const PRICE_TYPE_LABEL: Record<Exclude<PriceUnit, 'each'>, WordKey> = {
+    fixed: word('Total', 'price unit'),
+    hourly: word('/hr'),
+    daily: word('/day'),
+    weekly: word('/wk'),
+    monthly: word('/mo'),
+    yearly: word('/yr', 'price per year'),
+    per_kg: word('/kg', 'price per kilo'),
 };
 /** Sentences marked elsewhere, translated here where they are shown. */
 const LINES = { noBeansEditNote: NO_BEANS_EDIT_NOTE, price: LOCAL_COMMUNITY_LINES.price };
 
 /** The price unit's words, "Total" for a type this screen does not list. */
 function priceUnit(priceType: string): string {
-    return Object.prototype.hasOwnProperty.call(PRICE_TYPE_LABEL, priceType) ? t(PRICE_TYPE_LABEL[priceType]) : t(PRICE_TYPE_LABEL.fixed);
+    return Object.prototype.hasOwnProperty.call(PRICE_TYPE_LABEL, priceType)
+        ? t(PRICE_TYPE_LABEL[priceType as Exclude<PriceUnit, 'each'>])
+        : t(PRICE_TYPE_LABEL.fixed);
 }
 
 export default function GroupPostScreen() {
@@ -212,9 +219,14 @@ export default function GroupPostScreen() {
         }
     };
 
+    const offeredPriceTypes = priceUnitsOffered(nodeProfile?.features, type).filter((u): u is Exclude<PriceUnit, 'each'> => u !== 'each');
+    const activePriceType: Exclude<PriceUnit, 'each'> = (offeredPriceTypes as readonly string[]).includes(priceType)
+        ? (priceType as Exclude<PriceUnit, 'each'>)
+        : 'fixed';
+
     const cyclePriceType = () => {
-        const idx = PRICE_TYPES.indexOf(priceType as any);
-        setPriceType(PRICE_TYPES[(idx + 1) % PRICE_TYPES.length]);
+        const idx = offeredPriceTypes.indexOf(activePriceType);
+        setPriceType(offeredPriceTypes[(idx + 1) % offeredPriceTypes.length]);
     };
 
     const handleSubmit = async () => {
@@ -254,7 +266,7 @@ export default function GroupPostScreen() {
                 title: title.trim(),
                 description: description.trim(),
                 category,
-                ...groupPostPrice(credits, priceType, nodeProfile?.features),
+                ...groupPostPrice(credits, activePriceType, nodeProfile?.features),
                 photos: photos.length > 0 ? JSON.stringify(photos) : null,
                 repeatable: repeatable ? 1 : 0,
                 cash_also_needed: cashAlsoNeeded ? 1 : 0,
@@ -398,10 +410,10 @@ export default function GroupPostScreen() {
                                 style={styles.priceTypeBtn}
                                 onPress={cyclePriceType}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Price unit: {unit}', { unit: priceUnit(priceType) })}
+                                accessibilityLabel={t('Price unit: {unit}', { unit: priceUnit(activePriceType) })}
                                 accessibilityHint={t('Cycles price unit')}
                             >
-                                <Text style={styles.priceTypeText}>{priceUnit(priceType)}</Text>
+                                <Text style={styles.priceTypeText}>{priceUnit(activePriceType)}</Text>
                             </Pressable>
                         </View>
                     </View>

@@ -259,6 +259,56 @@ function confirmWorkedLabel(priceType: string | null | undefined): string {
     }
 }
 
+/** The label, screen-reader label, and placeholder for the quantity a member commits when taking up a time-priced listing. */
+function trustCommitmentCopy(priceType: string | null | undefined): { label: string; accessibilityLabel: string; placeholder: string } {
+    const fallback = {
+        label: t('TRUST COMMITMENT (UNITS)'),
+        accessibilityLabel: t('Trust commitment in units'),
+        placeholder: t('Units'),
+    };
+    if (!isPriceUnit(priceType)) return fallback;
+    switch (priceType) {
+        case 'hourly':
+            return {
+                label: t('TRUST COMMITMENT (HOURS)'),
+                accessibilityLabel: t('Trust commitment in hours'),
+                placeholder: t('Hours'),
+            };
+        case 'daily':
+            return {
+                label: t('TRUST COMMITMENT (DAYS)'),
+                accessibilityLabel: t('Trust commitment in days'),
+                placeholder: t('Days'),
+            };
+        case 'weekly':
+            return {
+                label: t('TRUST COMMITMENT (WEEKS)'),
+                accessibilityLabel: t('Trust commitment in weeks'),
+                placeholder: t('Weeks'),
+            };
+        case 'monthly':
+            return {
+                label: t('TRUST COMMITMENT (MONTHS)'),
+                accessibilityLabel: t('Trust commitment in months'),
+                placeholder: t('Months'),
+            };
+        case 'yearly':
+            return {
+                label: t('TRUST COMMITMENT (YEARS)'),
+                accessibilityLabel: t('Trust commitment in years'),
+                placeholder: t('Years'),
+            };
+        case 'fixed':
+        case 'each':
+        case 'per_kg':
+            return fallback;
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
+}
+
 function PostDetailModal() {
     const insets = useSafeAreaInsets();
     // Whether this screen is the one in front: an event's named line goes when the page is covered (slice N2b).
@@ -2376,13 +2426,16 @@ function PostDetailModal() {
                                     <Text testID="need-answer-line" style={styles.needAnswerLine}>{needAnswerWords}</Text>
                                 )}
                                 {/* A standing Need asks for no time: the helper offers one period, and its author agrees to the run (§4). */}
-                                {asksTime && !standingNeed && (
-                                    <View style={{ marginBottom: 12 }}>
-                                        <Text style={styles.confirmBoxLabel}>{t('TRUST COMMITMENT (HOURS)')}</Text>
-                                        <TextInput accessibilityLabel={t('Trust commitment in hours')} style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder={t('Hours')} placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={asksTime} />
-                                        <Text style={{ color: colors.text.muted, fontSize: 10, textAlign: 'center', marginTop: 4 }}>{t('Credits will be required upon approval.')}</Text>
-                                    </View>
-                                )}
+                                {asksTime && !standingNeed && (() => {
+                                    const commitmentCopy = trustCommitmentCopy(post.price_type);
+                                    return (
+                                        <View style={{ marginBottom: 12 }}>
+                                            <Text style={styles.confirmBoxLabel}>{commitmentCopy.label}</Text>
+                                            <TextInput accessibilityLabel={commitmentCopy.accessibilityLabel} style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder={commitmentCopy.placeholder} placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={asksTime} />
+                                            <Text style={{ color: colors.text.muted, fontSize: 10, textAlign: 'center', marginTop: 4 }}>{t('Credits will be required upon approval.')}</Text>
+                                        </View>
+                                    );
+                                })()}
                                 <View style={{ flexDirection: 'row', gap: 10 }}>
                                     <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => setShowAcceptConfirm(false)} disabled={accepting}>
                                         <Text style={styles.cancelActionBtnText}>{t('Cancel')}</Text>

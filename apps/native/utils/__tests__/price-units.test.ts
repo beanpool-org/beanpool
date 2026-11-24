@@ -115,6 +115,7 @@ describe('phone labels for every price unit (old and new)', () => {
         expect(postDetail).toContain("case 'yearly': return t('/ Yr'");
         expect(postDetail).toContain("case 'per_kg': return t('/ kg'");
         expect(postDetail).toContain('priceUnitTakesQuantity(post.price_type)');
+        expect(postDetail).toContain("TRUST COMMITMENT (YEARS)");
         expect(market).toContain("case 'yearly': return t('/Yr'");
         expect(market).toContain("case 'per_kg': return t('/kg'");
         expect(preview).toContain("case 'yearly': return t('/Yr'");
@@ -124,5 +125,7 @@ describe('phone labels for every price unit (old and new)', () => {
         expect(groupPost).toContain('priceUnitsOffered(nodeProfile?.features, type)');
         expect(treasuryPost).toContain('priceUnitsOffered(nodeProfile?.features,');
         expect(treasuryManage).toContain('priceUnitTakesQuantity(d.price_type)');
+        expect(treasuryManage).toContain("Confirm Years Worked");
+        expect(treasuryManage).toContain('Enter actual years worked for "{title}":');
     });
 });

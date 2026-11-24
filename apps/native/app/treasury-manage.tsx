@@ -26,7 +26,7 @@ import {
     stepDownConfirmText, removeKeeperConfirmText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
-import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, keeperWords, priceUnitTakesQuantity, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
+import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, isPriceUnit, keeperWords, priceUnitTakesQuantity, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, type PriceUnit } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -48,6 +48,67 @@ type LifecycleAction = 'pause' | 'resume' | 'windUp' | 'cancelWindUp' | 'finalis
 
 /** Sentences marked in utils/enterprise-season.ts, translated here where they are shown. */
 const SEASON_LINES = { resume: RESUME_CONFIRM_TEXT };
+
+/** Modal heading, prompt, and validation copy when a keeper confirms a quantity-priced enterprise deal. */
+function enterpriseWorkedCopy(priceType: string | null | undefined, title: string): {
+    heading: string;
+    prompt: string;
+    invalidTitle: string;
+    invalidMessage: string;
+} {
+    const fallback = {
+        heading: t('Confirm Units Worked'),
+        prompt: t('Enter actual units worked for "{title}":', { title }),
+        invalidTitle: t('Invalid Quantity'),
+        invalidMessage: t('Please enter a valid positive quantity.'),
+    };
+    if (!isPriceUnit(priceType)) return fallback;
+    switch (priceType) {
+        case 'hourly':
+            return {
+                heading: t('Confirm Hours Worked'),
+                prompt: t('Enter actual hours worked for "{title}":', { title }),
+                invalidTitle: t('Invalid Hours'),
+                invalidMessage: t('Please enter a valid positive number of hours.'),
+            };
+        case 'daily':
+            return {
+                heading: t('Confirm Days Worked'),
+                prompt: t('Enter actual days worked for "{title}":', { title }),
+                invalidTitle: t('Invalid Days'),
+                invalidMessage: t('Please enter a valid positive number of days.'),
+            };
+        case 'weekly':
+            return {
+                heading: t('Confirm Weeks Worked'),
+                prompt: t('Enter actual weeks worked for "{title}":', { title }),
+                invalidTitle: t('Invalid Weeks'),
+                invalidMessage: t('Please enter a valid positive number of weeks.'),
+            };
+        case 'monthly':
+            return {
+                heading: t('Confirm Months Worked'),
+                prompt: t('Enter actual months worked for "{title}":', { title }),
+                invalidTitle: t('Invalid Months'),
+                invalidMessage: t('Please enter a valid positive number of months.'),
+            };
+        case 'yearly':
+            return {
+                heading: t('Confirm Years Worked'),
+                prompt: t('Enter actual years worked for "{title}":', { title }),
+                invalidTitle: t('Invalid Years'),
+                invalidMessage: t('Please enter a valid positive number of years.'),
+            };
+        case 'fixed':
+        case 'each':
+        case 'per_kg':
+            return fallback;
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
+}
 
 /**
  * An enterprise's (or a project's) Manage console, its keepers' (slice S7 of
@@ -1270,15 +1331,17 @@ export default function TreasuryManageScreen() {
             {body()}
             </View>
 
-            {hourlyDealPrompt && (
+            {hourlyDealPrompt && (() => {
+                const workedCopy = enterpriseWorkedCopy(hourlyDealPrompt.price_type, hourlyDealPrompt.post_title);
+                return (
                 <Modal visible transparent animationType="fade" onRequestClose={() => setHourlyDealPrompt(null)}>
                     <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20, paddingBottom: 20 + hoursLift.lift }}>
                         <View style={{ backgroundColor: colors.surface.card, borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, maxHeight: hoursLift.maxHeight, borderWidth: 1, borderColor: colors.border.default }}>
                             <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading, marginBottom: 6 }}>
-                                {t('Confirm Hours Worked')}
+                                {workedCopy.heading}
                             </Text>
                             <Text style={{ fontSize: 13, color: colors.text.secondary, marginBottom: 14 }}>
-                                {t('Enter actual hours worked for "{title}":', { title: hourlyDealPrompt.post_title })}
+                                {workedCopy.prompt}
                             </Text>
                             <TextInput
                                 style={{ height: 48, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, color: colors.text.body, marginBottom: 16 }}
@@ -1287,7 +1350,7 @@ export default function TreasuryManageScreen() {
                                 keyboardType="numeric"
                                 placeholder={t('e.g. {amount}', { amount: 2.5 })}
                                 placeholderTextColor={colors.text.muted}
-                                accessibilityLabel={t('Confirm Hours Worked')}
+                                accessibilityLabel={workedCopy.heading}
                                 autoFocus
                             />
                             <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -1307,12 +1370,12 @@ export default function TreasuryManageScreen() {
                                         // decimals, as before; "1.000" in a comma language could be a thousand, so it is refused.
                                         const read = parseAmount(hourlyDealHours, undefined, ANY_DECIMALS);
                                         if (!read.ok && isAmbiguousAmount(read.refusal)) {
-                                            Alert.alert(t('Invalid Hours'), amountRefusalWords(read.refusal));
+                                            Alert.alert(workedCopy.invalidTitle, amountRefusalWords(read.refusal));
                                             return;
                                         }
                                         const parsed = read.ok ? read.value : NaN;
                                         if (isNaN(parsed) || parsed <= 0) {
-                                            Alert.alert(t('Invalid Hours'), t('Please enter a valid positive number of hours.'));
+                                            Alert.alert(workedCopy.invalidTitle, workedCopy.invalidMessage);
                                             return;
                                         }
                                         const deal = hourlyDealPrompt;
@@ -1336,7 +1399,8 @@ export default function TreasuryManageScreen() {
                         </View>
                     </View>
                 </Modal>
-            )}
+                );
+            })()}
 
             {showCandidatePicker && (
                 <Modal visible transparent animationType="fade" onRequestClose={() => setShowCandidatePicker(false)}>

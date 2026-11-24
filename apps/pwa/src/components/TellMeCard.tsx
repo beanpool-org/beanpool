@@ -12,7 +12,8 @@ import { useState } from 'react';
 import { PEEK_WORDS, currentLanguage, t } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    TELL_ME_WORDS as TW, cannotLines, grantedLine, pushPlace, readWebPushPin, tellMeWhenTheyAnswer, type PushPlace, type TellMeResult,
+    TELL_ME_WORDS as TW, cannotLines, grantedLine, isWebPushFailure, pushPlace, readWebPushPin, tellMeWhenTheyAnswer, webPushFailureMessage,
+    type PushPlace, type TellMeResult, type WebPushFailure,
 } from '../lib/web-push';
 
 const DOOR = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold break-words no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
@@ -29,7 +30,11 @@ export function TellMeCard({ origin, identity, name, subscribe = tellMeWhenTheyA
     /** Inside a card (Home's Find card): smaller words and spacing. */
     compact?: boolean;
 }) {
-    const [state, setState] = useState<{ kind: 'idle' | 'asking' } | { kind: 'on' | 'off'; place: PushPlace; dismissed?: boolean }>(() => {
+    const [state, setState] = useState<
+        { kind: 'idle' | 'asking' }
+        | { kind: 'on' | 'off'; place: PushPlace }
+        | { kind: 'failed'; failure: WebPushFailure }
+    >(() => {
         const granted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
         return readWebPushPin(origin, identity.publicKey) && granted ? { kind: 'on', place: pushPlace() } : { kind: 'idle' };
     });
@@ -39,10 +44,11 @@ export function TellMeCard({ origin, identity, name, subscribe = tellMeWhenTheyA
         void subscribe(origin, identity, currentLanguage()).then(r => {
             if (r.ok) setState({ kind: 'on', place: r.place });
             else if (r.reason === 'dismissed') setState({ kind: 'idle' });
-            else setState({ kind: 'off', place: r.place, dismissed: r.reason === 'failed' });
+            else if (isWebPushFailure(r)) setState({ kind: 'failed', failure: r });
+            else setState({ kind: 'off', place: r.place });
         });
     };
-    const off = state.kind === 'off' ? (state.dismissed ? { lines: [t(TW.failed)], getApp: null } : cannotLines(state.place)) : null;
+    const off = state.kind === 'off' ? cannotLines(state.place) : null;
     const head = compact ? 'text-sm' : 'text-base';
     return (
         <div data-testid={`${testId}-card`} className={compact ? 'mt-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700' : 'mb-4 p-4 max-[359px]:p-3 rounded-xl border border-nature-200 dark:border-nature-800'}>
@@ -60,12 +66,23 @@ export function TellMeCard({ origin, identity, name, subscribe = tellMeWhenTheyA
                             {off.getApp && (
                                 <a href={off.getApp} rel="noopener noreferrer" data-testid={`${testId}-get-app`} className={`${PRIMARY} no-underline`}>{t(PEEK_WORDS.getApp)}</a>
                             )}
-                            {off.lines.map(line => <p key={line} dir="auto" className="m-0 text-sm break-words">{line}</p>)}
+                            {off.lines.map(line => (
+                                <p key={line} dir="auto" className="m-0 text-sm break-words">{line}</p>
+                            ))}
                         </div>
                     ) : (
-                        <button type="button" data-testid={testId} className={PRIMARY} disabled={state.kind === 'asking'} aria-busy={state.kind === 'asking'} onClick={tap}>
-                            {state.kind === 'asking' ? t(TW.asking) : t(TW.button)}
-                        </button>
+                        <div className="grid gap-2">
+                            {state.kind === 'failed' && (
+                                <div role="alert" data-testid={`${testId}-off`} className="grid gap-2">
+                                    <p dir="auto" className="m-0 text-sm text-bp-ink-danger break-words">
+                                        {webPushFailureMessage(state.failure, compact ? 'member' : 'waiting')}
+                                    </p>
+                                </div>
+                            )}
+                            <button type="button" data-testid={testId} className={PRIMARY} disabled={state.kind === 'asking'} aria-busy={state.kind === 'asking'} onClick={tap}>
+                                {state.kind === 'asking' ? t(TW.asking) : t(TW.button)}
+                            </button>
+                        </div>
                     )}
                 </>
             )}

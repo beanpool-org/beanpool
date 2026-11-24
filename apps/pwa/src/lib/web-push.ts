@@ -18,7 +18,7 @@ import {
     type NotifyJoinPath, type NotifyLineKind, type NotifyPhone, type NotifyPrompter,
 } from '@beanpool/core';
 import { getNodeApiUrl, sendSignedAt, signedFetchAt } from './api';
-import { refuseIfNodeTooOld } from './node-version-gate';
+import { isNodeTooOldError, refuseIfNodeTooOld } from './node-version-gate';
 import type { BeanPoolIdentity } from './identity';
 import { APP_STORE_URL, PLAY_URL } from './peek';
 
@@ -46,6 +46,26 @@ export const TELL_ME_WORDS = {
 } as const;
 
 export const FORGED_NOTICE_LINE = TELL_ME_WORDS.forged;
+
+/** Plain sentences for each failure after notifications are allowed: browser-side vs community-side vs each node refusal code. */
+export const WEB_PUSH_FAILURE_WORDS = {
+    browser: word("This browser couldn't set up notifications. Some browsers, such as Brave, keep push switched off in their own settings, or you can try another browser."),
+    key: word("This community couldn't provide its notification key. Try again in a moment."),
+    nodeTooOld: word("This community's server needs an update before it can send browser notifications."),
+    nodeUnreachable: word("This community couldn't be reached right now. Try again in a moment."),
+    network: word("Couldn't reach this community to save your notification request. Try again in a moment."),
+    rateLimited: word('Too many new browsers for this account today. Try again tomorrow.'),
+    standby: word("This server is a standby copy of the community, so it can't turn on browser notifications. Try again at the community's main address."),
+    noSealKey: word("This community can't save browser notifications right now. Try again in a moment."),
+    noKey: word("This community can't send browser notifications right now. Try again in a moment."),
+    noOpenRequest: word('Only members, or people with an open request to join, can turn on notifications here.'),
+    featureOff: word("This community isn't taking notification requests right now."),
+    badSubscription: word("This community couldn't accept this browser's notification subscription."),
+    badHost: word("This community's address couldn't be used for notifications."),
+    badRequest: word("This community couldn't accept this notification request."),
+    unsigned: word("This community couldn't verify your account for this request. Reload the page and try again."),
+    fallback: word("This community couldn't take the request. Try again in a moment."),
+} as const;
 
 /** Where this browser stands for push, by feature tests in the design's order (§2.4). */
 export type PushPlace =
@@ -176,9 +196,56 @@ export function forgetWebPushPin(origin: string, publicKey: string): void {
 
 // ── The tap ──────────────────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Why turning on or keeping web push failed after permission (or where permission itself threw):
+ * - `browser`: the browser couldn't register/activate the worker or make a push subscription
+ * - `key`: reading the community's web push key failed (non-2xx without a specific refusal code, bad JSON, missing/invalid key, or network error)
+ * - `node_too_old`: the community's server is older than MIN_NODE_VERSION or its version couldn't be read
+ * - `network`: posting the subscription to the community didn't reach it (network error or timeout)
+ * - `refused`: the community answered POST /api/web-push (or GET /api/web-push/key with `standby`/`no_key`) with a refusal (`status` and its `code`, if any)
+ */
+export type WebPushFailure =
+    | { reason: 'browser' }
+    | { reason: 'key' }
+    | { reason: 'node_too_old'; nodeVersion: string | null }
+    | { reason: 'network' }
+    | { reason: 'refused'; status: number; code: string | null };
+
 export type TellMeResult =
     | { ok: true; place: PushPlace }
-    | { ok: false; place: PushPlace; reason: 'cannot' | 'blocked' | 'dismissed' | 'failed' };
+    | { ok: false; place: PushPlace; reason: 'cannot' | 'blocked' | 'dismissed' }
+    | ({ ok: false; place: PushPlace } & WebPushFailure);
+
+export function isWebPushFailure(r: TellMeResult): r is { ok: false; place: PushPlace } & WebPushFailure {
+    return !r.ok && r.reason !== 'cannot' && r.reason !== 'blocked' && r.reason !== 'dismissed';
+}
+
+/** Plain translated sentence for a web push failure, naming which side refused without raw error text. */
+export function webPushFailureMessage(failure: WebPushFailure, surface: 'member' | 'waiting' = 'member'): string {
+    if (failure.reason === 'browser') return t(WEB_PUSH_FAILURE_WORDS.browser);
+    if (failure.reason === 'key') return t(WEB_PUSH_FAILURE_WORDS.key);
+    if (failure.reason === 'node_too_old') {
+        return failure.nodeVersion ? t(WEB_PUSH_FAILURE_WORDS.nodeTooOld) : t(WEB_PUSH_FAILURE_WORDS.nodeUnreachable);
+    }
+    if (failure.reason === 'network') return t(WEB_PUSH_FAILURE_WORDS.network);
+    switch (failure.code) {
+        case 'key_rate_limited': return t(WEB_PUSH_FAILURE_WORDS.rateLimited);
+        case 'standby': return t(WEB_PUSH_FAILURE_WORDS.standby);
+        case 'no_seal_key': return t(WEB_PUSH_FAILURE_WORDS.noSealKey);
+        case 'no_key': return t(WEB_PUSH_FAILURE_WORDS.noKey);
+        case 'no_open_request': return t(WEB_PUSH_FAILURE_WORDS.noOpenRequest);
+        case 'feature_off': return t(WEB_PUSH_FAILURE_WORDS.featureOff);
+        case 'bad_subscription': return t(WEB_PUSH_FAILURE_WORDS.badSubscription);
+        case 'bad_host': return t(WEB_PUSH_FAILURE_WORDS.badHost);
+        case 'unsigned': return t(WEB_PUSH_FAILURE_WORDS.unsigned);
+    }
+    if (failure.code === null) {
+        if (failure.status === 400) return t(WEB_PUSH_FAILURE_WORDS.badRequest);
+        if (failure.status === 401) return t(WEB_PUSH_FAILURE_WORDS.unsigned);
+        if (failure.status === 503) return t(WEB_PUSH_FAILURE_WORDS.nodeUnreachable);
+    }
+    return surface === 'waiting' ? t(TELL_ME_WORDS.failed) : t(WEB_PUSH_FAILURE_WORDS.fallback);
+}
 
 const TIMEOUT_MS = 20_000;
 
@@ -222,7 +289,7 @@ export function knockScope(origin: string): string | null {
  */
 export async function tellMeAtHome(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<TellMeResult> {
     const scope = knockScope(origin);
-    if (!scope) return { ok: false, place: pushPlace(env), reason: 'failed' };
+    if (!scope) return { ok: false, place: pushPlace(env), reason: 'refused', status: 400, code: 'bad_host' };
     const result = await subscribeAtTap(origin, identity, lang, env, 'asker', scope);
     // A tap that failed after the registration was made (the key read refused, the subscription not taken) leaves it with no
     // pin, so Home's let-go would never find it: it ends here, unless an earlier Tell me for this key is still kept there.
@@ -303,45 +370,98 @@ async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: 
     const place = pushPlace(env);
     if (place.kind === 'home-screen' || place.kind === 'none') return { ok: false, place, reason: 'cannot' };
     if (place.kind === 'blocked') return { ok: false, place, reason: 'blocked' };
+
+    let permission: NotificationPermission;
     try {
-        const permission = await Notification.requestPermission();
-        if (permission === 'denied') return { ok: false, place: { kind: 'blocked', phone: place.device === 'phone' }, reason: 'blocked' };
-        if (permission !== 'granted') return { ok: false, place, reason: 'dismissed' };
-        const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope });
+        permission = await Notification.requestPermission();
+    } catch {
+        return { ok: false, place, reason: 'browser' };
+    }
+    if (permission === 'denied') return { ok: false, place: { kind: 'blocked', phone: place.device === 'phone' }, reason: 'blocked' };
+    if (permission !== 'granted') return { ok: false, place, reason: 'dismissed' };
+
+    let registration: ServiceWorkerRegistration;
+    try {
+        registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL, { scope });
+    } catch {
+        return { ok: false, place, reason: 'browser' };
+    }
+
+    let vapidKey: string;
+    let applicationServerKey: Uint8Array;
+    try {
         // The key read goes past api.ts, so it asks the version first, as the signed post after it does (lib/node-version-gate.ts).
         const keySignal = AbortSignal.timeout(TIMEOUT_MS);
         await refuseIfNodeTooOld(origin, keySignal);
         const keyRes = await fetch(`${origin}${WEB_PUSH_KEY_PATH}`, { cache: 'no-store', signal: keySignal });
-        const vapidKey = keyRes.ok ? (await keyRes.json())?.vapidKey : null;
-        if (typeof vapidKey !== 'string') return { ok: false, place, reason: 'failed' };
+        const keyBody = await keyRes.json().catch(() => null);
+        if (!keyRes.ok) {
+            const code = typeof keyBody?.code === 'string' ? keyBody.code : null;
+            if (code === 'standby' || code === 'no_key') {
+                return { ok: false, place, reason: 'refused', status: keyRes.status, code };
+            }
+            return { ok: false, place, reason: 'key' };
+        }
+        const rawKey = keyBody?.vapidKey;
+        if (typeof rawKey !== 'string' || !rawKey) return { ok: false, place, reason: 'key' };
+        vapidKey = rawKey;
+        applicationServerKey = fromBase64url(vapidKey);
+    } catch (e) {
+        if (isNodeTooOldError(e)) return { ok: false, place, reason: 'node_too_old', nodeVersion: e.nodeVersion };
+        return { ok: false, place, reason: 'key' };
+    }
+
+    let subscription: PushSubscription;
+    try {
         // Not navigator.serviceWorker.ready: that waits for a worker over THIS page, and /app is outside the scope /app/.
         const ready = await activated(registration);
-        let subscription = await ready.pushManager.getSubscription();
+        let existing = await ready.pushManager.getSubscription();
         // A subscription to another key (the community's key changed) can't be told by this one: it goes first.
-        const current = subscription?.options?.applicationServerKey;
-        if (subscription && current && base64url(new Uint8Array(current)) !== vapidKey) {
-            await subscription.unsubscribe().catch(() => false);
-            subscription = null;
+        const current = existing?.options?.applicationServerKey;
+        if (existing && current && base64url(new Uint8Array(current)) !== vapidKey) {
+            await existing.unsubscribe().catch(() => false);
+            existing = null;
         }
-        subscription ??= await ready.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromBase64url(vapidKey) as BufferSource });
-        return (await postSubscription(origin, identity, subscription, lang, vapidKey, made)) ? { ok: true, place } : { ok: false, place, reason: 'failed' };
+        subscription = existing ?? await ready.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: applicationServerKey as BufferSource });
     } catch {
-        return { ok: false, place, reason: 'failed' };
+        return { ok: false, place, reason: 'browser' };
     }
+
+    const posted = await postSubscription(origin, identity, subscription, lang, vapidKey, made);
+    return posted.ok ? { ok: true, place } : { ok: false, place, ...posted.failure };
 }
 
-/** Gives the node this browser's subscription, signed; pins its answer's notice key, and which tap it was for. Whether the node kept it. */
-async function postSubscription(origin: string, identity: BeanPoolIdentity, subscription: PushSubscription, lang: string, vapidKey: string, made: WebPushPin['for']): Promise<boolean> {
-    const json = subscription.toJSON();
-    const body = JSON.stringify({ subscription: { endpoint: json.endpoint, keys: json.keys }, lang });
-    const res = await signedFetchAt('POST', origin, WEB_PUSH_PATH, body, identity);
-    const answer = res.ok ? await res.json().catch(() => null) : null;
-    if (!answer?.success || typeof answer.subId !== 'string') return false;
+type PostSubscriptionResult = { ok: true } | { ok: false; failure: WebPushFailure };
+
+/** Gives the node this browser's subscription, signed; pins its answer's notice key, and which tap it was for. */
+async function postSubscription(origin: string, identity: BeanPoolIdentity, subscription: PushSubscription, lang: string, vapidKey: string, made: WebPushPin['for']): Promise<PostSubscriptionResult> {
+    let body: string;
+    try {
+        const json = subscription.toJSON();
+        body = JSON.stringify({ subscription: { endpoint: json.endpoint, keys: json.keys }, lang });
+    } catch {
+        return { ok: false, failure: { reason: 'browser' } };
+    }
+    let res: Response;
+    try {
+        res = await signedFetchAt('POST', origin, WEB_PUSH_PATH, body, identity);
+    } catch (e) {
+        if (isNodeTooOldError(e)) return { ok: false, failure: { reason: 'node_too_old', nodeVersion: e.nodeVersion } };
+        return { ok: false, failure: { reason: 'network' } };
+    }
+    const answer = await res.json().catch(() => null);
+    if (!res.ok) {
+        const code = typeof answer?.code === 'string' ? answer.code : null;
+        return { ok: false, failure: { reason: 'refused', status: res.status, code } };
+    }
+    if (!answer?.success || typeof answer.subId !== 'string') {
+        return { ok: false, failure: { reason: 'refused', status: res.status, code: null } };
+    }
     writeWebPushPin({
         origin, publicKey: identity.publicKey, subId: answer.subId, pushKey: typeof answer.pushKey === 'string' ? answer.pushKey : null,
         vapidKey: typeof answer.vapidKey === 'string' ? answer.vapidKey : vapidKey, for: made,
     });
-    return true;
+    return { ok: true };
 }
 
 /** This browser's push subscription at the worker's scope, if a worker was ever registered here; never registers one. */
@@ -499,18 +619,39 @@ function answerAsk(publicKey: string, surface: NotifyAskSurface, e: NotifyAskEve
     markNotifyAskHere(publicKey, e, now);
 }
 
+export type TurnOnAskResult =
+    | { result: 'ok' | 'blocked' | 'dismissed' | 'cannot' }
+    | { result: 'failed'; failure: WebPushFailure };
+
 /**
- * "Turn on notifications" on the join's last screen or Home's once card: {@link turnOnWebPush} (the browser's own prompt,
- * only inside this tap: nothing is awaited before it), and its answer kept ({@link answerAsk}; core's notifyBrowserOutcome):
- * a yes; the browser's no, apart and dated; a prompt closed with no answer (browsers say 'default' then) as a "Later", never
- * a no. A subscription the community didn't take keeps nothing: the caller says so and keeps its buttons. Never throws.
+ * "Turn on notifications" on the join's last screen, Home's once card, a named line, or EventReminder: {@link turnOnWebPush}
+ * (the browser's own prompt, only inside this tap: nothing is awaited before it), and its answer kept ({@link answerAsk};
+ * core's notifyBrowserOutcome): a yes; the browser's no, apart and dated; a prompt closed with no answer (browsers say
+ * 'default' then) as a "Later", never a no. A failure after permission keeps nothing and returns its {@link WebPushFailure},
+ * so the caller says which side refused and keeps its buttons. Never throws.
  */
-export async function turnOnFromAsk(identity: BeanPoolIdentity, lang: string, surface: NotifyAskSurface, env: PushEnv = pushEnv()): Promise<NotifyBrowserResult> {
+export async function turnOnAsk(identity: BeanPoolIdentity, lang: string, surface: NotifyAskSurface, env: PushEnv = pushEnv()): Promise<TurnOnAskResult> {
     const origin = webPushOrigin(getNodeApiUrl());
-    const r: NotifyBrowserResult = origin ? await turnOnWebPush(origin, identity, lang, env).then((a): NotifyBrowserResult => (a.ok ? 'ok' : a.reason)) : 'cannot';
-    const outcome = notifyBrowserOutcome(r);
+    if (!origin) {
+        const outcome = notifyBrowserOutcome('cannot');
+        if (outcome) answerAsk(identity.publicKey, surface, notifyOutcomeEvent(outcome, surface));
+        return { result: 'cannot' };
+    }
+    const a = await turnOnWebPush(origin, identity, lang, env);
+    if (a.ok) {
+        answerAsk(identity.publicKey, surface, notifyOutcomeEvent('granted', surface));
+        return { result: 'ok' };
+    }
+    if (isWebPushFailure(a)) {
+        return { result: 'failed', failure: a };
+    }
+    const outcome = notifyBrowserOutcome(a.reason);
     if (outcome) answerAsk(identity.publicKey, surface, notifyOutcomeEvent(outcome, surface));
-    return r;
+    return { result: a.reason };
+}
+
+export async function turnOnFromAsk(identity: BeanPoolIdentity, lang: string, surface: NotifyAskSurface, env: PushEnv = pushEnv()): Promise<NotifyBrowserResult> {
+    return (await turnOnAsk(identity, lang, surface, env)).result;
 }
 
 /** "Later" on either: dated, never a no ({@link answerAsk}); on the once card it also puts the card away. */
@@ -566,20 +707,19 @@ export async function turnOffFromSettings(origin: string, identity: BeanPoolIden
  * the community's row for it the member's (every kind), which only Turn on asks for. It still goes once the browser blocks
  * or forgets the permission.
  */
-export async function keepWebPushAtOpen(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<'none' | 'dropped' | 'kept' | 'failed'> {
+export type KeepWebPushResult = 'none' | 'dropped' | 'kept' | WebPushFailure;
+
+export async function keepWebPushAtOpen(origin: string, identity: BeanPoolIdentity, lang: string, env: PushEnv = pushEnv()): Promise<KeepWebPushResult> {
     const pin = readWebPushPin(origin, identity.publicKey);
     if (!pin) return 'none';
-    try {
-        const subscription = env.permission === 'granted' ? await currentSubscription() : null;
-        if (!subscription) {
-            await turnOffWebPush(origin, identity);
-            return 'dropped';
-        }
-        if (!isMemberPin(pin)) return 'none';
-        return (await postSubscription(origin, identity, subscription, lang, pin.vapidKey, 'member')) ? 'kept' : 'failed';
-    } catch {
-        return 'failed';
+    const subscription = env.permission === 'granted' ? await currentSubscription() : null;
+    if (!subscription) {
+        await turnOffWebPush(origin, identity);
+        return 'dropped';
     }
+    if (!isMemberPin(pin)) return 'none';
+    const posted = await postSubscription(origin, identity, subscription, lang, pin.vapidKey, 'member');
+    return posted.ok ? 'kept' : posted.failure;
 }
 
 /** The request is forgotten in this browser: the community lets go of the browser too, signed while the key is still here. */
@@ -597,9 +737,22 @@ const WORKER_WAIT_MS = 10_000;
 async function activated(registration: ServiceWorkerRegistration): Promise<ServiceWorkerRegistration> {
     const worker = registration.installing ?? registration.waiting;
     if (registration.active || !worker) return registration;
-    await new Promise<void>(resolve => {
-        const timer = setTimeout(resolve, WORKER_WAIT_MS);
-        const check = () => { if (worker.state === 'activated') { clearTimeout(timer); resolve(); } };
+    await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            worker.removeEventListener?.('statechange', check);
+            resolve();
+        }, WORKER_WAIT_MS);
+        const check = () => {
+            if (worker.state === 'activated') {
+                clearTimeout(timer);
+                worker.removeEventListener?.('statechange', check);
+                resolve();
+            } else if (worker.state === 'redundant') {
+                clearTimeout(timer);
+                worker.removeEventListener?.('statechange', check);
+                reject(new Error('service worker activation failed'));
+            }
+        };
         worker.addEventListener('statechange', check);
         check();
     });

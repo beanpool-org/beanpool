@@ -48,7 +48,7 @@ import { rekeyCodeFromSearch } from '../lib/web-rekey';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { AddSignIn, startWayBackShown } from '../components/OneWayBack';
 import { NotifyAsk } from '../components/NotifyAsk';
-import { laterFromAsk, notifyJoinDueHere, notifyPrompterHere, turnOnFromAsk } from '../lib/web-push';
+import { laterFromAsk, notifyJoinDueHere, notifyPrompterHere, turnOnAsk, type WebPushFailure } from '../lib/web-push';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, PRIVATE_PREVIEW_MESSAGE, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { privatePreviewOn } from '../lib/visitor-lobby';
 import { nodeNameFor, withNodeName } from '../lib/member-name';
@@ -254,7 +254,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     // The join's last screen, notifications (slice N5a): up once the join's own work is done, where this browser can be asked.
     const [notifyUp, setNotifyUp] = useState(false);
     const [notifyBusy, setNotifyBusy] = useState(false);
-    const [notifyFailed, setNotifyFailed] = useState(false);
+    const [notifyFailed, setNotifyFailed] = useState<WebPushFailure | null>(null);
     // Which way this join came in by, for core's rule and the screen's words: an open door (the global community's, or a
     // local community's own), else an invite.
     const notifyPath: NotifyJoinPath = joinedByDoor ? (localCommunity ? 'door' : 'global') : 'invite';
@@ -1241,7 +1241,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
             // its answer (lib/web-push.ts turnOnFromAsk, laterFromAsk): this join can't come back to the screen after a
             // reload or a closed tab, so one left unanswered leaves Home's once card to ask, as the phone's join resumes on it.
             void recordOnboardingEvent(NOTIFY_SHOWN);
-            setNotifyFailed(false);
+            setNotifyFailed(null);
             setNotifyUp(true);
             return;
         }
@@ -1270,13 +1270,17 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
     function notifyTurnOn() {
         if (!pendingIdentity || notifyBusy) return;
         setNotifyBusy(true);
-        setNotifyFailed(false);
-        void turnOnFromAsk(pendingIdentity, currentLanguage(), 'join').then((r) => {
+        setNotifyFailed(null);
+        void turnOnAsk(pendingIdentity, currentLanguage(), 'join').then((r) => {
             if (notifyLeft.current) return;
             setNotifyBusy(false);
-            const outcome = notifyBrowserOutcome(r);
+            if (r.result === 'failed') {
+                setNotifyFailed(r.failure);
+                return;
+            }
+            const outcome = notifyBrowserOutcome(r.result);
             if (outcome) leaveNotify(notifyJoinChoice(outcome));
-            else setNotifyFailed(true);
+            else setNotifyFailed({ reason: 'refused', status: 0, code: null });
         });
     }
 
@@ -1794,7 +1798,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo, onAsked, k
                         /* ===== THE JOIN'S LAST SCREEN: HEAR FROM YOUR COMMUNITY (slice N5a, the phone's N1j) =====
                            ‹ goes back to the step before, whose button brings this screen again. */
                         <>
-                            <StepDots steps={joinSteps} step="notify" busy={notifyBusy} onBack={() => { setNotifyUp(false); setNotifyFailed(false); }} />
+                            <StepDots steps={joinSteps} step="notify" busy={notifyBusy} onBack={() => { setNotifyUp(false); setNotifyFailed(null); }} />
                             <NotifyAsk form="step" words={notifyWords} busy={notifyBusy} failed={notifyFailed} onTurnOn={notifyTurnOn} onLater={notifyLater} />
                         </>
                     ) : hasMnemonic(pendingIdentity) && renaming ? (

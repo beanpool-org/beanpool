@@ -356,7 +356,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [postCategory, setPostCategory] = useState('food');
     const [postCredits, setPostCredits] = useState('');
     const [postPriceType, setPostPriceType] = useState('fixed');
-    const nodeInfo = useCommunityInfo();
+    // Only ask the node for its features when a real keeper can open the listing composer (never on a preview or guest view).
+    const nodeInfo = useCommunityInfo(!isEffectivePreview && !elsewhere && isKeeperOfThis);
     const offeredPostUnits = priceUnitsOffered(nodeInfo?.features, postModalMode ?? 'offer')
         .filter((u): u is Exclude<PriceUnit, 'each'> => u !== 'each');
     const activePostPriceType: Exclude<PriceUnit, 'each'> = (offeredPostUnits as readonly string[]).includes(postPriceType)

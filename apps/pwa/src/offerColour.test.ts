@@ -34,11 +34,12 @@ describe('Offers are one colour, green', () => {
         expect(blue).toEqual([]);
     });
 
-    it('the web composer and edit toggle fill a selected Offer with the commit role, not a raw blue', () => {
+    it('the web composer toggle fills a selected Offer with the commit role, not a raw blue', () => {
         const toggles = SOURCES.filter(s => /pages\/(MapPage|MarketplacePage)\.tsx$/.test(s.file))
             .flatMap(({ file, src }) => (src.match(/\b(?:t|tName) === 'offer' \? 'bg-[^']*'/g) ?? []).map(c => `${file}: ${c}`));
-        // MapPage names its loop variable tName (t is the translator); either name is the composer toggle.
-        expect(toggles.length).toBeGreaterThanOrEqual(2);
+        // MapPage names its loop variable tName (t is the translator); MarketplacePage edit shows listing type read-only
+        // because type is node-immutable after posting (still showing 🟢 Offer).
+        expect(toggles.length).toBeGreaterThanOrEqual(1);
         for (const t of toggles) {
             expect(t).toContain('bg-bp-commit-fill');
             expect(t).toContain('text-bp-commit-on');

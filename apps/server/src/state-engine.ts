@@ -5928,13 +5928,20 @@ export function createPost(
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
     // number of Beans never reaches a listing, whichever route made it.
-    const postFields: PostFieldsIn = { title, description, category, price_c: credits, priceType, lat, lng, tags: options?.tags, freeTags: options?.freeTags };
+    const postFields: PostFieldsIn = {
+        title, description, category, price_c: credits, priceType, lat, lng,
+        ...(repeatable !== undefined ? { repeatable } : {}),
+        ...(cashAlsoNeeded !== undefined ? { cashAlsoNeeded } : {}),
+        tags: options?.tags, freeTags: options?.freeTags,
+    };
     assertPostFields(postFields, 'create');
     if (options?.tags !== undefined) options = { ...options, tags: postFields.tags };
     if (options?.freeTags !== undefined) options = { ...options, freeTags: postFields.freeTags };
     title = postFields.title as string;
     description = postFields.description as string;
     category = postFields.category as string;
+    if (postFields.repeatable !== undefined) repeatable = postFields.repeatable as boolean;
+    if (postFields.cashAlsoNeeded !== undefined) cashAlsoNeeded = postFields.cashAlsoNeeded as boolean;
     credits = beansOffPrice(credits);
     const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
     // A Need for the whole community tells the members who starred its category, at most once a day each, on a community

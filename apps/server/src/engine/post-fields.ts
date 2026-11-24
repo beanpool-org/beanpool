@@ -60,6 +60,8 @@ export interface PostFieldsIn {
     /** The price, whole hundredths of a Bean (the wire's `price_c`). */
     price_c?: unknown;
     priceType?: unknown;
+    repeatable?: unknown;
+    cashAlsoNeeded?: unknown;
     lat?: unknown;
     lng?: unknown;
     hours?: unknown;
@@ -67,6 +69,17 @@ export interface PostFieldsIn {
     tags?: unknown;
     /** The tags its author typed. Written back as the list it will be stored as (assertFreeTags). */
     freeTags?: unknown;
+}
+
+/**
+ * A boolean listing flag (`repeatable`, `cashAlsoNeeded`) as a create or an edit carries it: true, false, or their
+ * stringified forms `'true'` / `'false'` (kept for legacy clients; `"false"` is truthy in JS, so never coerced with `Boolean`).
+ * Anything else (numbers, arbitrary text, null, objects) is refused rather than silently turning the flag off.
+ */
+export function parsePostFlag(raw: unknown, label: string): boolean {
+    if (raw === true || raw === 'true') return true;
+    if (raw === false || raw === 'false') return false;
+    throw new Error(`${label} must be true or false`);
 }
 
 /** A number of units for a deal: finite, from POST_HOURS_MIN to POST_HOURS_MAX. */
@@ -145,6 +158,8 @@ export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', 
     if (has('priceType') && !(POST_PRICE_TYPES as readonly unknown[]).includes(fields.priceType)) {
         throw new Error(`The price type must be one of ${POST_PRICE_TYPES.join(', ')}`);
     }
+    if (has('repeatable')) fields.repeatable = parsePostFlag(fields.repeatable, 'repeatable');
+    if (has('cashAlsoNeeded')) fields.cashAlsoNeeded = parsePostFlag(fields.cashAlsoNeeded, 'cashAlsoNeeded');
     if (has('lat')) coordinate(fields.lat, 'Latitude', 90, mode);
     if (has('lng')) coordinate(fields.lng, 'Longitude', 180, mode);
     if (has('hours') && !isDealQuantity(fields.hours)) throw new Error(DEAL_QUANTITY_ERROR);

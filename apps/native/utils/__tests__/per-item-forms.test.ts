@@ -150,7 +150,7 @@ describe('the edit form (app/post/[id].tsx) reads core\'s rules and the node\'s 
 
     it('Total -> Each carries the figure over here too, and Repeatable is not drawn on Each', () => {
         expect(src).toContain('carryTotalToEach(');
-        expect(src).toMatch(/\{!editEach && \(\s*<Pressable\s+accessibilityRole="button"\s+accessibilityState=\{\{ selected: editRepeatable \}\}/);
+        expect(src).toMatch(/\{!editEach && \(\s*<Pressable\s+accessibilityRole="checkbox"\s+accessibilityState=\{\{ checked: editRepeatable, selected: editRepeatable, disabled: isEditLendable \}\}/);
     });
 });
 

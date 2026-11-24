@@ -109,7 +109,7 @@ describe("a keeper editing their enterprise's listing on the web", () => {
         await waitFor(() => expect(update).toHaveBeenCalled());
         expect(update).toHaveBeenCalledWith('offer-eggs', ME, {
             type: 'offer', category: 'food', title: 'Dozen free-range eggs', description: 'Laid this week', price_c: 600, priceType: 'fixed',
-            repeatable: true, photos: [PHOTO],
+            repeatable: true, cashAlsoNeeded: false, photos: [PHOTO],
         });
         await waitFor(() => expect(screen.getByRole('heading', { name: /Dozen free-range eggs/ })).toBeInTheDocument());
         expect(screen.queryByText('💾 Save')).toBeNull();

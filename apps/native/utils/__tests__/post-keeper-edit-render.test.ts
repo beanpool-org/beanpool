@@ -256,7 +256,7 @@ describe("a keeper editing their enterprise's Offer", () => {
         expect(net.calls).toContain('db.updatePost');
         expect(net.args.get('updatePost')).toEqual(['p-eggs', {
             type: 'offer', category: 'food', title: 'Dozen free-range eggs', description: 'Laid this week', price_c: 600, price_type: 'fixed',
-            repeatable: true, photos: JSON.stringify([OWN_PHOTO, NEW_PHOTO]),
+            repeatable: true, cash_also_needed: 0, photos: JSON.stringify([OWN_PHOTO, NEW_PHOTO]),
         }]);
         // Saved: out of the form, the Offer as the node now has it.
         expect(alerts.said).not.toContain('Error');

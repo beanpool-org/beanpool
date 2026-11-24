@@ -200,5 +200,23 @@ assert.throws(() => {
     assertPostFields({ title: oversizedTitle + 'b', price_c: hc(15) }, 'edit', storedPost);
 }, new RegExp(LISTING_TITLE_TOO_LONG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'Edit mode rejects changed oversized title');
 
+// 6. Boolean listing flags (cashAlsoNeeded, repeatable) in create and edit modes
+console.log('  6. Testing cashAlsoNeeded and repeatable flag validation...');
+for (const flag of ['cashAlsoNeeded', 'repeatable'] as const) {
+    for (const [raw, want] of [[true, true], [false, false], ['true', true], ['false', false]] as const) {
+        const fields: Record<string, unknown> = { [flag]: raw };
+        assertPostFields(fields, 'edit');
+        assert.strictEqual(fields[flag], want, `${flag}: ${JSON.stringify(raw)} normalises to ${want}`);
+    }
+    for (const bad of ['yes', 'no', '1', '0', 1, 0, null, {}, []]) {
+        assert.throws(() => {
+            assertPostFields({ [flag]: bad }, 'edit');
+        }, new RegExp(`${flag} must be true or false`), `${flag} rejects invalid value ${JSON.stringify(bad)} on edit`);
+        assert.throws(() => {
+            assertPostFields({ title: 'Valid', [flag]: bad }, 'create');
+        }, new RegExp(`${flag} must be true or false`), `${flag} rejects invalid value ${JSON.stringify(bad)} on create`);
+    }
+}
+
 console.log('✅ post-fields engine utility tests PASSED!');
 process.exit(0);

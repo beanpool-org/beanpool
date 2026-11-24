@@ -104,6 +104,9 @@ export const PHONE_ALLOWED = new Map([
         'const lat = Math.round(latitude * 10000) / 10000;',
         'const lng = Math.round(longitude * 10000) / 10000;',
     ]],
+    ['apps/native/components/ListingFormFields.tsx', [
+        'const roundCoord = (deg: number) => Math.round(deg * 10000) / 10000;',
+    ]],
     ['apps/native/components/EventDetail.tsx', ["Linking.openURL(url).catch(() => Alert.alert(t('No maps app'), t('The event is at {lat}, {lng}.', { lat: p.lat.toFixed(5), lng: p.lng.toFixed(5) })));"]],
     ['apps/native/components/NewEventModal.tsx', [
         "? t('Approximate pin · {lat}, {lng}', { lat: pin.lat.toFixed(3), lng: pin.lng.toFixed(3) })",

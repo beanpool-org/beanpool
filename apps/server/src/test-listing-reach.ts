@@ -270,12 +270,13 @@ async function main() {
 
     const enterprise = makeMember('Coop');
     const keeper = makeMember('Keeper');
+    const RIVERSIDE = '12D3KooWRiversideReachTestPeer00000';
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(enterprise, keeper);
     const entNamed = createPost('offer', 'other', 'Coop apples', 'd', 10, 'fixed', enterprise,
-        undefined, undefined, undefined, false, undefined, false, { reach: 'peers', reachPeers: [BYRON] });
+        undefined, undefined, undefined, false, undefined, false, { reach: 'peers', reachPeers: [RIVERSIDE] });
     const keeperView = getPosts({ id: entNamed!.id, viewerPubkey: keeper })[0];
     const outsiderView = getPosts({ id: entNamed!.id, viewerPubkey: otherMember })[0];
-    assert(keeperView?.reachPeers?.length === 1 && keeperView.reachPeers[0] === BYRON,
+    assert(keeperView?.reachPeers?.length === 1 && keeperView.reachPeers[0] === RIVERSIDE,
         `12e. an active enterprise KEEPER gets the enterprise's reachPeers (got ${JSON.stringify(keeperView?.reachPeers)}) so editing it never wipes the chosen peers`);
     assert(outsiderView !== undefined && !('reachPeers' in outsiderView),
         '12f. while another member still does not see the enterprise\'s reachPeers');

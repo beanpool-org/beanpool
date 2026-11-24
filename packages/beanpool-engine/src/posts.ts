@@ -2595,7 +2595,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             out.push(removal);
             continue;
         }
-        if (post.authorPublicKey !== viewer && !(viewer && !viewerIsVisitor && !filter?.guest && viewerKeeps().has(post.authorPublicKey))) {
+        if (post.authorPublicKey !== viewer
+            && !(post.reach === 'peers' && Array.isArray(post.reachPeers) && post.reachPeers.length > 0
+                && viewer && !viewerIsVisitor && !filter?.guest && viewerKeeps().has(post.authorPublicKey))) {
             delete post.reachPeers;
         }
         // What made it (an owner's AI assistant, apps/server agent/owner-posts.ts), on its author's own read only, or a keeper's

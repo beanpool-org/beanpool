@@ -250,6 +250,7 @@ export const SUITES = [
     'test-mcp-owner-tags',
     'test-mcp-owner-photos',
     'test-mcp-owner-seeds',
+    'test-mcp-owner-price-units',
     'test-mcp-photo-link',
     'test-settings-qr-signin',
     'test-approval-number-match',

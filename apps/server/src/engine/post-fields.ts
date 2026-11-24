@@ -36,10 +36,11 @@ const { t: tr } = wordsFor('en');
 
 /** The most one listing may ask, per unit, in whole hundredths: a million Beans, far above any real price. */
 export const POST_PRICE_MAX_C = beans(1_000_000);
-/** The most units (hours, days, …) one deal may be for. */
+/** The most units (hours, days, …, kilos) one deal may be for. */
 export const POST_HOURS_MAX = 10_000;
 /**
- * The fewest units one deal may be for: 0.01 of an hour, day, week or month (36 seconds of an hour). The apps' own
+ * The fewest units one deal may be for: 0.01 of an hour, day, week, month, year or kilo (36 seconds of an hour, 10 g of a
+ * kilo). The apps' own
  * fields go no lower (PWA: min 0.5 to confirm, 1 to book, any positive number typed; native: any number typed; the
  * enterprise's prompt: any positive number), and no real booking does. Without it `5e-324` hours passed, and a deal's
  * rate (its credits over its hours, escrow.ts) rounded: a 0.4 Beans/h Offer booked at 5e-324 h paid 0 for 10 hours
@@ -54,10 +55,10 @@ export const POST_PRICE_TYPES = PRICE_UNITS;
 
 /**
  * Held false until both app stores carry the phone build with `yearly` and `per_kg` labels and `priceUnitTakesQuantity`
- * (mirroring config/node-profile.ts PER_ITEM_BUILT): a 1.4.7 phone renders both units with no unit suffix, mis-classifies
- * `per_kg` as a quantity-multiplied unit, and prompts `TRUST COMMITMENT (HOURS)` on `yearly` offers while locking
- * `hours × yearly_price` into escrow. Flip true alongside raising DEFAULT_MIN_APP_VERSION once both stores carry that build.
- * Re-exported from config/node-profile.ts so post-fields stays free of db.ts.
+ * (mirroring config/node-profile.ts PER_ITEM_BUILT): a 1.4.7 phone renders both units with no unit suffix and asks for
+ * "units" on both (it asks for a quantity on every unit but Total and Each), so its member is never told the quantity is
+ * years or kilos, though the node holds that many × the price. Flip true alongside raising DEFAULT_MIN_APP_VERSION once
+ * both stores carry that build. Re-exported from config/node-profile.ts so post-fields stays free of db.ts.
  */
 export const PRICE_UNITS_KG_YEAR_BUILT = false;
 

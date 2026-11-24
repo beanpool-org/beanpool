@@ -349,6 +349,18 @@ function assertNoDealOnCopy(shownFromHost: string | null | undefined): void {
     if (shownFromHost != null) throw Object.assign(new Error(word("This is shown from another community, so it can't be bought or taken here.")), { code: LISTING_COPY_CODE, status: 409 });
 }
 
+/**
+ * Taking up a listing priced per kilo with no weight: the words an app that never asks for one (a build from before per
+ * kilo was a unit) shows its member, so the node never holds one kilo for a weight nobody said. Marked for the member's
+ * language (member-words.ts).
+ */
+export const WEIGHT_REQUIRED_ERROR = word('This listing is priced per kilo, so say how many kilos you want. If your BeanPool app does not ask, update it and try again.');
+
+/** A per-kilo take-up must say its weight (requestPost, acceptPost): refused in plain words when it says none. */
+function assertWeightGiven(priceType: PriceUnit, hours: number | undefined): void {
+    if (priceType === 'per_kg' && hours == null) throw new Error(WEIGHT_REQUIRED_ERROR);
+}
+
 export function requestPost(
     cb: EscrowCallbacks,
     postId: string,
@@ -441,14 +453,14 @@ export function requestPost(
     const priceType = post.price_type || 'fixed';
     if (!isPriceUnit(priceType)) throw new Error(`Unknown price type: ${priceType}`);
     const takesQuantity = priceUnitDealKind(priceType) === 'quantity';
-    // Finite and in range (F6): `hours > 0` alone passed Infinity, and 0 × Infinity is NaN. A fixed-amount price
-    // (`fixed`, `per_kg`) ignores an absent quantity, but one that is given and isn't one (Infinity, a negative, text)
-    // is refused there too, not ignored (F3). A quantity given and out of range (below POST_HOURS_MIN too: 5e-324 hours
-    // rounded the deal's rate) gets the quantity's own words, on a priced-per-unit listing as on a fixed one.
+    // Finite and in range (F6): `hours > 0` alone passed Infinity, and 0 × Infinity is NaN. A fixed price ignores an
+    // absent quantity, but one that is given and isn't one (Infinity, a negative, text) is refused there too, not ignored
+    // (F3). A quantity given and out of range (below POST_HOURS_MIN too: 5e-324 hours rounded the deal's rate) gets the
+    // quantity's own words, on a priced-per-unit listing as on a fixed one. A per-kilo listing's quantity is the weight in
+    // kilos, asked for as an hourly one's hours are (Marty, 25 Nov 2026); one taken up with none is refused in plain words
+    // (assertWeightGiven), never held at one kilo.
     if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);
-    if (priceType === 'per_kg' && hours != null) {
-        throw new Error(word('This listing is priced per kilo and does not take a quantity — please update the BeanPool app and try again.'));
-    }
+    assertWeightGiven(priceType, hours);
     if (takesQuantity && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${priceType} post`);
     }
@@ -1200,9 +1212,7 @@ export function acceptPost(
         if (!isPriceUnit(priceType)) throw new Error(`Unknown price type: ${priceType}`);
         const takesQuantity = priceUnitDealKind(priceType) === 'quantity';
         if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
-        if (priceType === 'per_kg' && hours != null) {
-            throw new Error(word('This listing is priced per kilo and does not take a quantity — please update the BeanPool app and try again.'));
-        }
+        assertWeightGiven(priceType, hours);
         if (takesQuantity && !isDealQuantity(hours)) {
             throw new Error(`Must provide a valid quantity for a ${priceType} post`);
         }
@@ -1540,9 +1550,9 @@ export function completePostTransaction(
             case 'weekly': return 'weeks';
             case 'monthly': return 'months';
             case 'yearly': return 'years';
+            case 'per_kg': return 'kilos';
             case 'fixed':
             case 'each':
-            case 'per_kg':
                 return 'units';
             default: {
                 const _exhaustive: never = pt;

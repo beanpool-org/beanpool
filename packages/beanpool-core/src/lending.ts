@@ -38,12 +38,12 @@ export function loanDays(priceType: string | null | undefined, units: unknown): 
     return null;
 }
 
-export type DealQuantityUnit = 'hour' | 'day' | 'week' | 'month' | 'year';
+export type DealQuantityUnit = 'hour' | 'day' | 'week' | 'month' | 'year' | 'kilo';
 
 /**
  * The unit a deal's quantity (`marketplace_transactions.hours`) is counted in: hours for an hourly price, days for daily,
- * weeks for weekly, months for monthly, years for yearly, and days for a lendable Offer on one fee (fixed, Free included).
- * Null for fixed (non-lendable), each, and per_kg (no quantity line).
+ * weeks for weekly, months for monthly, years for yearly, kilos for per_kg (the weight taken up), and days for a lendable
+ * Offer on one fee (fixed, Free included). Null for fixed (non-lendable) and each (no quantity line).
  */
 export function dealQuantityUnit(
     priceType: string | null | undefined,
@@ -57,12 +57,12 @@ export function dealQuantityUnit(
         case 'weekly': return 'week';
         case 'monthly': return 'month';
         case 'yearly': return 'year';
+        case 'per_kg': return 'kilo';
         case 'fixed': {
             const isLend = lendable === true || lendable === 1 || lendable === '1' || lendable === 'true';
             return isLend ? 'day' : null;
         }
         case 'each':
-        case 'per_kg':
             return null;
         default: {
             const _exhaustive: never = pt;

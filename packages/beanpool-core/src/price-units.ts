@@ -40,12 +40,15 @@ export function kgYearPriceUnitsOffered(features: { priceUnitsKgYear?: unknown }
 /**
  * How a listing's price unit is charged when taken up in a one-off deal:
  *  - `'fixed'`: the deal amount is the posted price (`price_c`), no quantity required and never re-rated at release
- *    (`fixed`, `per_kg`).
+ *    (`fixed`).
  *  - `'each'`: Offers only, whole-number item count or lot price (`per-item.ts`).
  *  - `'quantity'`: posted price × quantity (`dealAmountFor(price_c, hours)`), re-rated on confirmed quantity at release
- *    (`hourly`, `daily`, `weekly`, `monthly`, `yearly`). Note: `weekly` and `monthly` with `price_c > 0` make a standing
- *    deal when taken up with `standing` (`standing-deal.ts`); without `standing` (or when Free / lendable) they follow
- *    this one-off quantity rule. `yearly` is always one-off because `standing_deals.period_unit` is `('week', 'month')`.
+ *    (`hourly`, `daily`, `weekly`, `monthly`, `yearly`, and `per_kg`, whose quantity is the weight in kilos: Marty,
+ *    25 Nov 2026, "yes ask for the weight like hours"). The quantity rides the deal's `hours` field in the price's own
+ *    unit, as a day or a week does, counted in hundredths (quantityHundredths: 0.01 kg is 10 g). Note: `weekly` and
+ *    `monthly` with `price_c > 0` make a standing deal when taken up with `standing` (`standing-deal.ts`); without
+ *    `standing` (or when Free / lendable) they follow this one-off quantity rule. `yearly` is always one-off because
+ *    `standing_deals.period_unit` is `('week', 'month')`, and `per_kg` is never a period.
  */
 export type PriceUnitDealKind = 'fixed' | 'each' | 'quantity';
 
@@ -53,7 +56,6 @@ export type PriceUnitDealKind = 'fixed' | 'each' | 'quantity';
 export function priceUnitDealKind(priceType: PriceUnit): PriceUnitDealKind {
     switch (priceType) {
         case 'fixed':
-        case 'per_kg':
             return 'fixed';
         case 'each':
             return 'each';
@@ -62,6 +64,7 @@ export function priceUnitDealKind(priceType: PriceUnit): PriceUnitDealKind {
         case 'weekly':
         case 'monthly':
         case 'yearly':
+        case 'per_kg':
             return 'quantity';
         default: {
             const _exhaustive: never = priceType;
@@ -71,8 +74,8 @@ export function priceUnitDealKind(priceType: PriceUnit): PriceUnitDealKind {
 }
 
 /**
- * Whether a listing's price unit asks for a quantity (`hours` on the wire) on a one-off deal.
- * Null/undefined defaults to `'fixed'` (false); an unknown string returns false.
+ * Whether a listing's price unit asks for a quantity (`hours` on the wire: hours, days, weeks, months, years, or kilos for
+ * `per_kg`) on a one-off deal. Null/undefined defaults to `'fixed'` (false); an unknown string returns false.
  */
 export function priceUnitTakesQuantity(priceType: string | null | undefined): boolean {
     const pt = priceType ?? 'fixed';

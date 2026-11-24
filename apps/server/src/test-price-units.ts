@@ -1,7 +1,9 @@
 /**
  * Exhaustive table test over ALL listing price units (old and new):
  *   PRICE_UNITS × (Offer, Need) × (create, edit) × (deal amount computed + release + ledger conservation)
- * plus standing-deal refusal for `yearly` & `per_kg`, unknown-unit refusal, and `features.priceUnitsKgYear`.
+ * plus the weight a per-kilo take-up asks for (Marty, 25 Nov 2026: "yes ask for the weight like hours"): missing, zero,
+ * negative, too large and a decimal weight, on both doors, and a release that confirms more or fewer kilos; standing-deal
+ * refusal for `yearly` & `per_kg`, unknown-unit refusal, and `features.priceUnitsKgYear`.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-price-units)
  */
@@ -18,10 +20,11 @@ import {
 import { startHttpsServer } from './https-server.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import {
-    PRICE_UNITS, dealAmountFor, priceUnitDealKind, standingAuthorisationText, standingUnitOf, type PriceUnit,
+    PRICE_UNITS, dealAmountFor, priceUnitDealKind, releaseAmount, standingAuthorisationText, standingUnitOf, type PriceUnit,
 } from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
-import { setPriceUnitsKgYearForTests } from './engine/post-fields.js';
+import { DEAL_QUANTITY_ERROR, setPriceUnitsKgYearForTests } from './engine/post-fields.js';
+import { WEIGHT_REQUIRED_ERROR } from './engine/escrow.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
 const realFetch = globalThis.fetch;
@@ -175,12 +178,8 @@ async function main() {
             const postId = createRes.body?.post?.id as string;
 
             if (dealKind === 'fixed') {
-                // Both `fixed` and `per_kg`: deal amount = posted price_c, no hours required, never re-rated at release
+                // `fixed`: deal amount = posted price_c, no hours required, never re-rated at release
                 if (kind === 'offer') {
-                    if (unit === 'per_kg') {
-                        const badHours = await post(bob, '/api/marketplace/posts/accept', { postId, buyerPublicKey: bob.pk, hours: 3 });
-                        assert(badHours.status === 400, `${label} offer accept with hours refused 400 so old clients cannot silently under-hold (${brief(badHours)})`);
-                    }
                     const acc = await post(bob, '/api/marketplace/posts/accept', { postId, buyerPublicKey: bob.pk });
                     const txId = acc.body?.transaction?.id as string;
                     assert(acc.status === 200 && txRow(txId).amount_c === unitPrice,
@@ -189,10 +188,6 @@ async function main() {
                     assert(rel.status === 200 && txRow(txId).status === 'completed' && txRow(txId).amount_c === unitPrice,
                         `${label} offer release settles exact posted price_c=${unitPrice} (${brief(rel)})`);
                 } else {
-                    if (unit === 'per_kg') {
-                        const badHours = await post(bob, '/api/marketplace/posts/request', { postId, buyerPublicKey: bob.pk, hours: 3 });
-                        assert(badHours.status === 400, `${label} need request with hours refused 400 so old clients cannot silently under-hold (${brief(badHours)})`);
-                    }
                     const req = await post(bob, '/api/marketplace/posts/request', { postId, buyerPublicKey: bob.pk });
                     const txId = req.body?.transaction?.id as string;
                     assert(req.status === 200 && txRow(txId).amount_c === unitPrice,
@@ -226,6 +221,9 @@ async function main() {
                 if (kind === 'offer') {
                     const noHours = await post(bob, '/api/marketplace/posts/accept', { postId, buyerPublicKey: bob.pk });
                     assert(noHours.status === 400, `${label} offer accept without quantity refused (${brief(noHours)})`);
+                    if (unit === 'per_kg') {
+                        assert(noHours.body?.error === WEIGHT_REQUIRED_ERROR, `${label} offer accept without a weight says so in plain words (${brief(noHours)})`);
+                    }
 
                     const acc = await post(bob, '/api/marketplace/posts/accept', { postId, buyerPublicKey: bob.pk, hours: bookedQty });
                     const txId = acc.body?.transaction?.id as string;
@@ -237,6 +235,9 @@ async function main() {
                 } else {
                     const noHours = await post(bob, '/api/marketplace/posts/request', { postId, buyerPublicKey: bob.pk });
                     assert(noHours.status === 400, `${label} need request without quantity refused (${brief(noHours)})`);
+                    if (unit === 'per_kg') {
+                        assert(noHours.body?.error === WEIGHT_REQUIRED_ERROR, `${label} need request without a weight says so in plain words (${brief(noHours)})`);
+                    }
 
                     const req = await post(bob, '/api/marketplace/posts/request', { postId, buyerPublicKey: bob.pk, hours: bookedQty });
                     const txId = req.body?.transaction?.id as string;
@@ -250,6 +251,56 @@ async function main() {
                         `${label} need release re-rates to ${expectedConfirmed} (${brief(rel)})`);
                 }
             }
+        }
+    }
+
+    // 2b. The weight a per-kilo take-up asks for, as an hourly one asks for hours (Marty, 25 Nov 2026). Both doors refuse
+    //     a weight that is zero, negative, too large or not a number with the quantity's own words, and one that is missing
+    //     with WEIGHT_REQUIRED_ERROR (an old app that never asks: never held at one kilo). A decimal weight is held at
+    //     price × kilos in whole hundredths (core dealAmountFor), and a release that confirms more kilos tops the hold up
+    //     from the buyer, fewer gives the rest back, as hours do.
+    const kiloPrice = hc(7.5); // 7.50 Beans a kilo
+    for (const kind of ['offer', 'need'] as const) {
+        const door = kind === 'offer' ? '/api/marketplace/posts/accept' : '/api/marketplace/posts/request';
+        for (const [what, hours, words] of [
+            ['missing', undefined, WEIGHT_REQUIRED_ERROR],
+            ['null', null, WEIGHT_REQUIRED_ERROR],
+            ['zero', 0, DEAL_QUANTITY_ERROR],
+            ['negative', -2, DEAL_QUANTITY_ERROR],
+            ['too large', 10_001, DEAL_QUANTITY_ERROR],
+            ['not a number', 'two', DEAL_QUANTITY_ERROR],
+        ] as const) {
+            const made = await post(alice, '/api/marketplace/posts', createBody(kind, 'per_kg', alice, kiloPrice));
+            const postId = made.body?.post?.id as string;
+            const before = nodeTotal();
+            const res = await post(bob, door, { postId, buyerPublicKey: bob.pk, ...(hours === undefined ? {} : { hours }) });
+            const rows = (db.prepare('SELECT COUNT(*) n FROM marketplace_transactions WHERE post_id = ?').get(postId) as { n: number }).n;
+            assert(res.status === 400 && res.body?.error === words && rows === 0 && nodeTotal() === before,
+                `${kind}/per_kg take-up with a ${what} weight refused with "${words}", no deal written (${brief(res)})`);
+        }
+        for (const [kilos, confirmed] of [[2.5, 3], [0.25, 0.2], [10_000, 10_000]] as const) {
+            const made = await post(alice, '/api/marketplace/posts', createBody(kind, 'per_kg', alice, kiloPrice));
+            const postId = made.body?.post?.id as string;
+            const held = dealAmountFor(kiloPrice, kilos);
+            // At the deal's own rate (what it holds over the kilos booked), as hours are re-rated and as both apps' Release
+            // line shows it (core releaseAmount): 0.25 kg holds 187 (187.5 truncated), and 0.2 of it pays 149, not 150.
+            const paid = releaseAmount({ amount_c: held, hours: kilos }, confirmed, { priceType: 'per_kg' });
+            const payer = kind === 'offer' ? bob : alice;
+            if (kilos === 10_000) transfer('genesis', payer.pk, held, 'seed for the heaviest weight', 'direct', true);
+            const res = await post(bob, door, { postId, buyerPublicKey: bob.pk, hours: kilos });
+            const txId = res.body?.transaction?.id as string;
+            assert(res.status === 200 && txRow(txId).amount_c === held && Number(txRow(txId).hours) === kilos,
+                `${kind}/per_kg take-up for ${kilos} kg at 7.50 holds ${held} hundredths and keeps the weight on the deal (${brief(res)})`);
+            if (kind === 'need') {
+                const app = await post(alice, '/api/marketplace/transactions/approve', { transactionId: txId, authorPublicKey: alice.pk });
+                assert(app.status === 200 && txRow(txId).amount_c === held, `need/per_kg approve for ${kilos} kg holds ${held} (${brief(app)})`);
+            }
+            const payerBefore = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(payer.pk) as { balance_c: number }).balance_c;
+            const rel = await post(payer, '/api/marketplace/transactions/complete', { transactionId: txId, confirmerPublicKey: payer.pk, finalHours: confirmed });
+            const payerAfter = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(payer.pk) as { balance_c: number }).balance_c;
+            assert(rel.status === 200 && txRow(txId).status === 'completed' && txRow(txId).amount_c === paid
+                && Number(txRow(txId).hours) === confirmed && payerAfter - payerBefore === held - paid,
+                `${kind}/per_kg release confirming ${confirmed} kg of ${kilos} pays ${paid} and moves ${held - paid} back to (or from) the payer (${brief(rel)})`);
         }
     }
 

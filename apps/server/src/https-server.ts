@@ -156,7 +156,7 @@ import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
-import { createWebPushRoutes } from './routes/web-push.js';
+import { createWebPushRoutes, logWebPushPostRefusal } from './routes/web-push.js';
 import { createNodeKeyRoutes } from './routes/node-key.js';
 import { createAddressListRoutes } from './routes/address-list.js';
 import { createRelayRoutes } from './routes/relay.js';
@@ -1462,6 +1462,18 @@ export async function startHttpsServer(port: number): Promise<number> {
     // The AI assistant's OAuth door with the owners' switch off: 404 for every verb, before the CORS layer below answers
     // OPTIONS 204 or a router answers 405 (agent/oauth-route.ts).
     app.use(oauthDoorOff());
+
+    // Log refusals of POST /api/web-push that stop in upstream middleware (rate limit, body limit, signature,
+    // identity read-only, private preview) before the route handler runs, sharing its per-minute log budget.
+    app.use(async (ctx, next) => {
+        const isWebPushPost = ctx.method === 'POST' && routedPath(ctx.path) === '/api/web-push';
+        await next();
+        if (isWebPushPost && ctx.status >= 400 && !ctx.state?.webPushRefusalLogged) {
+            const rawCode = typeof (ctx.body as any)?.code === 'string' ? (ctx.body as any).code : null;
+            const code = rawCode && /^[a-z0-9_]{1,40}$/.test(rawCode) ? rawCode : `http_${ctx.status}`;
+            logWebPushPostRefusal(code);
+        }
+    });
 
     // Gateway Configuration Middlewares (CORS Allowed Origins, Admin IP Allowlist, federation's routes and the headless switch, Rate Limiting)
 

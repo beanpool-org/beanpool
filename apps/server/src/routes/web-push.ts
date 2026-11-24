@@ -50,13 +50,55 @@ function answer(ctx: any, status: number, error: string, code: string, extra?: R
     ctx.body = extra ? { error, code, ...extra } : { error, code };
 }
 
-/** Log a refusal of POST /api/web-push at INFO with its reason code only (never keys, endpoints or subscriptions). */
-function logPostRefusal(code: string): void {
-    logger.info('SYS', `[WebPush] POST /api/web-push refused (${code})`);
+export const WEB_PUSH_REFUSAL_LOG_BUDGET = 20;
+const WEB_PUSH_REFUSAL_WINDOW_MS = 60_000;
+let refusalWindowStart = 0;
+let refusalWritten = 0;
+let refusalSuppressed = 0;
+let refusalSummaryTimer: ReturnType<typeof setTimeout> | null = null;
+const refusalSuppressedByCode = new Map<string, number>();
+
+function flushPostRefusalSummary(): void {
+    if (refusalSummaryTimer) clearTimeout(refusalSummaryTimer);
+    refusalSummaryTimer = null;
+    if (refusalSuppressed > 0) {
+        const breakdown = [...refusalSuppressedByCode.entries()].map(([k, n]) => `${k}=${n}`).join(', ');
+        logger.info('SYS', `[WebPush] POST /api/web-push refused ${refusalSuppressed} more times in that minute (${breakdown})`);
+    }
+    refusalSuppressed = 0;
+    refusalSuppressedByCode.clear();
+}
+
+/** Log a refusal of POST /api/web-push at INFO with its reason code only (never keys, endpoints or subscriptions), budgeted per minute. */
+export function logWebPushPostRefusal(code: string, now = Date.now()): void {
+    if (now - refusalWindowStart >= WEB_PUSH_REFUSAL_WINDOW_MS) {
+        flushPostRefusalSummary();
+        refusalWindowStart = now;
+        refusalWritten = 0;
+    }
+    if (refusalWritten < WEB_PUSH_REFUSAL_LOG_BUDGET) {
+        refusalWritten++;
+        logger.info('SYS', `[WebPush] POST /api/web-push refused (${code})`);
+        return;
+    }
+    refusalSuppressed++;
+    refusalSuppressedByCode.set(code, (refusalSuppressedByCode.get(code) ?? 0) + 1);
+    if (!refusalSummaryTimer) {
+        refusalSummaryTimer = setTimeout(flushPostRefusalSummary, Math.max(0, refusalWindowStart + WEB_PUSH_REFUSAL_WINDOW_MS - now));
+        refusalSummaryTimer.unref?.();
+    }
+}
+
+/** For tests: end the current refusal-log minute (flushing any summary line) and reset the per-minute counter. */
+export function endWebPushRefusalLogMinute(): void {
+    flushPostRefusalSummary();
+    refusalWindowStart = 0;
+    refusalWritten = 0;
 }
 
 function refusePost(ctx: any, status: number, error: string, code: string, extra?: Record<string, unknown>): void {
-    logPostRefusal(code);
+    if (ctx.state) ctx.state.webPushRefusalLogged = true;
+    logWebPushPostRefusal(code);
     answer(ctx, status, error, code, extra);
 }
 
@@ -115,7 +157,8 @@ export function createWebPushRoutes(_deps: RouteDeps): Router {
         if (!contact) return refusePost(ctx, 400, 'This request did not name this community by a host name.', 'bad_host');
         const key = nodeKey(ctx, true);
         if (!key) {
-            logPostRefusal('no_key');
+            if (ctx.state) ctx.state.webPushRefusalLogged = true;
+            logWebPushPostRefusal('no_key');
             return;
         }
         let subId: string;

@@ -38,7 +38,9 @@ import {
 } from './services/web-push.js';
 import { recoverySealKeyPath } from './services/recovery-seal-key.js';
 import { MEMBER_BROWSER_RULES } from './engine/web-push-subscriptions.js';
-import { createWebPushRoutes } from './routes/web-push.js';
+import {
+    WEB_PUSH_REFUSAL_LOG_BUDGET, createWebPushRoutes, endWebPushRefusalLogMinute, logWebPushPostRefusal,
+} from './routes/web-push.js';
 import { BUNDLED_FILES } from './services/takeover-envelope.js';
 import { tidyKnocks, joinAnsweredTtl } from './engine/knocks.js';
 import { verifyPushNotice, PUSH_NOTICE_KINDS } from '@beanpool/core';
@@ -361,6 +363,7 @@ async function main(): Promise<void> {
         `at most ${WEB_PUSH_RULES.inFlight} requests at once, the rest in line, all sent in the end (${show(firstWave)}, most ${most})`);
 
     // ── 11. Every POST /api/web-push refusal logs one INFO line with its reason code only and nothing secret ─────────
+    endWebPushRefusalLogMinute();
     const secretToken = `secret-ep-${crypto.randomBytes(8).toString('hex')}`;
     const secretBrowser = newBrowser(`https://fcm.googleapis.com/fcm/send/${secretToken}`);
     const stranger = newId('Stranger');
@@ -511,6 +514,86 @@ async function main(): Promise<void> {
             `POST /api/web-push refusal ${rc.name}: logs one INFO line with code only, nothing secret (status=${res.status}, code=${res.body?.code}, rows=${show(webPushRows)}, leaked=${show(leaked)})`,
         );
     }
+
+    // ── 12. Upstream HTTP middleware refusals log once (no double-log) and share the per-minute budget ──────────────
+    endWebPushRefusalLogMinute();
+    const mwCases: { name: string; expectedStatus: number; expectedCode: string; trigger: () => Promise<Res> }[] = [
+        {
+            name: 'HTTP 401 unsigned (requireSignature)',
+            expectedStatus: 401,
+            expectedCode: 'http_401',
+            trigger: () => call(null, 'POST', '/api/web-push', subscription(secretBrowser)),
+        },
+        {
+            name: 'HTTP 400 bad_key (requireSignature)',
+            expectedStatus: 400,
+            expectedCode: 'bad_key',
+            trigger: async () => {
+                pruneAuthAttempts(Date.now() + 120_000);
+                resetGatewayRateLimit();
+                const res = await fetch(`${BASE}/api/web-push`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Public-Key': 'not-a-valid-hex-key',
+                        'X-Signature': 'AAAA',
+                        'X-Timestamp': String(Date.now()),
+                        'X-Nonce': crypto.randomBytes(16).toString('hex'),
+                        [SIGNED_FOR_HEADER]: signedForHost(),
+                    },
+                    body: JSON.stringify(subscription(secretBrowser)),
+                });
+                const text = await res.text();
+                let parsed: any;
+                try { parsed = JSON.parse(text); } catch { parsed = text; }
+                return { status: res.status, body: parsed };
+            },
+        },
+    ];
+    for (const mc of mwCases) {
+        const beforeId = (db.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM system_logs').get() as { m: number }).m;
+        const res = await mc.trigger();
+        const rowsAfter = db.prepare('SELECT level, category, message, metadata FROM system_logs WHERE id > ? ORDER BY id ASC').all(beforeId) as
+            { level: string; category: string; message: string; metadata: string | null }[];
+        const webPushRows = rowsAfter.filter((r) => r.message.includes('[WebPush] POST /api/web-push refused'));
+        const expectedMsg = `[WebPush] POST /api/web-push refused (${mc.expectedCode})`;
+        const leaked = secrets.filter((s) => webPushRows.some((r) => r.message.includes(s) || (r.metadata ?? '').includes(s)));
+        assert(
+            res.status === mc.expectedStatus
+            && webPushRows.length === 1
+            && webPushRows[0].level === 'INFO'
+            && webPushRows[0].category === 'SYS'
+            && webPushRows[0].message === expectedMsg
+            && webPushRows[0].metadata === null
+            && leaked.length === 0,
+            `POST /api/web-push middleware refusal ${mc.name}: logs once with code only, nothing secret (status=${res.status}, rows=${show(webPushRows)}, leaked=${show(leaked)})`,
+        );
+    }
+
+    // Per-minute budget: first WEB_PUSH_REFUSAL_LOG_BUDGET lines written one by one, the rest coalesced into one summary by code.
+    endWebPushRefusalLogMinute();
+    const budgetBeforeId = (db.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM system_logs').get() as { m: number }).m;
+    const t0 = Date.now();
+    for (let i = 0; i < WEB_PUSH_REFUSAL_LOG_BUDGET; i++) logWebPushPostRefusal('bad_subscription', t0);
+    for (let i = 0; i < 3; i++) logWebPushPostRefusal('no_open_request', t0 + 100);
+    for (let i = 0; i < 2; i++) logWebPushPostRefusal('http_401', t0 + 200);
+    const duringMinute = db.prepare('SELECT message FROM system_logs WHERE id > ? ORDER BY id ASC').all(budgetBeforeId) as { message: string }[];
+    const duringWebPush = duringMinute.filter((r) => r.message.includes('[WebPush] POST /api/web-push refused'));
+    assert(
+        duringWebPush.length === WEB_PUSH_REFUSAL_LOG_BUDGET,
+        `refusal log budget caps individual lines at ${WEB_PUSH_REFUSAL_LOG_BUDGET}/min (${duringWebPush.length})`,
+    );
+    endWebPushRefusalLogMinute();
+    const afterMinute = db.prepare('SELECT level, category, message FROM system_logs WHERE id > ? ORDER BY id ASC').all(budgetBeforeId) as
+        { level: string; category: string; message: string }[];
+    const summaryRow = afterMinute.find((r) => r.message.includes('more times in that minute'));
+    assert(
+        !!summaryRow
+        && summaryRow.level === 'INFO'
+        && summaryRow.category === 'SYS'
+        && summaryRow.message === '[WebPush] POST /api/web-push refused 5 more times in that minute (no_open_request=3, http_401=2)',
+        `suppressed refusals coalesce into one summary INFO line by code (${show(summaryRow)})`,
+    );
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

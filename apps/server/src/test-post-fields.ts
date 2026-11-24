@@ -22,6 +22,8 @@ import {
     POST_HOURS_MAX,
     POST_HOURS_MIN,
     POST_PRICE_TYPES,
+    allowedPostPriceTypes,
+    setPriceUnitsKgYearForTests,
     LISTING_TITLE_TOO_LONG,
     LISTING_DESCRIPTION_TOO_LONG,
     LISTING_CATEGORY_TOO_LONG,
@@ -136,10 +138,32 @@ assert.throws(() => {
     assertPostFields({ title: 'Title', price_c: 150.5 }, 'create');
 }, new RegExp(`The price must be a number of Beans from 0 to ${beansOf(POST_PRICE_MAX_C)}`), 'A price that is not whole hundredths throws');
 
-// priceType errors
+// priceType errors (honours PRICE_UNITS_KG_YEAR_BUILT rollout gate)
 assert.throws(() => {
     assertPostFields({ title: 'Title', priceType: 'invalid' }, 'create');
-}, new RegExp(`The price type must be one of ${POST_PRICE_TYPES.join(', ')}`), 'Invalid price type throws');
+}, new RegExp(`The price type must be one of ${allowedPostPriceTypes().join(', ')}`), 'Invalid price type throws');
+
+for (const gated of ['yearly', 'per_kg'] as const) {
+    assert.throws(() => {
+        assertPostFields({ title: 'Title', priceType: gated }, 'create');
+    }, new RegExp(`The price type must be one of ${allowedPostPriceTypes().join(', ')}`), `Gated ${gated} throws on create while PRICE_UNITS_KG_YEAR_BUILT is false`);
+    assert.throws(() => {
+        assertPostFields({ priceType: gated }, 'edit', { price_type: 'fixed' });
+    }, new RegExp(`The price type must be one of ${allowedPostPriceTypes().join(', ')}`), `Gated ${gated} throws on edit from fixed while PRICE_UNITS_KG_YEAR_BUILT is false`);
+    assert.doesNotThrow(() => {
+        assertPostFields({ title: 'Still kept', priceType: gated }, 'edit', { price_type: gated });
+    }, `Edit preserves an unchanged stored ${gated} price_type while gated off`);
+}
+setPriceUnitsKgYearForTests(true);
+try {
+    for (const unit of POST_PRICE_TYPES) {
+        assert.doesNotThrow(() => {
+            assertPostFields({ title: 'Title', priceType: unit }, 'create');
+        }, `All canonical POST_PRICE_TYPES (${unit}) pass create when opted in`);
+    }
+} finally {
+    setPriceUnitsKgYearForTests(null);
+}
 
 // Coordinate errors
 assert.throws(() => {

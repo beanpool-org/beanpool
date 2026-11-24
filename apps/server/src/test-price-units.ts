@@ -21,6 +21,7 @@ import {
     PRICE_UNITS, dealAmountFor, priceUnitDealKind, standingAuthorisationText, standingUnitOf, type PriceUnit,
 } from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { setPriceUnitsKgYearForTests } from './engine/post-fields.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
 const realFetch = globalThis.fetch;
@@ -112,8 +113,30 @@ async function main() {
     assert(infoRes.status === 200 && typeof info?.features === 'object' && !('priceUnitsKgYear' in info.features),
         `GET /api/community/info holds features.priceUnitsKgYear off until mobile builds ship (red if PRICE_UNITS_KG_YEAR_BUILT is true) (${JSON.stringify(info?.features?.priceUnitsKgYear)})`);
 
-    // 2. Exhaustive table: ALL units × (Offer, Need) × (create, edit, deal amount, release)
+    // 1b. Direct HTTP writes refuse `yearly` and `per_kg` while PRICE_UNITS_KG_YEAR_BUILT is false,
+    //     while preserving an already-stored `price_type` when an edit sends it back unchanged.
     const unitPrice = hc(10); // 10 Beans
+    const gatedBase = await post(alice, '/api/marketplace/posts', createBody('offer', 'fixed', alice, unitPrice));
+    const gatedBaseId = gatedBase.body?.post?.id as string;
+    for (const gated of ['yearly', 'per_kg'] as const) {
+        const refusedCreate = await post(alice, '/api/marketplace/posts', createBody('offer', gated, alice, unitPrice));
+        assert(refusedCreate.status === 400, `direct HTTP create refuses gated ${gated} while PRICE_UNITS_KG_YEAR_BUILT is false (${brief(refusedCreate)})`);
+        const refusedEdit = await post(alice, '/api/marketplace/posts/update', {
+            id: gatedBaseId, authorPublicKey: alice.pk, priceType: gated,
+        });
+        assert(refusedEdit.status === 400, `direct HTTP edit refuses changing fixed -> ${gated} while PRICE_UNITS_KG_YEAR_BUILT is false (${brief(refusedEdit)})`);
+    }
+    db.prepare(`UPDATE posts SET price_type = 'yearly' WHERE id = ?`).run(gatedBaseId);
+    const keepStoredYearly = await post(alice, '/api/marketplace/posts/update', {
+        id: gatedBaseId, authorPublicKey: alice.pk, title: 'Updated title, same yearly unit', priceType: 'yearly',
+    });
+    assert(keepStoredYearly.status === 200 && keepStoredYearly.body?.post?.priceType === 'yearly',
+        `direct HTTP edit preserves existing stored yearly price_type while gated off (${brief(keepStoredYearly)})`);
+
+    // 2. Exhaustive table: ALL units × (Offer, Need) × (create, edit, deal amount, release)
+    // Opt in explicitly for this suite so the full 8-unit lifecycle is verified end-to-end while rollout is held off.
+    setPriceUnitsKgYearForTests(true);
+    try {
     const bookedQty = 2;
     const confirmedQty = 1.5;
 
@@ -287,6 +310,9 @@ async function main() {
     const a = runLedgerAudit();
     assert(a.ok && a.drift === 0 && a.strandedEscrows === 0 && a.badBalances === 0 && nodeTotal() === 0,
         `ledger conserved after all price unit deals (drift=${a.drift}, stranded=${a.strandedEscrows}, total=${nodeTotal()})`);
+    } finally {
+        setPriceUnitsKgYearForTests(null);
+    }
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

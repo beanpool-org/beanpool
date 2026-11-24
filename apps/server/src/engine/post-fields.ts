@@ -24,7 +24,7 @@ import {
     LEND_MAX_DAYS_MAX, LEND_TERMS_LIMIT, REPLACEMENT_VALUE_LIMIT,
     POST_TAGS_CHARS, POST_TAGS_MAX, isTagId, postTagsOf, storedPostTags, word, wordsFor,
     FREE_TAGS_CHARS, FREE_TAGS_MAX, FREE_TAGS_TOO_LONG_TOGETHER, FREE_TAGS_TOO_MANY, freeTagRefusal, freeTagStored, freeTagsOf, storedFreeTags,
-    beans, isHundredths, PRICE_UNITS,
+    beans, isHundredths, PRICE_UNITS, type PriceUnit,
 } from '@beanpool/core';
 
 // The deal arithmetic is core's, so the apps show the figure the node holds (packages/beanpool-core/src/hundredths.ts).
@@ -51,6 +51,29 @@ export const POST_HOURS_MIN = 0.01;
  * engine/per-item.ts), per hour, per day, per week, per month, per year, per kilo.
  */
 export const POST_PRICE_TYPES = PRICE_UNITS;
+
+/**
+ * Held false until both app stores carry the phone build with `yearly` and `per_kg` labels and `priceUnitTakesQuantity`
+ * (mirroring config/node-profile.ts PER_ITEM_BUILT): a 1.4.7 phone renders both units with no unit suffix, mis-classifies
+ * `per_kg` as a quantity-multiplied unit, and prompts `TRUST COMMITMENT (HOURS)` on `yearly` offers while locking
+ * `hours × yearly_price` into escrow. Flip true alongside raising DEFAULT_MIN_APP_VERSION once both stores carry that build.
+ * Re-exported from config/node-profile.ts so post-fields stays free of db.ts.
+ */
+export const PRICE_UNITS_KG_YEAR_BUILT = false;
+
+let priceUnitsKgYearEnabledForTests: boolean | null = null;
+
+/** Test-only opt-in so test-price-units.ts and test-post-fields.ts can exercise the 8-unit lifecycle while gated off. */
+export function setPriceUnitsKgYearForTests(enabled: boolean | null): void {
+    priceUnitsKgYearEnabledForTests = enabled;
+}
+
+/** Price types accepted for new writes right now: omits `yearly` and `per_kg` until PRICE_UNITS_KG_YEAR_BUILT is flipped true. */
+export function allowedPostPriceTypes(): readonly PriceUnit[] {
+    return (priceUnitsKgYearEnabledForTests ?? PRICE_UNITS_KG_YEAR_BUILT)
+        ? POST_PRICE_TYPES
+        : POST_PRICE_TYPES.filter((p) => p !== 'yearly' && p !== 'per_kg');
+}
 
 /** The fields this checks, as a create or an edit carries them. An edit names only what it changes. */
 export interface PostFieldsIn {
@@ -127,6 +150,8 @@ export interface PostTextStored {
     tags?: unknown;
     /** The tags its author typed, as stored (posts.free_tags): one sent back by an edit is not new. */
     free_tags?: unknown;
+    /** Its price_type as stored (posts.price_type): sent back unchanged by an edit, kept even while gated off. */
+    price_type?: unknown;
 }
 
 /**
@@ -142,8 +167,15 @@ export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', 
     if (has('price_c') && !isListingPrice(fields.price_c)) {
         throw new Error('The price must be a number of Beans from 0 to 1000000');
     }
-    if (has('priceType') && !(POST_PRICE_TYPES as readonly unknown[]).includes(fields.priceType)) {
-        throw new Error(`The price type must be one of ${POST_PRICE_TYPES.join(', ')}`);
+    if (has('priceType')) {
+        const allowed = allowedPostPriceTypes();
+        const keptStored = mode === 'edit'
+            && stored.price_type !== undefined
+            && fields.priceType === stored.price_type
+            && (POST_PRICE_TYPES as readonly unknown[]).includes(fields.priceType);
+        if (!keptStored && !(allowed as readonly unknown[]).includes(fields.priceType)) {
+            throw new Error(`The price type must be one of ${allowed.join(', ')}`);
+        }
     }
     if (has('lat')) coordinate(fields.lat, 'Latitude', 90, mode);
     if (has('lng')) coordinate(fields.lng, 'Longitude', 180, mode);

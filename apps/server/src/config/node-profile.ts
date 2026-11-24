@@ -55,6 +55,7 @@ import { prepared, readWhileUnchanged, MAX_POST_PHOTOS } from '@beanpool/engine'
 import { askedPushSent, newEventPushSent } from '@beanpool/core';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { isPrivatePreview, privatePreviewAtBoot } from './private-preview.js';
+import { PRICE_UNITS_KG_YEAR_BUILT } from '../engine/post-fields.js';
 
 export type NodeProfile = 'local' | 'global';
 
@@ -499,11 +500,10 @@ const PER_ITEM_BUILT = true;
 
 /**
  * Held false until both app stores carry the phone build with `yearly` and `per_kg` labels and `priceUnitTakesQuantity`
- * (mirroring PER_ITEM_BUILT above): a 1.4.7 phone renders both units with no unit suffix and mis-classifies `per_kg`
- * as a quantity-multiplied unit on take-up and release. Flip true alongside raising DEFAULT_MIN_APP_VERSION once both
- * stores carry that mobile build.
+ * (mirroring PER_ITEM_BUILT above). Defined in engine/post-fields.ts so assertPostFields enforces the same rollout gate
+ * without importing db.ts; flip true there alongside raising DEFAULT_MIN_APP_VERSION once both stores carry that build.
  */
-export const PRICE_UNITS_KG_YEAR_BUILT = false;
+export { PRICE_UNITS_KG_YEAR_BUILT };
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
 const OVERRIDE_PREFIX = `${NODE_PROFILE_KEY}.`;

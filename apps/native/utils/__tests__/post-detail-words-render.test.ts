@@ -130,7 +130,8 @@ vi.mock('../profile-status', async (importOriginal) => ({ ...(await importOrigin
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => net.answer?.(name, args)));
 
-import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
+import { PRICE_UNITS, dealAmountFor, formatHundredths, needAnswerLine, pseudoLocalise, releaseAmount, setLanguage, type PriceUnit, type UiLang } from '@beanpool/core';
+import { confirmWorkedLabel, priceUnitWords, trustCommitmentCopy } from '../price-unit-words';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { ReviewModal } from '../../components/ReviewModal';
 import PostDetailScreen from '../../app/post/[id]';
@@ -640,5 +641,154 @@ describe('the page at 320 dp with 1.3× text: the fixed-width words shrink to fi
             expect(label!.getAttribute('data-lines')).toBe('1');
             expect(Number(label!.getAttribute('data-min-scale'))).toBeLessThanOrEqual(0.7);
         }
+    });
+});
+
+// Every listing price unit, taken up on the phone (#3378): the listing's page in English, its node calls answered here, so
+// each row says what a member SEES (the box over the quantity, the line with the total) and what the page SENDS (`hours`,
+// the quantity on the wire). A per-kilo listing asks for the weight as an hourly one asks for hours (Marty, 25 Nov 2026):
+// any decimals, Confirm off for nothing, 0 or a negative; the node refuses a weight past what a deal can be for (its own
+// words, as for hours). The web's twin is apps/pwa/src/pages/MarketplacePage.price-units.test.tsx, the node's
+// apps/server/src/test-price-units.ts.
+describe('every price unit, taken up on the phone: the box, the total, and what is sent', () => {
+    const UNIT_PRICE = 750;
+    const sentBy = () => {
+        const sent: Array<{ name: string; args: unknown[] }> = [];
+        return { sent, answer: (post: Record<string, unknown>) => {
+            const base = answers(post);
+            return (name: string, args: unknown[]) => {
+                if (name === 'acceptMarketplacePost' || name === 'requestMarketplacePost') { sent.push({ name, args }); return Promise.resolve({ success: true, transaction: { id: 'tx-new' } }); }
+                return base(name);
+            };
+        } };
+    };
+    async function openEn(post: Record<string, unknown>, answer: (name: string, args: unknown[]) => Promise<unknown> | undefined) {
+        net.answer = answer;
+        params.now = { id: String(post.id) };
+        await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(PostDetailScreen)) as any); });
+        await settle();
+    }
+    const pressEn = async (text: string) => {
+        const el = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.trim() === text || b.getAttribute('aria-label') === text);
+        expect(el, text).toBeTruthy();
+        await act(async () => { (el as HTMLElement).click(); });
+        await settle(4);
+    };
+    const confirmEl = () => Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Confirm') as HTMLButtonElement | undefined;
+    const type = async (input: HTMLInputElement, value: string) => {
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await settle(2);
+    };
+    /** The listing's take-up by the node's rules (core priceUnitDealKind, standingUnitForListing), as the web's table. */
+    const TAKE_UP: Record<PriceUnit, 'none' | 'each' | 'box' | 'standing'> = {
+        fixed: 'none', each: 'each', hourly: 'box', daily: 'box', weekly: 'standing', monthly: 'standing', yearly: 'box', per_kg: 'box',
+    };
+    const listingOf = (kind: 'offer' | 'need', unit: PriceUnit) => ({
+        id: `l-${kind}-${unit}`, type: kind, status: 'active', title: `Thing ${kind} ${unit}`, description: 'For the table test', category: 'food',
+        author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_c: UNIT_PRICE, price_type: unit, photos: JSON.stringify(['https://mullum.example/p/1.jpg']),
+        audience_scope: 'public', created_at: iso(now - 60 * 60_000), ...(unit === 'each' ? { units_left: 9 } : {}),
+    });
+
+    it('the table covers every unit the node knows', () => {
+        expect(Object.keys(TAKE_UP)).toEqual([...PRICE_UNITS]);
+    });
+
+    for (const unit of PRICE_UNITS) {
+        for (const kind of ['offer', 'need'] as const) {
+            if (unit === 'each' && kind === 'need') continue; // the node refuses a Need priced each (test-price-units)
+            const how = TAKE_UP[unit];
+            it(`${kind} priced ${unit}: ${how}`, async () => {
+                const post = listingOf(kind, unit);
+                const spy = sentBy();
+                await openEn(post, spy.answer(post));
+                expect(host.textContent).toContain(post.title);
+                if (priceUnitWords(unit)) expect(host.textContent).toContain(priceUnitWords(unit));
+                await pressEn(kind === 'offer' ? '🤝 Accept Offer' : '✋ I can do this');
+                const copy = trustCommitmentCopy(unit);
+                const box = host.querySelector(`input[aria-label="${copy.accessibilityLabel}"]`) as HTMLInputElement | null;
+                const wantName = kind === 'offer' ? 'acceptMarketplacePost' : 'requestMarketplacePost';
+                if (how === 'box') {
+                    expect(host.textContent).toContain(copy.label);
+                    expect(box?.value).toBe('1');
+                    await type(box!, '2.5');
+                    const weight = host.querySelector('[data-testid="weight-take-up-line"]');
+                    if (unit === 'per_kg') expect(weight?.textContent).toBe('2.5 kilos at 7.50 Beans a kilo comes to 18.75 Beans.');
+                    else expect(weight).toBeNull();
+                    if (kind === 'need') expect(host.querySelector('[data-testid="need-answer-line"]')?.textContent).toBe(needAnswerLine(dealAmountFor(UNIT_PRICE, 2.5), KOFI.callsign));
+                    await act(async () => { confirmEl()!.click(); });
+                    await settle(4);
+                    expect(spy.sent.map((s) => [s.name, s.args[0], s.args[2]])).toEqual([[wantName, post.id, 2.5]]);
+                } else if (how === 'standing') {
+                    expect(box).toBeNull();
+                    if (kind === 'need') {
+                        await act(async () => { confirmEl()!.click(); });
+                        await settle(4);
+                        expect(spy.sent.map((s) => [s.name, s.args[2]])).toEqual([[wantName, 1]]);
+                    } else {
+                        expect(confirmEl()).toBeUndefined();
+                        expect(spy.sent).toEqual([]);
+                    }
+                } else if (how === 'each') {
+                    expect(box).toBeNull();
+                    expect(host.textContent).not.toContain('TRUST COMMITMENT');
+                } else {
+                    expect(box).toBeNull();
+                    expect(host.textContent).not.toContain('TRUST COMMITMENT');
+                    expect(host.textContent).not.toContain('WEIGHT (KILOS)');
+                    if (kind === 'need') expect(host.querySelector('[data-testid="need-answer-line"]')?.textContent).toBe(needAnswerLine(UNIT_PRICE, KOFI.callsign));
+                    await act(async () => { confirmEl()!.click(); });
+                    await settle(4);
+                    expect(spy.sent.map((s) => [s.name, s.args[0], s.args[2]])).toEqual([[wantName, post.id, undefined]]);
+                }
+            });
+        }
+    }
+
+    for (const kind of ['offer', 'need'] as const) {
+        it(`${kind} per kilo: nothing, 0 or a negative weight leaves Confirm off and sends nothing; 0.25 kg is taken`, async () => {
+            const post = listingOf(kind, 'per_kg');
+            const spy = sentBy();
+            await openEn(post, spy.answer(post));
+            await pressEn(kind === 'offer' ? '🤝 Accept Offer' : '✋ I can do this');
+            const box = host.querySelector('input[aria-label="Weight in kilos"]') as HTMLInputElement;
+            for (const typed of ['', '0', '-2']) {
+                await type(box, typed);
+                await act(async () => { confirmEl()!.click(); });
+                await settle(2);
+                expect(host.querySelector('[data-testid="weight-take-up-line"]'), `"${typed}"`).toBeNull();
+            }
+            expect(spy.sent).toEqual([]);
+            await type(box, '0.25');
+            expect(host.querySelector('[data-testid="weight-take-up-line"]')?.textContent).toBe('0.25 kilos at 7.50 Beans a kilo comes to 1.87 Beans.');
+            await act(async () => { confirmEl()!.click(); });
+            await settle(4);
+            expect(spy.sent.map((s) => s.args[2])).toEqual([0.25]);
+        });
+    }
+
+    it('a per-kilo deal held in trust: the payer confirms the weight, the line follows it, and Release sends it', async () => {
+        const post = { ...listingOf('offer', 'per_kg'), id: 'p-kg-held', status: 'pending', pending_transaction_id: 'tx-kg' };
+        const tx = { id: 'tx-kg', post_id: 'p-kg-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, amount_c: 1875, hours: 2.5, created_at: iso(now - 60_000) };
+        const released: unknown[][] = [];
+        const base = answers(post, { first: (sql) => (sql.includes('marketplace_transactions') ? tx : null), all: (sql) => (sql.includes('marketplace_transactions') ? [tx] : []) });
+        await openEn(post, (name, args) => {
+            if (name === 'completeMarketplaceTransaction') { released.push(args); return Promise.resolve({ success: true }); }
+            return base(name);
+        });
+        await pressEn('✅ Release Beans');
+        expect(host.textContent).toContain(confirmWorkedLabel('per_kg'));
+        expect(confirmWorkedLabel('per_kg')).toBe('CONFIRM ACTUAL WEIGHT (KILOS)');
+        const box = Array.from(host.querySelectorAll('input')).find((i) => i.value === '2.5') as HTMLInputElement;
+        expect(box).toBeTruthy();
+        expect(host.textContent).toContain('Transferring 18.75 B to Kofi');
+        await type(box, '3');
+        expect(host.textContent).toContain(`Transferring ${formatHundredths(releaseAmount({ amount_c: 1875, hours: 2.5 }, 3, { priceType: 'per_kg' }))} B to Kofi`);
+        const release = host.querySelector('[data-testid="release-confirm"]') as HTMLButtonElement;
+        await act(async () => { release.click(); });
+        await settle(4);
+        expect(released.map((a) => a[2])).toEqual([3]);
     });
 });

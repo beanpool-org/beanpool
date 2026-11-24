@@ -156,6 +156,7 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import { darkColors, lightColors } from '../../constants/colors';
 import TreasuryDetailScreen from '../../app/treasury-detail';
 import TreasuryManageScreen from '../../app/treasury-manage';
+import { enterpriseWorkedCopy } from '../price-unit-words';
 
 const NODE = 'https://mullum.example';
 const NAME = 'Hill Bakery';
@@ -461,6 +462,40 @@ for (const dark of [false, true]) {
             expect(host.textContent).toContain('Select an active collaborator to move the leader role to:');
             expect(byLabel('Propose Zoe as leader')).not.toBeNull();
         });
+
+        // Every unit priced by quantity asks in its own unit (utils/price-unit-words.ts enterpriseWorkedCopy), per kilo the
+        // weight (Marty, 25 Nov 2026: "yes ask for the weight like hours"); 0 is refused in the unit's words, nothing sent;
+        // what is typed, any decimals, is the deal's final quantity (#3378).
+        for (const [unit, heading, invalid] of [
+            ['hourly', 'Confirm Hours Worked', 'Please enter a valid positive number of hours.'],
+            ['daily', 'Confirm Days Worked', 'Please enter a valid positive number of days.'],
+            ['weekly', 'Confirm Weeks Worked', 'Please enter a valid positive number of weeks.'],
+            ['monthly', 'Confirm Months Worked', 'Please enter a valid positive number of months.'],
+            ['yearly', 'Confirm Years Worked', 'Please enter a valid positive number of years.'],
+            ['per_kg', 'Confirm Weight (Kilos)', 'Please enter a valid positive number of kilos.'],
+        ] as const) {
+            it(`a release priced ${unit} asks "${heading}", refuses 0, and sends the quantity typed`, async () => {
+                const completed: unknown[][] = [];
+                const node = community({ getTreasuryDetail: leadsView({ activeDeals: [{ id: 'x9', post_id: 'p9', post_title: 'Duck eggs', peer_callsign: 'Mia', amount_c: 1875, action_required: 'pay', price_type: unit, hours: 2.5 }] }) });
+                net.answer = (name, args) => {
+                    if (name === 'treasuryComplete') { completed.push(args); return Promise.resolve({ success: true }); }
+                    return node(name, args);
+                };
+                await render('console');
+                await click(buttonWith('Release Payment (18.75 🫘)'), 'Release Payment');
+                expect(host.textContent).toContain(heading);
+                const box = byLabel(heading) as HTMLInputElement;
+                expect(box?.value).toBe('2.5');
+                const confirm = () => Array.from(host.querySelectorAll('button')).filter((b) => b.textContent === 'Release Payment').pop();
+                await type(box, '0', 'the quantity');
+                await click(confirm(), 'Release Payment in the prompt');
+                expect(alerts.said.slice(-2)).toEqual([enterpriseWorkedCopy(unit, 'Duck eggs').invalidTitle, invalid]);
+                expect(completed).toEqual([]);
+                await type(box, '3', 'the quantity');
+                await click(confirm(), 'Release Payment in the prompt');
+                expect(completed.map((a) => [a[1], a[2]])).toEqual([['x9', 3]]);
+            });
+        }
 
         // The node answers someone who keeps none of it, on no vote's roll, a 404 for its votes (decisions-engine.ts
         // getScopedDecisions): the console asks, and draws no Decisions block.

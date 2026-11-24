@@ -70,34 +70,48 @@ export function ChatWaitingPhoto({ uri, styles, disabled, onRemove }: { uri: str
  * loads and a clear fallback with Try again if it fails — never a blank full-screen overlay.
  */
 export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+    // Unmounting the inner modal on `!uri` resets retry/settled cleanly for always-mounted callers (e.g. GroupChatView)
+    // without a passive useEffect([uri]) that can race early cached/local onLoad events.
+    if (!uri) return null;
+    return <ChatPhotoViewerModal uri={uri} onClose={onClose} />;
+}
+
+function ChatPhotoViewerModal({ uri, onClose }: { uri: string; onClose: () => void }) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
-    const [retryKey, setRetryKey] = useState(0);
-    useEffect(() => {
-        setStatus('loading');
-        setRetryKey(0);
-    }, [uri]);
-    if (!uri) return null;
+    const [retry, setRetry] = useState<{ uri: string; n: number } | null>(null);
+    const [settled, setSettled] = useState<{ key: string; state: 'loaded' | 'error' } | null>(null);
+
+    const retryKey = retry && retry.uri === uri ? retry.n : 0;
+    const isRemote = /^https?:\/\//i.test(uri);
+    const requestUri = retryKey > 0 && isRemote
+        ? `${uri}${uri.includes('?') ? '&' : '?'}retry=${retryKey}`
+        : uri;
+    const attemptKey = `${requestUri}#${retryKey}`;
+    const status = settled?.key === attemptKey ? settled.state : 'loading';
+
     return (
         // Its own window: the close button takes the status-bar inset itself (a Dynamic Island's 59 pt is more than 50).
         <LightBarModal visible transparent animationType="fade" onRequestClose={onClose}>
-            <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('Dismiss full-size photo')}
-                style={{ flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' }}
-                onPress={onClose}
-            >
+            <View style={{ flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' }}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Dismiss full-size photo')}
+                    style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+                    onPress={onClose}
+                />
                 {status !== 'error' ? (
-                    <Image
-                        key={`${uri}#${retryKey}`}
-                        source={{ uri }}
-                        style={{ width: '100%', height: '100%' }}
-                        resizeMode="contain"
-                        onLoad={() => setStatus('loaded')}
-                        onError={() => setStatus('error')}
-                        accessibilityLabel={t('Full-size photo')}
-                    />
+                    <View pointerEvents="none" style={{ width: '100%', height: '100%' }}>
+                        <Image
+                            key={attemptKey}
+                            source={{ uri: requestUri, ...(retryKey > 0 && isRemote ? { cache: 'reload' as const } : {}) }}
+                            style={{ width: '100%', height: '100%' }}
+                            resizeMode="contain"
+                            onLoad={() => setSettled({ key: attemptKey, state: 'loaded' })}
+                            onError={() => setSettled({ key: attemptKey, state: 'error' })}
+                            accessibilityLabel={t('Full-size photo')}
+                        />
+                    </View>
                 ) : null}
                 {status === 'loading' ? (
                     <View
@@ -109,9 +123,11 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                     </View>
                 ) : null}
                 {status === 'error' ? (
-                    <Pressable
-                        onPress={(e) => e?.stopPropagation?.()}
+                    <View
+                        accessible={false}
                         accessibilityRole="alert"
+                        accessibilityLiveRegion="polite"
+                        onStartShouldSetResponder={() => true}
                         testID="photo-viewer-error"
                         style={{
                             maxWidth: 288,
@@ -132,14 +148,11 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                             testID="photo-viewer-retry"
                             accessibilityRole="button"
                             accessibilityLabel={t('Try again')}
-                            onPress={(e) => {
-                                e?.stopPropagation?.();
-                                setStatus('loading');
-                                setRetryKey((k) => k + 1);
-                            }}
+                            onPress={() => setRetry({ uri, n: retryKey + 1 })}
                             style={{
                                 minHeight: 48,
                                 minWidth: 120,
+                                maxWidth: '100%',
                                 paddingHorizontal: 20,
                                 paddingVertical: 10,
                                 borderRadius: 12,
@@ -152,7 +165,7 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                                 {t('Try again')}
                             </Text>
                         </Pressable>
-                    </Pressable>
+                    </View>
                 ) : null}
                 <Pressable
                     accessibilityRole="button"
@@ -165,7 +178,7 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                 >
                     <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                 </Pressable>
-            </Pressable>
+            </View>
         </LightBarModal>
     );
 }

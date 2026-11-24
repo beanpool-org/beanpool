@@ -8,7 +8,7 @@
  * blank full-screen overlay. Measured in light and dark at 320 dp × 1.3x font.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement, useEffect, type ReactNode } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as any).__DEV__ = false;
@@ -23,7 +23,10 @@ const h = vi.hoisted(() => ({
     /** Every expo-image render's props & callbacks for assertions. */
     images: [] as Array<{ uri: string; cachePolicy?: string; transition?: number; contentFit?: string; onLoad?: () => void; onError?: () => void }>,
     /** Every React Native Image render's callbacks (used by ChatPhotoViewer) for assertions. */
-    rnImages: [] as Array<{ uri: string; onLoad?: () => void; onError?: () => void }>,
+    rnImages: [] as Array<{ uri: string; cache?: string; onLoad?: () => void; onError?: () => void }>,
+    /** ScrollView imperative scrollTo calls & momentum end handlers. */
+    scrollTos: [] as Array<{ x?: number; y?: number; animated?: boolean }>,
+    scrollEnds: [] as Array<(e: { nativeEvent: { contentOffset: { x: number; y: number } } }) => void>,
 }));
 
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), navigate: vi.fn(), canGoBack: vi.fn(() => true) }));
@@ -62,9 +65,10 @@ vi.mock('react-native', async () => {
     const flat = (s: unknown): Record<string, any> => Object.assign({}, ...[s].flat(4).filter((x) => x && typeof x === 'object'));
     const roles: Record<string, string> = { button: 'button', link: 'link', header: 'heading', alert: 'alert' };
     const host = (tag: string) => forwardRef(function Host(props: Record<string, any>, ref: any) {
-        useImperativeHandle(ref, () => ({ scrollTo: () => {} }));
-        const { children, onPress, onLayout, accessibilityLabel, accessibilityRole, testID, disabled } = props;
+        useImperativeHandle(ref, () => ({ scrollTo: (opts: any) => { h.scrollTos.push(opts); } }));
+        const { children, onPress, onLayout, onMomentumScrollEnd, accessibilityLabel, accessibilityRole, accessibilityLiveRegion, accessible, onStartShouldSetResponder, testID, disabled } = props;
         effect(() => { onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 288, height: 220 } } }); }, []);
+        if (onMomentumScrollEnd) h.scrollEnds.push(onMomentumScrollEnd);
         const attrs: Record<string, unknown> = {
             'data-style': JSON.stringify(flat(typeof props.style === 'function' ? props.style({ pressed: false }) : props.style)),
         };
@@ -76,6 +80,9 @@ vi.mock('react-native', async () => {
         }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
+        if (accessibilityLiveRegion) attrs['aria-live'] = accessibilityLiveRegion;
+        if (typeof accessible === 'boolean') attrs['data-accessible'] = String(accessible);
+        if (onStartShouldSetResponder) attrs['data-responder'] = String(Boolean(onStartShouldSetResponder()));
         if (testID) attrs['data-testid'] = testID;
         return el(tag, attrs, children);
     });
@@ -88,13 +95,14 @@ vi.mock('react-native', async () => {
         ScrollView: host('div'),
         Image: ({ source, style, accessibilityLabel, resizeMode, onLoad, onError }: any) => {
             const uri: string = source?.uri ?? '';
+            const cache: string | undefined = source?.cache;
             effect(() => {
-                h.rnImages.push({ uri, onLoad, onError });
+                h.rnImages.push({ uri, cache, onLoad, onError });
                 if (!h.autoSettle || !uri) return;
                 if (h.failUris.has(uri)) onError?.();
                 else onLoad?.();
             }, [uri]);
-            return el('img', { 'data-src': uri, 'data-fit': resizeMode ?? '', 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(flat(style)) });
+            return el('img', { 'data-src': uri, 'data-cache': cache ?? '', 'data-fit': resizeMode ?? '', 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(flat(style)) });
         },
         ActivityIndicator: ({ accessibilityLabel }: any) => el('span', { 'data-testid': 'spinner', 'aria-label': accessibilityLabel }, '…'),
         Modal: ({ visible, children }: any) => (visible ? el('div', { 'data-testid': 'modal' }, children) : null),
@@ -138,7 +146,9 @@ import { layOut } from './yoga-dom-layout';
 const WHERE = 'Riverside district: Northgate, Eastwood, Lowtown, surrounds';
 const PHOTO_A = 'https://valley.example.org/api/marketplace/posts/nr/photos/0?v=1&k=AAA';
 const PHOTO_B = 'https://valley.example.org/api/marketplace/posts/nr/photos/1?v=1&k=BBB';
+const PHOTO_C = 'https://valley.example.org/api/marketplace/posts/nr/photos/2?v=1&k=CCC';
 const PHOTO_A_V2 = 'https://valley.example.org/api/marketplace/posts/nr/photos/0?v=2&k=AAA2';
+const PHOTO_B_V2 = 'https://valley.example.org/api/marketplace/posts/nr/photos/1?v=2&k=BBB2';
 
 function makePage(photos: string[] = []): KnowledgePage {
     return {
@@ -174,6 +184,8 @@ beforeEach(() => {
     h.autoSettle = true;
     h.images.length = 0;
     h.rnImages.length = 0;
+    h.scrollTos.length = 0;
+    h.scrollEnds.length = 0;
     vi.clearAllMocks();
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -285,22 +297,130 @@ describe.each(['light', 'dark'] as const)('Learn page Where: + photos (%s, 320 d
         expect(layout.height(retry)).toBeGreaterThanOrEqual(48);
         expect(layout.box(errBox).left + layout.box(errBox).width).toBeLessThanOrEqual(320);
 
-        // Now the network recovers: tapping Try again retries without dismissing the modal.
+        // Now the network recovers: tapping Try again retries without dismissing the modal, cache-busting remote http(s) URLs.
         h.failUris.delete(PHOTO_A);
         await act(async () => { retry.click(); });
         await settle();
         expect(onClose).not.toHaveBeenCalled();
         expect(q('photo-viewer-error')).toBeNull();
-        expect(q('modal')?.querySelector('img[aria-label="Full-size photo"]')?.getAttribute('data-src')).toBe(PHOTO_A);
+        const retriedImg = q('modal')!.querySelector('img[aria-label="Full-size photo"]')!;
+        expect(retriedImg.getAttribute('data-src')).toBe(`${PHOTO_A}&retry=1`);
+        expect(retriedImg.getAttribute('data-cache')).toBe('reload');
     });
 });
 
-describe('PhotoCarousel recovery when a newer URL arrives', () => {
+describe('ChatPhotoViewer accessibility, state transitions, and retry caching', () => {
+    it('does not nest interactive Pressables and exposes polite live alert on error card', async () => {
+        h.failUris.add(PHOTO_A);
+        await show(createElement(ChatPhotoViewer, { uri: PHOTO_A, onClose: vi.fn() }));
+        const modal = q('modal')!;
+        const dismiss = modal.querySelector('button[aria-label="Dismiss full-size photo"]')!;
+        const close = modal.querySelector('button[aria-label="Close photo"]')!;
+        const errBox = q('photo-viewer-error')!;
+        const retry = q('photo-viewer-retry')!;
+        expect(dismiss.contains(close)).toBe(false);
+        expect(dismiss.contains(errBox)).toBe(false);
+        expect(dismiss.contains(retry)).toBe(false);
+        expect(errBox.tagName).toBe('DIV');
+        expect(errBox.getAttribute('role')).toBe('alert');
+        expect(errBox.getAttribute('aria-live')).toBe('polite');
+        expect(errBox.getAttribute('data-accessible')).toBe('false');
+        expect(errBox.getAttribute('data-responder')).toBe('true');
+        expect(errBox.contains(retry)).toBe(true);
+    });
+
+    it('derives status by attemptKey (no useEffect reset race on uri switch) and resets cleanly across close/reopen', async () => {
+        h.failUris.add(PHOTO_A);
+        await show(createElement(ChatPhotoViewer, { uri: PHOTO_A, onClose: vi.fn() }));
+        expect(q('photo-viewer-error')).toBeTruthy();
+
+        // Switch directly to a working URI while mounted: immediately loads cleanly without overwriting onLoad back to loading.
+        await show(createElement(ChatPhotoViewer, { uri: PHOTO_B, onClose: vi.fn() }));
+        expect(q('photo-viewer-error')).toBeNull();
+        expect(q('photo-viewer-loading')).toBeNull();
+        expect(q('modal')?.querySelector('img[aria-label="Full-size photo"]')?.getAttribute('data-src')).toBe(PHOTO_B);
+
+        // Close (uri: null) and reopen PHOTO_A after recovery: starts fresh instead of keeping stale error state.
+        await show(createElement(ChatPhotoViewer, { uri: null, onClose: vi.fn() }));
+        expect(q('modal')).toBeNull();
+        h.failUris.delete(PHOTO_A);
+        await show(createElement(ChatPhotoViewer, { uri: PHOTO_A, onClose: vi.fn() }));
+        expect(q('photo-viewer-error')).toBeNull();
+        expect(q('photo-viewer-loading')).toBeNull();
+        expect(q('modal')?.querySelector('img[aria-label="Full-size photo"]')?.getAttribute('data-src')).toBe(PHOTO_A);
+    });
+
+    it('leaves local file:// and data: URIs untouched on Try again (no query param or reload cache)', async () => {
+        const localUri = 'file:///cache/chat-photo.jpg';
+        h.failUris.add(localUri);
+        await show(createElement(ChatPhotoViewer, { uri: localUri, onClose: vi.fn() }));
+        expect(q('photo-viewer-error')).toBeTruthy();
+        h.failUris.delete(localUri);
+        await act(async () => { q('photo-viewer-retry')!.click(); });
+        await settle();
+        const img = q('modal')!.querySelector('img[aria-label="Full-size photo"]')!;
+        expect(img.getAttribute('data-src')).toBe(localUri);
+        expect(img.getAttribute('data-cache')).toBe('');
+    });
+});
+
+describe('PhotoCarousel recovery, key stability, and scroll alignment', () => {
     it('tries again cleanly when a sync brings a fresh versioned URL after an earlier URL failed', async () => {
         h.failUris.add(PHOTO_A);
         await show(createElement(PhotoCarousel, { photos: [PHOTO_A], height: 220 }));
         expect(host.querySelectorAll('img')).toHaveLength(0);
         await show(createElement(PhotoCarousel, { photos: [PHOTO_A_V2], height: 220 }));
         expect(Array.from(host.querySelectorAll('img')).map((i) => i.getAttribute('data-src'))).toEqual([PHOTO_A_V2]);
+    });
+
+    it('keys slides by pre-filter origIndex so dropping an earlier failed photo preserves surviving slide DOM nodes', async () => {
+        h.autoSettle = false;
+        await show(createElement(PhotoCarousel, { photos: [PHOTO_A, PHOTO_B, PHOTO_C], height: 220, onOpen: vi.fn() }));
+        const before = Array.from(host.querySelectorAll('img'));
+        expect(before).toHaveLength(3);
+        const failA = h.images.find((entry) => entry.uri === PHOTO_A)!;
+        await act(async () => { failA.onError?.(); });
+        await settle();
+        const after = Array.from(host.querySelectorAll('img'));
+        expect(after).toHaveLength(2);
+        expect(after[0]).toBe(before[1]);
+        expect(after[1]).toBe(before[2]);
+    });
+
+    it('keeps the user on the same slide and realigns ScrollView when an earlier slide fails while viewing a later slide', async () => {
+        h.autoSettle = false;
+        await show(createElement(PhotoCarousel, { photos: [PHOTO_A, PHOTO_B, PHOTO_C], height: 220, onOpen: vi.fn() }));
+        // Swipe to slide 2 (PHOTO_B, index 1).
+        await act(async () => {
+            h.scrollEnds[h.scrollEnds.length - 1]({ nativeEvent: { contentOffset: { x: 288, y: 0 } } });
+        });
+        await settle();
+        expect(host.textContent).toContain('2 / 3');
+
+        h.scrollTos.length = 0;
+        const failA = h.images.find((entry) => entry.uri === PHOTO_A)!;
+        await act(async () => { failA.onError?.(); });
+        await settle();
+        expect(host.textContent).toContain('1 / 2');
+        expect(h.scrollTos).toContainEqual({ x: 0, animated: false });
+    });
+
+    it('resets index to 0 when all slides fail while viewing slide 2 so fresh URLs start on 1 / 2', async () => {
+        h.autoSettle = false;
+        await show(createElement(PhotoCarousel, { photos: [PHOTO_A, PHOTO_B], height: 220, onOpen: vi.fn() }));
+        await act(async () => {
+            h.scrollEnds[h.scrollEnds.length - 1]({ nativeEvent: { contentOffset: { x: 288, y: 0 } } });
+        });
+        await settle();
+        expect(host.textContent).toContain('2 / 2');
+
+        const failA = h.images.find((entry) => entry.uri === PHOTO_A)!;
+        const failB = h.images.find((entry) => entry.uri === PHOTO_B)!;
+        await act(async () => { failA.onError?.(); failB.onError?.(); });
+        await settle();
+        expect(host.querySelectorAll('img')).toHaveLength(0);
+
+        await show(createElement(PhotoCarousel, { photos: [PHOTO_A_V2, PHOTO_B_V2], height: 220, onOpen: vi.fn() }));
+        expect(host.textContent).toContain('1 / 2');
     });
 });

@@ -26,7 +26,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, setNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { startP2P } from './p2p.js';
@@ -36,6 +36,9 @@ import {
     encryptPushPayload, vapidAuthorization, ensureVapidKey, readVapidKey, vapidKeyPath, isPushServiceEndpoint, pushTtl,
     _setWebPushFetchForTests, _webPushQueueForTests, sendWebPush, VAPID_KEY_FILE, WEB_PUSH_RULES,
 } from './services/web-push.js';
+import { recoverySealKeyPath } from './services/recovery-seal-key.js';
+import { MEMBER_BROWSER_RULES } from './engine/web-push-subscriptions.js';
+import { createWebPushRoutes } from './routes/web-push.js';
 import { BUNDLED_FILES } from './services/takeover-envelope.js';
 import { tidyKnocks, joinAnsweredTtl } from './engine/knocks.js';
 import { verifyPushNotice, PUSH_NOTICE_KINDS } from '@beanpool/core';
@@ -356,6 +359,157 @@ async function main(): Promise<void> {
     const outcomes = await Promise.all(many);
     assert(firstWave.inFlight === WEB_PUSH_RULES.inFlight && firstWave.waiting === 12 && most === WEB_PUSH_RULES.inFlight && outcomes.every((o) => o === 'sent'),
         `at most ${WEB_PUSH_RULES.inFlight} requests at once, the rest in line, all sent in the end (${show(firstWave)}, most ${most})`);
+
+    // ── 11. Every POST /api/web-push refusal logs one INFO line with its reason code only and nothing secret ─────────
+    const secretToken = `secret-ep-${crypto.randomBytes(8).toString('hex')}`;
+    const secretBrowser = newBrowser(`https://fcm.googleapis.com/fcm/send/${secretToken}`);
+    const stranger = newId('Stranger');
+    const rateLimitedMember = newId('RateLimited');
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by) VALUES (?, ?, 'active', ?, ?)`)
+        .run(rateLimitedMember.pk, rateLimitedMember.name, new Date().toISOString(), owner.pk);
+    for (let i = 0; i < MEMBER_BROWSER_RULES.newBrowsersPerDay; i++) {
+        const r = await call(rateLimitedMember, 'POST', '/api/web-push', subscription(newBrowser()));
+        if (r.status !== 201) throw new Error(`rate-limit setup ${i}: ${r.status} ${show(r.body)}`);
+    }
+
+    const secrets = [
+        owner.pk, owner.pk.slice(0, 8),
+        stranger.pk, stranger.pk.slice(0, 8),
+        rateLimitedMember.pk, rateLimitedMember.pk.slice(0, 8),
+        made.publicKeyText,
+        secretBrowser.endpoint, secretToken, secretBrowser.p256dh, secretBrowser.auth,
+        'secret-bad-endpoint-leak',
+    ];
+    const webPushMw = createWebPushRoutes({} as any).routes();
+    const invokeDirect = async (opts: { actor?: string; host: string; body: unknown }): Promise<Res> => {
+        const ctx: any = {
+            method: 'POST',
+            path: '/api/web-push',
+            host: opts.host,
+            state: opts.actor ? { actor: opts.actor } : {},
+            requestBody: opts.body,
+            status: 404,
+            body: undefined,
+            set() {},
+        };
+        await webPushMw(ctx, async () => {});
+        return { status: ctx.status, body: ctx.body };
+    };
+
+    const refusalCases: { name: string; expectedStatus: number; expectedCode: string; trigger: () => Promise<Res> }[] = [
+        {
+            name: '401 unsigned',
+            expectedStatus: 401,
+            expectedCode: 'unsigned',
+            trigger: () => invokeDirect({ host: 'node.example', body: subscription(secretBrowser) }),
+        },
+        {
+            name: '503 standby',
+            expectedStatus: 503,
+            expectedCode: 'standby',
+            trigger: async () => {
+                setNodeRole('standby');
+                try { return await call(owner, 'POST', '/api/web-push', subscription(secretBrowser)); }
+                finally { setNodeRole('primary'); }
+            },
+        },
+        {
+            name: '400 bad_subscription',
+            expectedStatus: 400,
+            expectedCode: 'bad_subscription',
+            trigger: () => call(owner, 'POST', '/api/web-push', {
+                subscription: { endpoint: 'https://evil.example/secret-bad-endpoint-leak', keys: { p256dh: secretBrowser.p256dh, auth: secretBrowser.auth } },
+            }),
+        },
+        {
+            name: '404 feature_off',
+            expectedStatus: 404,
+            expectedCode: 'feature_off',
+            trigger: async () => {
+                db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('nodeProfile.knocks', 'false')").run();
+                try { return await call(stranger, 'POST', '/api/web-push', subscription(secretBrowser)); }
+                finally { db.prepare("DELETE FROM node_config WHERE key = 'nodeProfile.knocks'").run(); }
+            },
+        },
+        {
+            name: '403 no_open_request',
+            expectedStatus: 403,
+            expectedCode: 'no_open_request',
+            trigger: () => call(stranger, 'POST', '/api/web-push', subscription(secretBrowser)),
+        },
+        {
+            name: '400 bad_host',
+            expectedStatus: 400,
+            expectedCode: 'bad_host',
+            trigger: () => invokeDirect({ actor: owner.pk, host: 'bad host!', body: subscription(secretBrowser) }),
+        },
+        {
+            name: '503 no_key',
+            expectedStatus: 503,
+            expectedCode: 'no_key',
+            trigger: async () => {
+                const kp = vapidKeyPath();
+                const backup = fs.readFileSync(kp);
+                fs.writeFileSync(kp, 'not-a-valid-pem-key', { mode: 0o600 });
+                try { return await call(owner, 'POST', '/api/web-push', subscription(secretBrowser)); }
+                finally { fs.writeFileSync(kp, backup, { mode: 0o600 }); }
+            },
+        },
+        {
+            name: '429 key_rate_limited',
+            expectedStatus: 429,
+            expectedCode: 'key_rate_limited',
+            trigger: () => call(rateLimitedMember, 'POST', '/api/web-push', subscription(secretBrowser)),
+        },
+        {
+            name: '503 no_seal_key',
+            expectedStatus: 503,
+            expectedCode: 'no_seal_key',
+            trigger: async () => {
+                const sp = recoverySealKeyPath();
+                const bak = `${sp}.bak`;
+                fs.renameSync(sp, bak);
+                try { return await call(owner, 'POST', '/api/web-push', subscription(secretBrowser)); }
+                finally { fs.renameSync(bak, sp); }
+            },
+        },
+    ];
+
+    for (const rc of refusalCases) {
+        const beforeId = (db.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM system_logs').get() as { m: number }).m;
+        const consoleLines: string[] = [];
+        const realLog = console.log;
+        console.log = (...args: unknown[]) => { consoleLines.push(args.map(String).join(' ')); };
+        let res: Res;
+        try {
+            res = await rc.trigger();
+        } finally {
+            console.log = realLog;
+        }
+        const rowsAfter = db.prepare('SELECT level, category, message, metadata FROM system_logs WHERE id > ? ORDER BY id ASC').all(beforeId) as
+            { level: string; category: string; message: string; metadata: string | null }[];
+        const webPushRows = rowsAfter.filter((r) => r.message.includes('[WebPush] POST /api/web-push refused'));
+        const expectedMsg = `[WebPush] POST /api/web-push refused (${rc.expectedCode})`;
+        const webPushConsole = consoleLines.filter((l) => l.includes('[WebPush] POST /api/web-push refused'));
+        const leaked = secrets.filter((s) =>
+            webPushRows.some((r) => r.message.includes(s) || (r.metadata ?? '').includes(s))
+            || webPushConsole.some((l) => l.includes(s))
+        );
+        assert(
+            res.status === rc.expectedStatus
+            && res.body?.code === rc.expectedCode
+            && webPushRows.length === 1
+            && webPushRows[0].level === 'INFO'
+            && webPushRows[0].category === 'SYS'
+            && webPushRows[0].message === expectedMsg
+            && webPushRows[0].metadata === null
+            && webPushConsole.length === 1
+            && webPushConsole[0].includes('[INFO]')
+            && webPushConsole[0].includes(expectedMsg)
+            && leaked.length === 0,
+            `POST /api/web-push refusal ${rc.name}: logs one INFO line with code only, nothing secret (status=${res.status}, code=${res.body?.code}, rows=${show(webPushRows)}, leaked=${show(leaked)})`,
+        );
+    }
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

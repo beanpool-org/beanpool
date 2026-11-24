@@ -512,7 +512,7 @@ describe('the tap on Home\'s row (tellMeAtHome, global yes Y2)', () => {
         vi.mocked(signedFetchAt).mockClear();
         try {
             const r = await tellMeAtHome(RIVERSIDE, identity, 'en', env({}));
-            expect(r).toMatchObject({ ok: false, reason: 'failed' });
+            expect(r).toMatchObject({ ok: false, reason: 'key' });
             expect(register).toHaveBeenCalledWith('/sw.js', { scope: '/app/knock/riverside.example/' });
             expect(signedFetchAt).not.toHaveBeenCalled();
         } finally {

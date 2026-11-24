@@ -408,7 +408,7 @@ describe('other callers sharing these steps (TellMeCard, tellMeAtHome, keepWebPu
     it('TellMeCard on the waiting page shows browser-side and node-code sentences, and falls back to TELL_ME_WORDS.failed on unknown 500', async () => {
         const { registration } = setupHappyBrowser();
         registration.pushManager.subscribe = vi.fn(async () => { throw new Error(RAW_SECRET_ERR); });
-        render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Byron', subscribe: tellMeWhenTheyAnswer }));
+        render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Riverside', subscribe: tellMeWhenTheyAnswer }));
         fireEvent.click(screen.getByTestId('tell-me'));
         const off = await screen.findByTestId('tell-me-off');
         expect(off.textContent).toBe(WEB_PUSH_FAILURE_WORDS.browser);
@@ -417,14 +417,14 @@ describe('other callers sharing these steps (TellMeCard, tellMeAtHome, keepWebPu
 
         setupHappyBrowser();
         vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR, code: 'no_open_request' }), { status: 403 }));
-        render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Byron', subscribe: tellMeWhenTheyAnswer }));
+        render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Riverside', subscribe: tellMeWhenTheyAnswer }));
         fireEvent.click(screen.getByTestId('tell-me'));
         expect((await screen.findByTestId('tell-me-off')).textContent).toBe(WEB_PUSH_FAILURE_WORDS.noOpenRequest);
         cleanup();
 
         setupHappyBrowser();
         vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR }), { status: 500 }));
-        render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Byron', subscribe: tellMeWhenTheyAnswer }));
+        render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Riverside', subscribe: tellMeWhenTheyAnswer }));
         fireEvent.click(screen.getByTestId('tell-me'));
         expect((await screen.findByTestId('tell-me-off')).textContent).toBe(TELL_ME_WORDS.failed);
     });

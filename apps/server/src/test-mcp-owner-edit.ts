@@ -370,7 +370,7 @@ async function main(): Promise<void> {
         const offAgain = await edit({ post_id: offerId, repeatable: false, cash_also_needed: false });
         assert(!offAgain.isError && row(offerId)?.repeatable === 0 && row(offerId)?.cash_also_needed === 0, `and false takes them off (${errorText(offAgain) || 'ok'})`);
         const flagText = await edit({ post_id: offerId, repeatable: 'false' });
-        const badType = await edit({ post_id: offerId, price_type: 'yearly' });
+        const badType = await edit({ post_id: offerId, price_type: 'per_litre' });
         assert(flagText.isError === true && /repeatable is true or false/.test(errorText(flagText)) && row(offerId)?.repeatable === 0 && badType.isError === true && /price type must be one of/.test(errorText(badType)) && row(offerId)?.price_type === 'hourly',
             `text for a flag and a made-up price type → refused in words, unchanged (${errorText(flagText)} | ${errorText(badType)})`);
 

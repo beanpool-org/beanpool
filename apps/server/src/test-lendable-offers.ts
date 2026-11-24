@@ -309,8 +309,8 @@ async function main(): Promise<void> {
     }
     const noUnit = await offer(dave, { title: 'Garden help, one fee', price_c: hc(3) });
     assert(noUnit.status === 200 && postRow(noUnit.body.post.id).price_type === 'fixed', 'a listing that names no unit is one fee');
-    const badUnit = await offer(dave, { title: 'Garden help yearly', price_c: hc(3), priceType: 'yearly' });
-    assert(badUnit.status >= 400 && badUnit.status < 500, `a unit that isn't one of the five is refused, not made one fee (${brief(badUnit)})`);
+    const badUnit = await offer(dave, { title: 'Garden help unknown unit', price_c: hc(3), priceType: 'per_litre' });
+    assert(badUnit.status >= 400 && badUnit.status < 500, `an unknown unit is refused, not made one fee (${brief(badUnit)})`);
 
     // ── 2. lendable=1 ────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 2. lendable=1');

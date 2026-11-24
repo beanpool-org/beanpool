@@ -298,7 +298,7 @@ describe('the host', () => {
             // "Put this in your shop" is a field the composer takes (web shops, #2484); lendable, availableFrom, photos stay dropped.
             priceType: 'daily', repeatable: true, cashAlsoNeeded: false, shop: true,
         });
-        expect(composerDraft('offer', { title: 'Jam', category: 'not-a-category', credits: -2, priceType: 'yearly' }))
+        expect(composerDraft('offer', { title: 'Jam', category: 'not-a-category', credits: -2, priceType: 'per_litre' }))
             .toMatchObject({ category: null, credits: null, priceType: null });
         expect(composerDraft('offer', { title: 'Jam', credits: 2.5 }).credits).toBeNull();
         // A Need carries no price.

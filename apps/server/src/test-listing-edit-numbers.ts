@@ -147,7 +147,7 @@ async function main() {
         ['description 42 (a number)', { description: 42 }],
         ['category 7 (a number)', { category: 7 }],
         ['category "" (empty)', { category: '' }],
-        ['priceType "yearly"', { priceType: 'yearly' }],
+        ['priceType "per_litre"', { priceType: 'per_litre' }],
         ['priceType 1', { priceType: 1 }],
         ['lat "x"', { lat: 'x' }],
         ['lat 91', { lat: 91 }],

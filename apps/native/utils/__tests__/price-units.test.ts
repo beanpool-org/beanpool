@@ -110,8 +110,8 @@ describe('phone labels for every price unit (old and new)', () => {
         const treasuryPost = read('../../app/treasury-post.tsx');
         const treasuryManage = read('../../app/treasury-manage.tsx');
 
-        expect(newListing).toContain("case 'yearly': return t('/ Yr'");
-        expect(newListing).toContain("case 'per_kg': return t('/ kg'");
+        expect(newListing).toContain("yearly: t('/ Yr'");
+        expect(newListing).toContain("per_kg: t('/ kg'");
         expect(postDetail).toContain("case 'yearly': return t('/ Yr'");
         expect(postDetail).toContain("case 'per_kg': return t('/ kg'");
         expect(postDetail).toContain('priceUnitTakesQuantity(post.price_type)');

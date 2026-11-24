@@ -61,7 +61,7 @@ export default function GroupPostScreen() {
     const [tags, setTags] = useState<string[]>([]);
     const [freeTags, setFreeTags] = useState<string[]>([]);
     const [credits, setCredits] = useState('');
-    const [priceType, setPriceType] = useState<string>('fixed');
+    const [pickedPriceType, setPickedPriceType] = useState<string>('fixed');
     // On a community with Beans off (the worldwide one) a post has no price: no field, and it goes up at 0 Beans.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
@@ -220,13 +220,13 @@ export default function GroupPostScreen() {
     };
 
     const offeredPriceTypes = priceUnitsOffered(nodeProfile?.features, type).filter((u): u is Exclude<PriceUnit, 'each'> => u !== 'each');
-    const activePriceType: Exclude<PriceUnit, 'each'> = (offeredPriceTypes as readonly string[]).includes(priceType)
-        ? (priceType as Exclude<PriceUnit, 'each'>)
+    const priceType: Exclude<PriceUnit, 'each'> = (offeredPriceTypes as readonly string[]).includes(pickedPriceType)
+        ? (pickedPriceType as Exclude<PriceUnit, 'each'>)
         : 'fixed';
 
     const cyclePriceType = () => {
-        const idx = offeredPriceTypes.indexOf(activePriceType);
-        setPriceType(offeredPriceTypes[(idx + 1) % offeredPriceTypes.length]);
+        const idx = offeredPriceTypes.indexOf(priceType);
+        setPickedPriceType(offeredPriceTypes[(idx + 1) % offeredPriceTypes.length]);
     };
 
     const handleSubmit = async () => {
@@ -266,7 +266,7 @@ export default function GroupPostScreen() {
                 title: title.trim(),
                 description: description.trim(),
                 category,
-                ...groupPostPrice(credits, activePriceType, nodeProfile?.features),
+                ...groupPostPrice(credits, priceType, nodeProfile?.features),
                 photos: photos.length > 0 ? JSON.stringify(photos) : null,
                 repeatable: repeatable ? 1 : 0,
                 cash_also_needed: cashAlsoNeeded ? 1 : 0,
@@ -410,10 +410,10 @@ export default function GroupPostScreen() {
                                 style={styles.priceTypeBtn}
                                 onPress={cyclePriceType}
                                 accessibilityRole="button"
-                                accessibilityLabel={t('Price unit: {unit}', { unit: priceUnit(activePriceType) })}
+                                accessibilityLabel={t('Price unit: {unit}', { unit: priceUnit(priceType) })}
                                 accessibilityHint={t('Cycles price unit')}
                             >
-                                <Text style={styles.priceTypeText}>{priceUnit(activePriceType)}</Text>
+                                <Text style={styles.priceTypeText}>{priceUnit(priceType)}</Text>
                             </Pressable>
                         </View>
                     </View>

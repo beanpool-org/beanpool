@@ -36,7 +36,7 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { StackActions, useRoute } from '@react-navigation/native';
 import {
     POST_TYPE_LINES, carryTotalToEach, feeOf, formatHundredths, parseHundredths, perItemCreateFields, perItemFeeLine, perItemLines,
-    isPriceUnit, priceUnitsOffered, t, upperCase, type PerItemField,
+    isPriceUnit, priceUnitsOffered, t, upperCase, type PerItemField, type PriceUnit,
 } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getReachablePeers } from '../utils/db';
@@ -1045,21 +1045,8 @@ export default function NewListingScreen() {
                                 />
                                 <Pressable accessibilityRole="button" onPress={nextPostUnit} style={styles.priceTypeBtn}>
                                     <Text style={styles.priceTypeBtnText}>{(() => {
-                                        if (!isPriceUnit(postPriceType)) return t('Total', undefined, 'price unit');
-                                        switch (postPriceType) {
-                                            case 'fixed': return t('Total', undefined, 'price unit');
-                                            case 'each': return perItemLines.unitEach();
-                                            case 'hourly': return t('/ Hr', undefined, 'price per hour');
-                                            case 'daily': return t('/ Dy', undefined, 'price per day');
-                                            case 'weekly': return t('/ Wk', undefined, 'price per week');
-                                            case 'monthly': return t('/ Mo', undefined, 'price per month');
-                                            case 'yearly': return t('/ Yr', undefined, 'price per year');
-                                            case 'per_kg': return t('/ kg', undefined, 'price per kilo');
-                                            default: {
-                                                const _exhaustive: never = postPriceType;
-                                                return _exhaustive;
-                                            }
-                                        }
+                                        const labels: Record<PriceUnit, string> = { fixed: t('Total', undefined, 'price unit'), hourly: t('/ Hr', undefined, 'price per hour'), daily: t('/ Dy', undefined, 'price per day'), weekly: t('/ Wk', undefined, 'price per week'), monthly: t('/ Mo', undefined, 'price per month'), yearly: t('/ Yr', undefined, 'price per year'), per_kg: t('/ kg', undefined, 'price per kilo'), each: perItemLines.unitEach() };
+                                        return isPriceUnit(postPriceType) ? labels[postPriceType] : labels.fixed;
                                     })()}</Text>
                                 </Pressable>
                                 <Pressable

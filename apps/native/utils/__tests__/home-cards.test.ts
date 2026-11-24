@@ -1595,6 +1595,8 @@ describe('Asked near you and "Ask for one thing you\'d pay a neighbour for" (col
         expect(askedFacts(need('a', { price_c: 1500, priceType: 'daily' }), true, NOW)).toBe('15 Beans /Dy · 2h ago');
         expect(askedFacts(need('a', { price_c: 9000, priceType: 'weekly' }), true, NOW)).toBe('90 Beans /Wk · 2h ago');
         expect(askedFacts(need('a', { price_c: 30000, priceType: 'monthly' }), true, NOW)).toBe('300 Beans /Mo · 2h ago');
+        expect(askedFacts(need('a', { price_c: 2000, priceType: 'yearly' }), true, NOW)).toBe('20 Beans /Yr · 2h ago');
+        expect(askedFacts(need('a', { price_c: 2000, priceType: 'per_kg' }), true, NOW)).toBe('20 Beans /kg · 2h ago');
         // A fixed price is a total: the line is as it was.
         expect(askedFacts(need('a', { price_c: 2000, priceType: 'fixed' }), true, NOW)).toBe('20 Beans · 2h ago');
         expect(askedFacts(need('a', { price_c: 2000 }), true, NOW)).toBe('20 Beans · 2h ago');
@@ -1603,7 +1605,7 @@ describe('Asked near you and "Ask for one thing you\'d pay a neighbour for" (col
         expect(askedFacts(need('a', { price_c: 2000, priceType: 'hourly' }), false, NOW)).toBe('2h ago');
         expect(askedFacts(need('a', { price_c: undefined, priceType: 'hourly' }), true, NOW)).toBe('2h ago');
         // A kind this build does not know says no unit rather than a made-up one.
-        expect(askedFacts(need('a', { price_c: 2000, priceType: 'yearly' }), true, NOW)).toBe('20 Beans · 2h ago');
+        expect(askedFacts(need('a', { price_c: 2000, priceType: 'per_litre' }), true, NOW)).toBe('20 Beans · 2h ago');
     });
 
     it('First steps: the Need line comes after the interests line, once there is an Offer, with the invite line after it', () => {

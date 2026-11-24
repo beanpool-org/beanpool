@@ -595,6 +595,8 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
         expect(at({ price_c: 1500, priceType: 'daily' })).toMatch(/^15 Beans \/day · .+/);
         expect(at({ price_c: 9000, priceType: 'weekly' })).toMatch(/^90 Beans \/wk · .+/);
         expect(at({ price_c: 30000, priceType: 'monthly' })).toMatch(/^300 Beans \/mo · .+/);
+        expect(at({ price_c: 2000, priceType: 'yearly' })).toMatch(/^20 Beans \/yr · .+/);
+        expect(at({ price_c: 2000, priceType: 'per_kg' })).toMatch(/^20 Beans \/kg · .+/);
         // A fixed price is a total: the line is as it was.
         expect(at({ price_c: 2000, priceType: 'fixed' })).toMatch(/^20 Beans · .+/);
         expect(at({ price_c: 2000 })).toMatch(/^20 Beans · .+/);
@@ -603,7 +605,7 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
         expect(askedFacts(need('a', { price_c: 2000, priceType: 'hourly' }), false, beansWords)).not.toMatch(/\/|Beans|Free/);
         expect(at({ price_c: undefined, priceType: 'hourly' })).not.toMatch(/\/|Beans|Free/);
         // A kind this build does not know says no unit rather than a made-up one.
-        expect(at({ price_c: 2000, priceType: 'yearly' })).toMatch(/^20 Beans · .+/);
+        expect(at({ price_c: 2000, priceType: 'per_litre' })).toMatch(/^20 Beans · .+/);
         expect(at({ price_c: 2000, priceType: 'hourly', createdAt: 'nonsense' })).toBe('20 Beans /hr');
     });
 

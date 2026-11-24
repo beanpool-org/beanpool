@@ -113,7 +113,7 @@ describe('editing a listing priced for each one (§2.5)', () => {
         expect(lot().value).toBe('5500');
         expect(screen.getByTestId('per-item-hint')).toHaveTextContent('All 20 for 5,500 Beans. One by one they come to 6,000.');
         // Each has no Repeatable tick.
-        expect(screen.queryByText('Recurring Need / Offer')).toBeNull();
+        expect(screen.queryByTestId('edit-repeatable')).toBeNull();
     });
 
     it('a title edit sends the unit, the count, the count it read and the price for all as it stands, and never Repeatable (red if unitsLeftWas is dropped)', async () => {
@@ -338,7 +338,7 @@ describe('a one-price listing made Each (§2.4)', () => {
         expect(lot().value).toBe('5500');
         expect(document.activeElement).toBe(price);
         // Repeatable is gone, and a count is asked for before it can be saved.
-        expect(screen.queryByText('Recurring Need / Offer')).toBeNull();
+        expect(screen.queryByTestId('edit-repeatable')).toBeNull();
         await save();
         expect(await screen.findByTestId('per-item-refusal')).toHaveTextContent('Say how many you have: a whole number from 1 to 9,999.');
         expect(update).not.toHaveBeenCalled();

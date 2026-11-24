@@ -21,7 +21,7 @@ import { PostTagChips } from '../components/PostTagChips';
 import { SharePostButtons } from '../components/SharePost';
 import { ShowOnGlobalHostRow } from '../components/ShowOnGlobalRow';
 import { YourEvents } from '../components/YourEvents';
-import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
+import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, hostLetsInDefault, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal, type DealsTab } from '../components/MyDealsModal';
 import { BILL_DOOR } from '../lib/bill-door';
@@ -72,10 +72,12 @@ import { forumOn, perItemCard } from '@beanpool/core';
 import { LISTING_AFTER_JOIN_WORDS } from '@beanpool/core';
 import { BeansText } from '../components/BeansText';
 import {
-    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
+    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemFeeLine, perItemHeldNote, perItemLines,
     perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
 } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
+import { CashAlsoNeededField, EDIT_LOCK_LINES, ListingReachField, RepeatableField } from '../components/ListingFormFields';
+import { ListingLocationField } from '../components/ListingLocationField';
 // The buyer's "How many would you like?" and both sides' deal lines (slice P3).
 import {
     ITEM_BOX_START, itemDealRow, itemDealTakenLine, itemSellerStock, itemTakeUpBox, itemTakeUpRefusalIn, type ItemBoxState,
@@ -94,7 +96,7 @@ import {
     signStandingStart, stopStandingDeal, lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
     getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
-    getGroups, deleteGroupPost, type Group,
+    getGroups, deleteGroupPost, getReachablePeers, type Group, type PostReach, type ReachablePeer,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
     type CommissionCapacity,
 } from '../lib/api';
@@ -933,6 +935,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editCredits, setEditCredits] = useState('');
     const [editPriceType, setEditPriceType] = useState<'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
+    const [editCashAlsoNeeded, setEditCashAlsoNeeded] = useState(false);
+    const [editLat, setEditLat] = useState<number | null>(null);
+    const [editLng, setEditLng] = useState<number | null>(null);
+    const [editReach, setEditReach] = useState<PostReach>('local');
+    const [editReachPeers, setEditReachPeers] = useState<string[]>([]);
+    const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     // A listing priced for each one (DESIGN-per-item-price-fable.md §2.5): the two boxes, the count and price for all of them the
     // node held when the form opened (what the count is saved against), whether the seller touched the price-for-all box, and
     // whether the count is still being read.
@@ -1865,10 +1873,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // The price box's stock line: its own people also read how many the deals under way hold, "17 left · 3 held for buyers" (§2.3).
         const eachStock = deals.own ? itemSellerStock(selectedPost, ownRows.map((m) => m.tx)) : null;
         // The edit's units: Each (right after Total) on an Offer once the node says it takes them up, and for a listing already
-        // priced each, so an edit never takes its unit away. The unit chosen falls back to Total where the list lacks it (a Need).
-        const editUnits = priceUnitsOffered(communityInfo?.features, editType, selectedPost.priceType);
+        // priced each, so an edit never takes its unit away. Lendable offers keep lendable units only (fixed, daily, weekly).
+        const isEditLendable = Boolean(selectedPost.lendable);
+        const baseEditUnits = priceUnitsOffered(communityInfo?.features, editType, selectedPost.priceType);
+        const editUnits = isEditLendable ? baseEditUnits.filter((u) => u === 'fixed' || u === 'daily' || u === 'weekly') : baseEditUnits;
         const editUnit: typeof editPriceType = editUnits.includes(editPriceType) ? editPriceType : 'fixed';
         const editEach = !priceMarked && editUnit === 'each';
+        // The node freezes price & unit while any non-standing deal on the listing is requested or held (engine/posts.ts assertPriceNotFrozen).
+        const hasOpenNonStandingDeal = ownRows.some((m) => !m.tx.standingId)
+            || requests.some((r) => (r.status === 'requested' || r.status === 'pending') && !r.standingId);
+        const editOpenMembership = hostLetsInDefault(communityInfo?.features as { openMembership?: boolean } | undefined);
+        const editScope = (selectedPost as any).audience_scope ?? selectedPost.audienceScope ?? 'public';
+        const isEditGroupPost = editScope === 'group' || Boolean((selectedPost as any).target_group_id ?? selectedPost.targetGroupId);
+        const isEditPublicLocal = editScope === 'public' && !isRemotePost && !isEditGroupPost && !((selectedPost as any).target_pubkey ?? (selectedPost as any).targetPubkey);
         /** What the node held of this listing when the form opened: the count the save is made against, and a stored price for all. */
         const editStoredItems = selectedPost.priceType === 'each' && editItemStored
             ? { wasEach: true, unitsLeft: editItemStored.unitsLeft, lot: editItemStored.lot }
@@ -3249,7 +3266,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         // Plain decimal text the price box parses back (parseHundredths refuses a grouped figure).
                                         setEditCredits(selectedPost.price_c ? formatHundredths(selectedPost.price_c).replace(/,(?=\d{3})/g, '') : '');
                                         setEditPriceType(selectedPost.priceType || 'fixed');
-                                        setEditRepeatable(!!selectedPost.repeatable);
+                                        setEditRepeatable(Boolean(selectedPost.repeatable || selectedPost.lendable));
+                                        setEditCashAlsoNeeded(Boolean(selectedPost.cashAlsoNeeded));
+                                        setEditLat(typeof selectedPost.lat === 'number' ? selectedPost.lat : null);
+                                        setEditLng(typeof selectedPost.lng === 'number' ? selectedPost.lng : null);
+                                        setEditReach(selectedPost.reach === 'peers' || selectedPost.reach === 'everywhere' ? selectedPost.reach : 'local');
+                                        setEditReachPeers(Array.isArray(selectedPost.reachPeers) ? selectedPost.reachPeers : []);
                                         // Priced for each one: its count and price for all of them are read from the node now, and the count
                                         // read is the one the save is made against (a list read a while ago may have been sold from since).
                                         setEditItemCount(''); setEditItemLot(''); setEditLotTouched(false); setEditItemRefusal(null); setEditItemStored(null);
@@ -3302,6 +3324,30 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             })();
                                         }
+                                        if (scope === 'public' && !originNode && !targetGroupId && !targetPubkey) {
+                                            const targetPostId = post.id;
+                                            void getReachablePeers()
+                                                .then((r) => {
+                                                    if (selectedPostRef.current?.id === targetPostId) {
+                                                        setReachablePeerList(Array.isArray(r?.peers) ? r.peers : []);
+                                                    }
+                                                })
+                                                .catch(() => {
+                                                    if (selectedPostRef.current?.id === targetPostId) setReachablePeerList([]);
+                                                });
+                                            if (post.reach === 'peers' && !Array.isArray(post.reachPeers)) {
+                                                void getMarketplacePosts({ id: targetPostId })
+                                                    .then((found) => {
+                                                        const fresh = found.find((p) => p.id === targetPostId);
+                                                        if (selectedPostRef.current?.id === targetPostId && Array.isArray(fresh?.reachPeers)) {
+                                                            setEditReachPeers(fresh.reachPeers);
+                                                        }
+                                                    })
+                                                    .catch(() => {});
+                                            }
+                                        } else {
+                                            setReachablePeerList([]);
+                                        }
                                         setEditMode(true);
                                     }}
                                     className="w-full py-3.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-[15px] transition-all shadow-md"
@@ -3336,25 +3382,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                                 <h3 className="font-bold text-lg text-nature-950 dark:text-white mb-4 tracking-tight">{t('✏️ Edit Post')}</h3>
 
-                                {/* Type */}
-                                <div className="flex gap-2 mb-4">
-                                    {(['offer', 'need'] as const).map(t => (
-                                        <button
-                                            key={t}
-                                            onClick={() => setEditType(t)}
-                                            className={`flex-1 py-2.5 rounded-xl border text-sm font-bold capitalize transition-colors ${
-                                                editType === t
-                                                    ? (t === 'offer' ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-sm' : 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-sm')
-                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
-                                            }`}
-                                        >
-                                            {editTypeLabel[t]}
-                                        </button>
-                                    ))}
+                                {/* Type — read-only because the node keeps Offer vs Need fixed after posting */}
+                                <div data-testid="edit-type-readonly" className="mb-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50">
+                                    <p className="m-0 text-sm font-bold text-nature-900 dark:text-white">{editTypeLabel[editType]}</p>
+                                    <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-400 leading-snug break-words">{t(EDIT_LOCK_LINES.typeFixed)}</p>
                                 </div>
+
+                                {/* Audience Scope — read-only (the node keeps public vs group fixed after posting) */}
+                                <p data-testid="edit-audience-readonly" className="m-0 mb-3 p-3 rounded-xl bg-nature-50 dark:bg-nature-900/50 border border-nature-200 dark:border-nature-800 text-xs text-nature-700 dark:text-nature-300 leading-snug break-words">
+                                    {isEditGroupPost
+                                        ? t('For {group} only. Who can see it stays as it is.', { group: selectedPost.targetGroupName || t('the group') })
+                                        : t(EDIT_LOCK_LINES.audiencePublicFixed)}
+                                </p>
 
                                 {/* Category */}
                                 <select
+                                    aria-label={t('Category')}
                                     value={editCategory}
                                     onChange={(e) => setEditCategory(e.target.value)}
                                     className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
@@ -3378,8 +3421,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     />
                                 </div>
 
+                                {/* Location — My location + Drop a pin map + Approximate (~100m) when openMembership */}
+                                <ListingLocationField
+                                    lat={editLat}
+                                    lng={editLng}
+                                    onChange={(nextLat, nextLng) => { setEditLat(nextLat); setEditLng(nextLng); }}
+                                    openMembership={editOpenMembership}
+                                    testId="edit-location"
+                                />
+
                                 {/* Title */}
                                 <input
+                                    aria-label={t('Title')}
                                     value={editTitle}
                                     onChange={(e) => setEditTitle(e.target.value)}
                                     placeholder={t('Title')}
@@ -3387,35 +3440,34 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     style={inputStyle}
                                 />
 
-                                {/* Description */}
-                                <textarea
-                                    value={editDescription}
-                                    onChange={(e) => setEditDescription(e.target.value)}
-                                    placeholder={t('Description')}
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
-                                    style={{ ...inputStyle, minHeight: '100px' }}
-                                />
-
-                                {/* Credits + Unit; Each: PRICE FOR ONE with its two extra boxes below (core per-item-form) */}
+                                {/* Price + Unit; hidden when Beans are off (priceMarked), read-only when a non-standing deal is open */}
+                                {priceMarked ? (
+                                    <div className="mb-3" data-testid="edit-price-marked">
+                                        <LocalCommunityLine feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} {...markWays} />
+                                    </div>
+                                ) : (<>
                                 {editEach && (
                                     <p className="text-xs font-bold text-nature-500 dark:text-nature-300 uppercase tracking-widest mb-1">
                                         {upperCase(perItemLines.priceForOne())} <span className="text-bp-ink-danger">*</span>
                                     </p>
                                 )}
-                                <div className={`flex gap-2 ${editEach ? 'mb-2' : 'mb-4'}`}>
+                                <div className={`flex flex-wrap gap-2 ${editEach ? 'mb-2' : 'mb-2'}`}>
                                     {/* Text, not type="number": a number box reads "2,5" by the browser's language, not the member's (#2202). */}
                                     <input
                                         ref={editPriceRef}
                                         type="text"
                                         inputMode="decimal"
-                                        aria-label={editEach ? perItemLines.priceForOne() : undefined}
+                                        aria-label={editEach ? perItemLines.priceForOne() : t('Price')}
+                                        disabled={hasOpenNonStandingDeal}
                                         value={editCredits}
                                         onChange={(e) => setEditCredits(e.target.value)}
-                                        placeholder={t('Credits (B)')}
-                                        className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
+                                        placeholder="0"
+                                        className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-[6rem] disabled:opacity-60 disabled:cursor-not-allowed"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     />
                                     <select
+                                        aria-label={t('Price unit')}
+                                        disabled={hasOpenNonStandingDeal}
                                         value={editUnit}
                                         onChange={(e) => {
                                             const next = e.target.value as typeof editPriceType;
@@ -3435,17 +3487,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             setEditItemRefusal(null);
                                             setEditPriceType(next);
                                         }}
-                                        className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
+                                        className="w-28 shrink-0 py-3 px-3 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     >
                                         <option value="fixed">{t('Total', undefined, 'a price for the whole job')}</option>
                                         {editUnits.includes('each') && <option value="each">{perItemLines.unitEach()}</option>}
-                                        <option value="hourly">{t('/ Hr', undefined, 'price per hour')}</option>
-                                        <option value="daily">{t('/ Dy', undefined, 'price per day')}</option>
-                                        <option value="weekly">{t('/ Wk', undefined, 'price per week')}</option>
-                                        <option value="monthly">{t('/ Mo', undefined, 'price per month')}</option>
+                                        {editUnits.includes('hourly') && <option value="hourly">{t('/ Hr', undefined, 'price per hour')}</option>}
+                                        {editUnits.includes('daily') && <option value="daily">{t('/ Dy', undefined, 'price per day')}</option>}
+                                        {editUnits.includes('weekly') && <option value="weekly">{t('/ Wk', undefined, 'price per week')}</option>}
+                                        {editUnits.includes('monthly') && <option value="monthly">{t('/ Mo', undefined, 'price per month')}</option>}
                                     </select>
                                 </div>
+                                {hasOpenNonStandingDeal && (
+                                    <p data-testid="edit-price-frozen-reason" className="m-0 mb-2 text-xs font-medium text-amber-800 dark:text-amber-300 leading-snug break-words">
+                                        {t(EDIT_LOCK_LINES.priceFrozen)}
+                                    </p>
+                                )}
 
                                 {/* Each: how many are left, and the price for all of them, with their live line (core per-item-form) */}
                                 {editEach && (editItemLoading ? (
@@ -3464,28 +3521,76 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     />
                                 ))}
 
-                                {/* Repeatable Toggle: not on Each, where the count takes its place (DESIGN-per-item-price-fable.md D4) */}
+                                {/* 1.5% fee line */}
+                                <p className="text-[13px] text-nature-600 dark:text-nature-300 mt-0 mb-3 leading-snug break-words">
+                                    {(() => {
+                                        const eachFee = editEach ? perItemFeeLine({ price: editCredits, count: editItemCount, lot: editItemLot }) : null;
+                                        if (eachFee) return eachFee;
+                                        const read = parseHundredths(editCredits);
+                                        if (read.ok && read.value > 0) {
+                                            const net = read.value - feeOf(read.value);
+                                            return editType === 'offer'
+                                                ? t('1.5% fee: You will receive {amount} Beans.', { amount: formatHundredths(net) })
+                                                : t('1.5% fee: Helper receives {amount} Beans.', { amount: formatHundredths(net) });
+                                        }
+                                        return t('1.5% transaction fee funds community projects & solvency.');
+                                    })()}
+                                </p>
+                                </>)}
+
+                                {/* Repeatable Toggle (shared with create form): not on Each; locked on while lendable */}
                                 {!editEach && (
-                                <div className="mb-4">
-                                    <label className="flex items-center gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50 cursor-pointer hover:bg-white dark:hover:bg-nature-900 transition-colors cursor-pointer group">
-                                        <div className="relative flex items-center justify-center w-6 h-6 shrink-0">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={editRepeatable} 
-                                                onChange={e => setEditRepeatable(e.target.checked)}
-                                                className="peer appearance-none w-5 h-5 border-2 border-nature-300 dark:border-nature-700 rounded bg-white dark:bg-nature-900 checked:bg-terra-500 checked:border-terra-500 transition-colors cursor-pointer"
-                                            />
-                                            <svg className="absolute w-3 h-3 text-white pointer-events-none opacity-0 peer-checked:opacity-100 peer-checked:scale-110 transition-all drop-shadow-sm" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors">{t('Recurring Need / Offer')}</span>
-                                            <span className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">{t('Post remains active after completion for repeat business.')}</span>
-                                        </div>
-                                    </label>
-                                </div>
+                                    <RepeatableField
+                                        checked={editRepeatable}
+                                        onChange={setEditRepeatable}
+                                        disabled={isEditLendable}
+                                        lockNote={isEditLendable ? t(EDIT_LOCK_LINES.lendableRepeatable) : undefined}
+                                        testId="edit-repeatable"
+                                    />
                                 )}
+
+                                {/* #108 Cash-also-needed toggle (shared with create form) */}
+                                <CashAlsoNeededField
+                                    checked={editCashAlsoNeeded}
+                                    onChange={setEditCashAlsoNeeded}
+                                    type={editType}
+                                    testId="edit-cash-also-needed"
+                                />
+
+                                {/* Shop toggle (author's own public local Offer) */}
+                                {editType === 'offer' && editShop.kind !== 'hidden' && (
+                                    <div className="mb-3">
+                                        <ShopToggle
+                                            state={editShop}
+                                            on={editInShop}
+                                            onChange={setEditInShop}
+                                            testId="edit-post-shop"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* #143 step 4 — Where does this travel? (shared with create form; public local listings only) */}
+                                {isEditPublicLocal && (
+                                    <ListingReachField
+                                        reach={editReach}
+                                        onReachChange={setEditReach}
+                                        reachPeers={editReachPeers}
+                                        onReachPeersChange={setEditReachPeers}
+                                        peerList={reachablePeerList}
+                                        labelId="edit-reach-chooser-label"
+                                        testId="edit-reach"
+                                    />
+                                )}
+
+                                {/* Description */}
+                                <textarea
+                                    aria-label={t('Description')}
+                                    value={editDescription}
+                                    onChange={(e) => setEditDescription(e.target.value)}
+                                    placeholder={t('Description')}
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
+                                    style={{ ...inputStyle, minHeight: '100px' }}
+                                />
 
                                 {/* Photos */}
                                 <div className="mb-5">
@@ -3542,17 +3647,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </div>
                                 </div>
 
-                                {editType === 'offer' && editShop.kind !== 'hidden' && (
-                                    <div className="mb-4">
-                                        <ShopToggle
-                                            state={editShop}
-                                            on={editInShop}
-                                            onChange={setEditInShop}
-                                            testId="edit-post-shop"
-                                        />
-                                    </div>
-                                )}
-
                                 {/* Save/Cancel */}
                                 <div className="flex gap-2">
                                     <button
@@ -3570,8 +3664,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             }
                                             // The price in the language's decimal mark, to whole hundredths (core parseHundredths): fr "12,5"
                                             // is 1,250, never saved as 0; a third decimal is refused in words. An empty box is 0, as before.
-                                            const price = parseHundredths(editCredits);
-                                            if (!price.ok && price.refusal !== 'empty') { setError(amountRefusalWords(price.refusal)); return; }
+                                            const price = priceMarked ? null : parseHundredths(editCredits);
+                                            if (price && !price.ok && price.refusal !== 'empty') { setError(amountRefusalWords(price.refusal)); return; }
                                             // Priced for each one: how many, and the price for all of them, held to the node's own rules (core
                                             // per-item-form). An empty price box is 0 here, as it is for every unit, so a Free listing is checked as one.
                                             if (editEach && editItemLoading) return;
@@ -3590,15 +3684,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
                                                 const tagsChanged = storedPostTags(editTags) !== storedPostTags(editTagsFrom.current);
                                                 const freeTagsChanged = storedFreeTags(editFreeTags) !== storedFreeTags(editFreeTagsFrom.current);
+                                                const effectiveReach: PostReach = (editReach === 'peers' && editReachPeers.length === 0) ? 'local' : editReach;
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
-                                                    type: editType,
+                                                    type: selectedPost.type as 'offer' | 'need',
                                                     category: editCategory,
                                                     title: editTitle.trim(),
                                                     description: editDescription.trim(),
-                                                    price_c: price.ok ? price.value : 0,
-                                                    priceType: editEach ? 'each' : editUnit,
+                                                    price_c: price?.ok ? price.value : 0,
+                                                    priceType: priceMarked ? 'fixed' : (editEach ? 'each' : editUnit),
                                                     ...(itemSave && itemSave.ok ? itemSave.fields : {}),
-                                                    repeatable: editEach ? false : editRepeatable,
+                                                    repeatable: editEach ? false : (isEditLendable ? true : editRepeatable),
+                                                    cashAlsoNeeded: editCashAlsoNeeded,
+                                                    ...(editLat != null && editLng != null ? { lat: editLat, lng: editLng } : {}),
+                                                    ...(isEditPublicLocal && reachablePeerList.length > 0 ? {
+                                                        reach: effectiveReach,
+                                                        ...(effectiveReach === 'peers' ? { reachPeers: editReachPeers } : {}),
+                                                    } : {}),
                                                     photos: editPhotos,
                                                     ...(tagsChanged ? { tags: editTags } : {}),
                                                     ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),

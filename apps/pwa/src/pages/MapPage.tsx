@@ -14,6 +14,7 @@ import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, POLL_DAYS_DE
 import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
 import { carryTotalToEach, perItemCreateFields, perItemFeeLine, perItemLines, priceUnitsOffered, type PerItemField } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
+import { CashAlsoNeededField, ListingReachField, RepeatableField } from '../components/ListingFormFields';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useLearn } from '../lib/learn';
 import { usePollNextStart } from '../lib/poll-week';
@@ -3564,41 +3565,20 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
                         {/* Repeatable toggle: not on Each, where the count takes its place (DESIGN-per-item-price-fable.md D4) */}
                         {!eachChosen && (
-                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 dark:text-nature-400 cursor-pointer py-2 px-1 mb-1">
-                            <input
-                                type="checkbox"
+                            <RepeatableField
                                 checked={newPostRepeatable}
-                                onChange={e => setNewPostRepeatable(e.target.checked)}
-                                className="w-5 h-5 rounded border-nature-300 text-blue-600 focus:ring-blue-500 shadow-sm accent-blue-600 cursor-pointer transition-all"
+                                onChange={setNewPostRepeatable}
+                                testId="composer-repeatable"
                             />
-                            {t('🔁 Repeatable — keep listing active for ongoing bookings')}
-                        </label>
                         )}
 
-                        {/* #108 Cash-also-needed toggle. The nudge sits directly under the box, because the
-                            moment of ticking is where the rule actually lands. No amount field by design:
-                            the app can escrow beans, not cash, and a figure would imply it settles money it
-                            never touches. On a Need the poster is the one who pays, so the same flag reads the
-                            other way round there, in the phone's words (Marty, 14 Nov 2026). */}
-                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 dark:text-nature-400 cursor-pointer py-2 px-1">
-                            <input
-                                type="checkbox"
-                                checked={newPostCashAlsoNeeded}
-                                onChange={e => setNewPostCashAlsoNeeded(e.target.checked)}
-                                className="w-5 h-5 rounded border-nature-300 text-amber-600 focus:ring-amber-500 shadow-sm accent-amber-600 cursor-pointer transition-all"
-                            />
-                            {newPostType === 'need' ? t("💸 I'll pay cash too — for fuel or materials") : t('💸 Cash also needed — for fuel or materials')}
-                        </label>
-                        {newPostCashAlsoNeeded && (
-                            <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 mb-1">
-                                {newPostType === 'need' ? t('Cash covers fuel or materials the helper buys — at cost, not their time or tools.') : <Sentence
-                                    text={t('Cash is for fuel and consumables you paid for — {notTools}. At cost, no markup. Agree the details in chat; the app never handles the money.')}
-                                    parts={{
-                                        notTools: <strong>{t('not your time, not your tools')}</strong>
-                                    }}
-                                />}
-                            </p>
-                        )}
+                        {/* #108 Cash-also-needed toggle (shared with edit form). */}
+                        <CashAlsoNeededField
+                            checked={newPostCashAlsoNeeded}
+                            onChange={setNewPostCashAlsoNeeded}
+                            type={newPostType === 'need' ? 'need' : 'offer'}
+                            testId="composer-cash-also-needed"
+                        />
 
                         {newPostType === 'offer' && audienceScope === 'public' && composerShop.kind !== 'hidden' && (
                             <div className="py-2 px-1">
@@ -3611,87 +3591,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             </div>
                         )}
 
-                        {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
-                            trading partners: a reach chooser on a node with no peers is a decision about nothing.
-                            Default stays "Stays here", because a member who has never heard of federation has not
-                            agreed to their listing appearing somewhere else.
-
-                            THE COPY IS ABOUT TRAVEL, NOT VISIBILITY, and that distinction is the whole point. This
-                            read "Who can see this?" over a "Just here" button, which promises more than the code
-                            keeps: reach decides what this node hands a PEER that asks over libp2p, and every board
-                            has always been a public HTTPS read, so anyone with the node's URL can list every active
-                            listing regardless. That is by design (Rule 9 — reach is a discovery filter, not an
-                            access control), so the honest fix is the words, not a guarantee we cannot make. */}
-                        {audienceScope !== 'group' && reachablePeerList.length > 0 && (
-                            <div className="py-2 px-1">
-                                <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">{t('Where does this travel?')}</label>
-                                {/* role="group" with aria-pressed toggles, NOT role="radiogroup" with role="radio"
-                                    (review suggestion, departed from deliberately): a radiogroup promises arrow-key
-                                    navigation between options, and implementing the role without the keys leaves a
-                                    screen-reader user told "1 of 3" by a control that does not respond to arrows.
-                                    A labelled group of pressed-state buttons is complete exactly as written. */}
-                                <div className="flex gap-2" role="group" aria-labelledby="reach-chooser-label">
-                                    {([
-                                        { value: 'local' as const, label: t('🏠 Stays here') },
-                                        { value: 'peers' as const, label: t('🤝 Chosen') },
-                                        { value: 'everywhere' as const, label: t('🌏 Everywhere') },
-                                    ]).map(opt => (
-                                        <button
-                                            key={opt.value}
-                                            type="button"
-                                            onClick={() => setNewPostReach(opt.value)}
-                                            aria-pressed={newPostReach === opt.value}
-                                            className={`flex-1 text-xs font-medium rounded-xl px-2 py-2.5 border transition-all min-h-[44px] ${
-                                                newPostReach === opt.value
-                                                    ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500 shadow-sm'
-                                                    : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
-                                            }`}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                {newPostReach === 'peers' && (
-                                    <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={t('Communities this listing is aimed at')}>
-                                        {reachablePeerList.map(p => {
-                                            const on = newPostReachPeers.includes(p.peerId);
-                                            return (
-                                                <button
-                                                    key={p.peerId}
-                                                    type="button"
-                                                    onClick={() => setNewPostReachPeers(prev =>
-                                                        on ? prev.filter(x => x !== p.peerId) : [...prev, p.peerId])}
-                                                    aria-pressed={on}
-                                                    className={`text-xs rounded-full px-3 py-2 border transition-all min-h-[36px] ${
-                                                        on
-                                                            ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500'
-                                                            : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
-                                                    }`}
-                                                >
-                                                    {on ? '✓ ' : ''}{p.callsign || t('Peer {id}', { id: p.peerId.slice(-8) })}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                                {/* "Chosen" with nothing ticked is a real dead end — the listing silently stays home —
-                                    so it reads as a warning rather than as neutral help text. Not a blocking error:
-                                    staying home is a valid outcome, and refusing the post would be worse than
-                                    honouring the safe default. */}
-                                <p className={`text-[13px] leading-snug mt-1.5 ${
-                                    newPostReach === 'peers' && newPostReachPeers.length === 0
-                                        ? 'text-amber-600 dark:text-amber-400 font-medium'
-                                        : 'text-nature-500 dark:text-nature-400'
-                                }`}>
-                                    {newPostReach === 'local'
-                                        ? t("Stays on this community's board.")
-                                        : newPostReach === 'everywhere'
-                                            ? t('Appears on the board of every community you trade with, and they can buy it.')
-                                            : newPostReachPeers.length > 0
-                                                ? t('Appears on the board of the communities you ticked.')
-                                                : t('⚠️ Tick at least one community, or it stays here.')}
-                                </p>
-                            </div>
+                        {/* #143 step 4 — how far this listing travels (shared with edit form). */}
+                        {audienceScope !== 'group' && (
+                            <ListingReachField
+                                reach={newPostReach}
+                                onReachChange={setNewPostReach}
+                                reachPeers={newPostReachPeers}
+                                onReachPeersChange={setNewPostReachPeers}
+                                peerList={reachablePeerList}
+                                testId="composer-reach"
+                            />
                         )}
 
                         {/* Description */}

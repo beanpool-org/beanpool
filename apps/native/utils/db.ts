@@ -5241,12 +5241,19 @@ export async function updatePost(id: string, updates: any) {
 
     // Named only when the member changed them: absent leaves them on the node and in the copy, [] clears them.
     const freeTags: string[] | undefined = updates.freeTags !== undefined ? freeTagsOf(updates.freeTags) : undefined;
+    const cashAlsoNeeded: boolean | undefined = updates.cash_also_needed !== undefined
+        ? Boolean(updates.cash_also_needed)
+        : updates.cashAlsoNeeded !== undefined ? Boolean(updates.cashAlsoNeeded) : undefined;
+    const hasLat = updates.lat !== undefined;
+    const hasLng = updates.lng !== undefined;
+    const hasReach = updates.reach !== undefined;
+    const reachPeersRaw = updates.reachPeers !== undefined ? updates.reachPeers : updates.reach_peers;
+    const reachPeers: string[] | undefined = Array.isArray(reachPeersRaw) ? reachPeersRaw : undefined;
 
     // 1. Broadcast UPDATE to remote network
     await _signedRequest('/api/marketplace/posts/update', { 
         id, 
         authorPublicKey: identity.publicKey, 
-        type: updates.type,
         category: updates.category,
         title: updates.title,
         description: updates.description,
@@ -5254,6 +5261,11 @@ export async function updatePost(id: string, updates: any) {
         price_c: updates.price_c,
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
+        ...(cashAlsoNeeded !== undefined ? { cashAlsoNeeded } : {}),
+        ...(hasLat ? { lat: updates.lat } : {}),
+        ...(hasLng ? { lng: updates.lng } : {}),
+        ...(hasReach ? { reach: updates.reach } : {}),
+        ...(hasReach && updates.reach === 'peers' && reachPeers !== undefined ? { reachPeers } : {}),
         photos,
         // A listing priced for each one (§4.6): the count, the count the screen read, and the price for all of them
         // (`{ price_c }` sets it, null clears it, absent keeps it).
@@ -5269,22 +5281,44 @@ export async function updatePost(id: string, updates: any) {
     });
     repeatOnGlobalCopy((copy) => copy.tendCopies(identity));
 
-    // 2. Erase from local SQLite Cache (or gracefully update it)
+    // 2. Update local SQLite cache (type is immutable on the node, so never overwritten here).
     const database = await getDb();
-    const tagsSql = `${tags !== undefined ? ', tags = ?' : ''}${freeTags !== undefined ? ', free_tags = ?' : ''}`;
-    const tagsArg = [...(tags !== undefined ? [tags.join(' ')] : []), ...(freeTags !== undefined ? [storedFreeTags(freeTags)] : [])];
+    const extraCols: string[] = [];
+    const extraArgs: any[] = [];
     if (photos !== undefined) {
-        const photosJson = photos && photos.length > 0 ? JSON.stringify(photos) : null;
-        await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, price_c = ?, price_type = ?, repeatable = ?, photos = ?${tagsSql} WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.price_c, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, ...tagsArg, id]
-        );
-    } else {
-        await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, price_c = ?, price_type = ?, repeatable = ?${tagsSql} WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.price_c, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, ...tagsArg, id]
-        );
+        extraCols.push('photos = ?');
+        extraArgs.push(photos && photos.length > 0 ? JSON.stringify(photos) : null);
     }
+    if (cashAlsoNeeded !== undefined) {
+        extraCols.push('cash_also_needed = ?');
+        extraArgs.push(cashAlsoNeeded ? 1 : 0);
+    }
+    if (hasLat) {
+        extraCols.push('lat = ?');
+        extraArgs.push(updates.lat);
+    }
+    if (hasLng) {
+        extraCols.push('lng = ?');
+        extraArgs.push(updates.lng);
+    }
+    if (hasReach) {
+        const storedReach = updates.reach === 'peers' && (!reachPeers || reachPeers.length === 0) ? 'local' : updates.reach;
+        extraCols.push('reach = ?', 'reach_peers = ?');
+        extraArgs.push(storedReach, storedReach === 'peers' && reachPeers ? JSON.stringify(reachPeers) : null);
+    }
+    if (tags !== undefined) {
+        extraCols.push('tags = ?');
+        extraArgs.push(tags.join(' '));
+    }
+    if (freeTags !== undefined) {
+        extraCols.push('free_tags = ?');
+        extraArgs.push(storedFreeTags(freeTags));
+    }
+    const extraSql = extraCols.length > 0 ? `, ${extraCols.join(', ')}` : '';
+    await database.runAsync(
+        `UPDATE posts SET category = ?, title = ?, description = ?, price_c = ?, price_type = ?, repeatable = ?${extraSql} WHERE id = ?`,
+        [updates.category, updates.title, updates.description, updates.price_c, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, ...extraArgs, id]
+    );
 }
 
 /** Pause an Offer (owner-only): drops it from the live feed and stops it counting toward the

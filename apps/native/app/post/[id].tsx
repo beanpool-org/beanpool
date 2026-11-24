@@ -18,9 +18,13 @@ import {
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance, refreshBalanceFromServer,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
     fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, getListingItems, refreshPost,
-    lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
+    lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk, getReachablePeers,
 } from '../../utils/db';
 import { PerItemFields } from '../../components/PerItemFields';
+import {
+    CashAlsoNeededField, EDIT_LOCK_LINES, ListingLocationRow, ListingPinDropModal, ListingReachField,
+    parseStoredReachPeers, requestDeviceLocation, type ReachChoice, type ReachPeerOption,
+} from '../../components/ListingFormFields';
 import { chatMoment, noteNotifyMoment, useScreenShowing } from '../../components/NotifyLine';
 import { PerItemTakeUp } from '../../components/PerItemTakeUp';
 import {
@@ -321,6 +325,16 @@ function PostDetailModal() {
         editPickerWrap: { backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, overflow: 'hidden' },
         editPicker: { color: colors.text.body, height: 50 },
         editInput: { backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 14, paddingVertical: 12, color: colors.text.body, fontSize: 15, marginBottom: 10 },
+        editInputDisabled: { opacity: 0.6, backgroundColor: colors.surface.subtle },
+        editSectionLabel: { color: colors.text.secondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4, marginTop: 4 },
+        editLockedBox: { backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, padding: 12, marginBottom: 12 },
+        editLockedTitle: { color: colors.text.heading, fontSize: 14, fontWeight: '800' },
+        editLockedHint: { color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 4 },
+        editFreeChip: { paddingHorizontal: 10, paddingVertical: 8, minHeight: 44, justifyContent: 'center', borderRadius: 12, borderWidth: 2, borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
+        editFreeChipActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
+        editFreeChipText: { color: colors.brand.primary, fontSize: 13, fontWeight: '800' },
+        editFreeChipTextActive: { color: colors.text.onBrand },
+        editFeeNote: { color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 10 },
         editPhotoLabel: { color: colors.text.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 8 },
         requiredStar: { color: colors.feedback.danger.fg },
         editPhotosRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
@@ -538,6 +552,13 @@ function PostDetailModal() {
     const [editCredits, setEditCredits] = useState('');
     const [editPriceType, setEditPriceType] = useState<string>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
+    const [editCashAlsoNeeded, setEditCashAlsoNeeded] = useState(false);
+    const [editLat, setEditLat] = useState<number | null>(null);
+    const [editLng, setEditLng] = useState<number | null>(null);
+    const [editPinDropVisible, setEditPinDropVisible] = useState(false);
+    const [editReach, setEditReach] = useState<ReachChoice>('local');
+    const [editReachPeers, setEditReachPeers] = useState<string[]>([]);
+    const [reachablePeerList, setReachablePeerList] = useState<ReachPeerOption[]>([]);
     // A listing priced for each one (DESIGN-per-item-price-fable.md §2.5): the two boxes, the count and price for all of them the
     // node held when the form opened (what the count is saved against), whether the seller touched the price-for-all box, and
     // a stored price for all that was for another number than are left (its box opens empty and says why).
@@ -1377,10 +1398,18 @@ function PostDetailModal() {
     }
 
     // The edit's units: Each (right after Total) on an Offer once the node says it takes them up, and for a listing already
-    // priced each, so an edit never takes its unit away. The unit chosen falls back to Total where the list lacks it (a Need).
-    const editUnits = priceUnitsOffered(reader.effective ?? nodeProfile?.features, editType, post.price_type);
+    // priced each, so an edit never takes its unit away. Lendable offers keep lendable units only (fixed, daily, weekly).
+    const isEditLendable = Boolean(post.lendable);
+    const baseEditUnits = priceUnitsOffered(reader.effective ?? nodeProfile?.features, editType, post.price_type);
+    const editUnits = isEditLendable ? baseEditUnits.filter((u) => u === 'fixed' || u === 'daily' || u === 'weekly') : baseEditUnits;
     const editUnit: string = (editUnits as readonly string[]).includes(editPriceType) ? editPriceType : 'fixed';
     const editEach = showsBeans && editUnit === 'each';
+    // The node freezes price & unit while any non-standing deal on the listing is requested or held (engine/posts.ts assertPriceNotFrozen).
+    const hasOpenNonStandingDeal = deals.held.some((m) => !m.tx.standingId)
+        || requests.some((r) => (r.status === 'requested' || r.status === 'pending') && !r.standing_id && !r.standingId);
+    const editScope = post.audience_scope ?? post.audienceScope ?? 'public';
+    const isEditGroupPost = editScope === 'group' || Boolean(post.target_group_id || post.targetGroupId);
+    const isEditPublicLocal = editScope === 'public' && !post.origin_node && !isEditGroupPost && !(post.target_pubkey ?? post.targetPubkey);
     /** What the node held of this listing when the form opened: the count the save is made against, and a stored price for all. */
     const editStoredItems = post.price_type === 'each' && editItemStored
         ? { wasEach: true, unitsLeft: editItemStored.unitsLeft, lot: editItemStored.lot }
@@ -1415,7 +1444,13 @@ function PostDetailModal() {
         // In the language's way ("12,50"), so it reads back as the same price (core parseHundredths).
         setEditCredits(priceAsTyped(post.price_c));
         setEditPriceType(post.price_type || 'fixed');
-        setEditRepeatable(!!post.repeatable);
+        setEditRepeatable(Boolean(post.repeatable || post.lendable));
+        setEditCashAlsoNeeded(Boolean(post.cash_also_needed || post.cashAlsoNeeded));
+        setEditLat(typeof post.lat === 'number' ? post.lat : null);
+        setEditLng(typeof post.lng === 'number' ? post.lng : null);
+        setEditPinDropVisible(false);
+        setEditReach(post.reach === 'peers' || post.reach === 'everywhere' ? post.reach : 'local');
+        setEditReachPeers(parseStoredReachPeers(post.reach_peers ?? post.reachPeers));
         // Priced for each one: its count and price for all of them are read from the node now (the phone's copy doesn't keep
         // them), and the count read is the one the save is made against. A listing that is not starts with empty boxes.
         setEditItemCount(''); setEditItemLot(''); setEditLotTouched(false); setEditItemRefusal(null); setEditItemStored(null);
@@ -1449,6 +1484,20 @@ function PostDetailModal() {
                 setEditInShop(inShop);
             });
         }
+        if (scope === 'public' && !post.origin_node && !(post.target_group_id ?? post.targetGroupId) && !(post.target_pubkey ?? post.targetPubkey)) {
+            void getReachablePeers()
+                .then((peers) => { if (Array.isArray(peers)) setReachablePeerList(peers); })
+                .catch(() => {});
+        } else {
+            setReachablePeerList([]);
+        }
+    };
+
+    const useEditMyLocation = async () => {
+        const coords = await requestDeviceLocation();
+        if (!coords) return;
+        setEditLat(coords.lat);
+        setEditLng(coords.lng);
     };
 
     const handleSave = async () => {
@@ -1475,8 +1524,9 @@ function PostDetailModal() {
             const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
             const tagsChanged = storedPostTags(editTags) !== storedPostTags(editTagsFrom.current);
             const freeTagsChanged = storedFreeTags(editFreeTags) !== storedFreeTags(editFreeTagsFrom.current);
+            const effectiveReach: ReachChoice = (editReach === 'peers' && editReachPeers.length === 0) ? 'local' : editReach;
             await updatePost(post.id, {
-                type: editType,
+                type: post.type,
                 category: editCategory,
                 ...(tagsChanged ? { tags: editTags } : {}),
                 ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
@@ -1485,7 +1535,13 @@ function PostDetailModal() {
                 price_c: price?.ok ? price.value : 0,
                 price_type: editEach ? 'each' : editUnit,
                 ...(itemSave && itemSave.ok ? itemSave.fields : {}),
-                repeatable: editEach ? false : editRepeatable,
+                repeatable: editEach ? false : (isEditLendable ? true : editRepeatable),
+                cash_also_needed: editCashAlsoNeeded ? 1 : 0,
+                ...(editLat != null && editLng != null ? { lat: editLat, lng: editLng } : {}),
+                ...(isEditPublicLocal && reachablePeerList.length > 0 ? {
+                    reach: effectiveReach,
+                    ...(effectiveReach === 'peers' ? { reachPeers: editReachPeers } : {}),
+                } : {}),
                 photos: editPhotos.length > 0 ? JSON.stringify(editPhotos) : null,
                 ...(shopId !== undefined ? { shopId } : {}),
             });
@@ -2089,17 +2145,30 @@ function PostDetailModal() {
                         <View style={styles.editSection}>
                             <Text style={styles.editSectionTitle}>{t('✏️ Edit Post')}</Text>
 
-                            {/* Type Toggle */}
-                            <View style={styles.editTypeRow}>
-                                <Pressable accessibilityRole="button" accessibilityState={{ selected: editType === 'offer' }} style={[styles.editTypeBtn, editType === 'offer' && styles.editTypeBtnOffer]} onPress={() => setEditType('offer')}>
-                                    <Text style={[styles.editTypeBtnText, editType === 'offer' && styles.editTypeBtnTextActive]}>{t('🟢 Offer')}</Text>
-                                </Pressable>
-                                <Pressable accessibilityRole="button" accessibilityState={{ selected: editType === 'need' }} style={[styles.editTypeBtn, editType === 'need' && styles.editTypeBtnNeed]} onPress={() => setEditType('need')}>
-                                    <Text style={[styles.editTypeBtnText, editType === 'need' && styles.editTypeBtnTextActive]}>{t('🟠 Need')}</Text>
-                                </Pressable>
+                            {/* Type — read-only because the node keeps Offer vs Need fixed after posting */}
+                            <View style={styles.editLockedBox} testID="edit-type-readonly">
+                                <Text style={styles.editLockedTitle}>{editType === 'offer' ? t('🟢 Offer') : t('🟠 Need')}</Text>
+                                <Text style={styles.editLockedHint}>{t(EDIT_LOCK_LINES.typeFixed)}</Text>
                             </View>
 
+                            {/* Audience Scope — read-only on group posts */}
+                            {isEditGroupPost && (
+                                <View style={styles.editLockedBox} testID="edit-audience-readonly">
+                                    <Text style={styles.editLockedTitle}>
+                                        {post.target_group_name || post.targetGroupName
+                                            ? t('Only {group} can see this', { group: post.target_group_name || post.targetGroupName })
+                                            : t('Only group members can see this')}
+                                    </Text>
+                                    <Text style={styles.editLockedHint}>{t(EDIT_LOCK_LINES.audienceFixed)}</Text>
+                                </View>
+                            )}
+
+                            {/* Title */}
+                            <Text style={styles.editSectionLabel}>{upperCase(t('Title'))} <Text style={styles.requiredStar}>*</Text></Text>
+                            <TextInput accessibilityLabel={t('Title')} style={styles.editInput} value={editTitle} onChangeText={setEditTitle} placeholder={t('What do you need/offer?')} placeholderTextColor={colors.text.muted} />
+
                             {/* Category */}
+                            <Text style={styles.editSectionLabel}>{upperCase(t('Category'))} <Text style={styles.requiredStar}>*</Text></Text>
                             <View style={styles.editPickerWrap}>
                                 <Picker selectedValue={editCategory} onValueChange={v => setEditCategory(v)} style={styles.editPicker} dropdownIconColor={colors.text.secondary}>
                                     {POST_CATEGORIES.map(c => <Picker.Item key={c.id} label={t('{emoji} {label}', { emoji: c.emoji, label: t(c.label) })} value={c.id} />)}
@@ -2117,13 +2186,52 @@ function PostDetailModal() {
                                 description={editDescription}
                             />
 
-                            {/* Title */}
-                            <TextInput accessibilityLabel={t('Title')} style={styles.editInput} value={editTitle} onChangeText={setEditTitle} placeholder={t('Title')} placeholderTextColor={colors.text.muted} />
-
                             {/* Description */}
-                            <TextInput accessibilityLabel={t('Description')} style={[styles.editInput, { minHeight: 80 }]} value={editDescription} onChangeText={setEditDescription} placeholder={t('Description')} placeholderTextColor={colors.text.muted} multiline textAlignVertical="top" />
+                            <Text style={styles.editSectionLabel}>{upperCase(t('Description'))} <Text style={styles.requiredStar}>*</Text></Text>
+                            <TextInput accessibilityLabel={t('Description')} style={[styles.editInput, { minHeight: 80 }]} value={editDescription} onChangeText={setEditDescription} placeholder={t('Describe what you need/offer...')} placeholderTextColor={colors.text.muted} multiline textAlignVertical="top" />
 
-                            {/* Credits + Price Type; where there are no Beans, a note instead */}
+                            {/* Photos */}
+                            <Text style={styles.editPhotoLabel}>
+                                {t('PHOTOS ({n}/{max})', { n: editPhotos.length, max: 5 })}
+                                {photos.length > 0 ? <Text style={styles.requiredStar}> *</Text> : null}
+                            </Text>
+                            <View style={styles.editPhotosRow}>
+                                {editPhotos.map((uri, i) => (
+                                    uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
+                                        <View key={i} style={styles.editPhotoThumb}>
+                                            <Image accessibilityLabel={t('Post photo')} source={{ uri }} style={styles.editPhotoImg} />
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo from the post')} style={styles.editPhotoRemove} onPress={() => setEditPhotos(prev => prev.filter((_, j) => j !== i))}>
+                                                <Text style={styles.editPhotoRemoveText}>✕</Text>
+                                            </Pressable>
+                                        </View>
+                                    ) : null
+                                ))}
+                                {editPhotos.length < 5 && (
+                                    <Pressable accessibilityRole="button" accessibilityLabel={t('Add photo')} style={styles.editPhotoAdd} onPress={pickEditPhoto}>
+                                        <Text style={styles.editPhotoAddIcon}>+</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+
+                            {/* Location — same controls as Create (My location + Drop a pin modal) */}
+                            <ListingLocationRow
+                                hasLocation={editLat != null && editLng != null}
+                                pinDropActive={editPinDropVisible}
+                                required={false}
+                                onUseMyLocation={useEditMyLocation}
+                                onDropPin={() => { Keyboard.dismiss(); setEditPinDropVisible(true); }}
+                                testID="edit-location-row"
+                            />
+                            <ListingPinDropModal
+                                visible={editPinDropVisible}
+                                initialLat={editLat}
+                                initialLng={editLng}
+                                postType={editType}
+                                onConfirm={(lat, lng) => { setEditLat(lat); setEditLng(lng); setEditPinDropVisible(false); }}
+                                onCancel={() => setEditPinDropVisible(false)}
+                            />
+
+                            {/* Price + Price Unit + FREE chip; read-only while an open deal holds it, or note when Beans are off */}
                             {!showsBeans ? (
                                 <View style={{ marginBottom: 10 }}>
                                     <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{t(LINES.noBeansEditNote)}</Text>
@@ -2131,13 +2239,56 @@ function PostDetailModal() {
                                 </View>
                             ) : (
                             <View style={{ marginBottom: 10 }}>
-                                {editEach ? <Text style={styles.editPhotoLabel}>{upperCase(perItemLines.priceForOne())} <Text style={styles.requiredStar}>*</Text></Text> : null}
-                                <View style={{ flexDirection: 'row', gap: 8 }}>
-                                    <TextInput ref={editPriceRef} accessibilityLabel={editEach ? perItemLines.priceForOne() : t('Credits')} style={[styles.editInput, { flex: 1, marginBottom: 0 }]} value={editCredits} onChangeText={setEditCredits} placeholder={t('Credits (B)')} placeholderTextColor={colors.text.muted} keyboardType="numeric" />
-                                    <Pressable accessibilityRole="button" onPress={nextEditUnit} style={{ backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 16, justifyContent: 'center', minHeight: 44 }}>
+                                <Text style={styles.editSectionLabel}>{upperCase(editEach ? perItemLines.priceForOne() : t('Price'))} <Text style={styles.requiredStar}>*</Text></Text>
+                                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                    <TextInput
+                                        ref={editPriceRef}
+                                        accessibilityLabel={editEach ? perItemLines.priceForOne() : t('Price')}
+                                        editable={!hasOpenNonStandingDeal}
+                                        style={[styles.editInput, { flex: 1, marginBottom: 0 }, hasOpenNonStandingDeal && styles.editInputDisabled]}
+                                        value={editCredits}
+                                        onChangeText={setEditCredits}
+                                        placeholder="0"
+                                        placeholderTextColor={colors.text.muted}
+                                        keyboardType="numeric"
+                                    />
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityState={{ disabled: hasOpenNonStandingDeal }}
+                                        disabled={hasOpenNonStandingDeal}
+                                        onPress={nextEditUnit}
+                                        style={[{ backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 14, justifyContent: 'center', minHeight: 44 }, hasOpenNonStandingDeal && styles.editInputDisabled]}
+                                    >
                                         <Text style={{ color: colors.text.body, fontSize: 13, fontWeight: '700' }}>{editUnit === 'each' ? perItemLines.unitEach() : priceUnitWords(editUnit) || t('Total', undefined, 'a price for the whole job')}</Text>
                                     </Pressable>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityState={{ selected: editCredits === '0', disabled: hasOpenNonStandingDeal }}
+                                        disabled={hasOpenNonStandingDeal}
+                                        style={[styles.editFreeChip, editCredits === '0' && styles.editFreeChipActive, hasOpenNonStandingDeal && styles.editInputDisabled]}
+                                        onPress={() => setEditCredits('0')}
+                                        testID="edit-free-chip"
+                                    >
+                                        <Text style={[styles.editFreeChipText, editCredits === '0' && styles.editFreeChipTextActive]}>{t('FREE')}</Text>
+                                    </Pressable>
                                 </View>
+                                {hasOpenNonStandingDeal && (
+                                    <Text style={styles.editLockedHint} testID="edit-price-frozen-reason">{t(EDIT_LOCK_LINES.priceFrozen)}</Text>
+                                )}
+                                {!editEach && (
+                                    <Text style={styles.editFeeNote}>
+                                        {(() => {
+                                            const parsed = parseHundredths(editCredits);
+                                            if (parsed.ok && parsed.value > 0) {
+                                                const net = formatHundredths(parsed.value - feeOf(parsed.value));
+                                                return editType === 'offer'
+                                                    ? t('1.5% fee: You will receive {amount} Beans.', { amount: net })
+                                                    : t('1.5% fee: Helper receives {amount} Beans.', { amount: net });
+                                            }
+                                            return t('1.5% transaction fee funds community projects & solvency.');
+                                        })()}
+                                    </Text>
+                                )}
                             </View>
                             )}
 
@@ -2162,48 +2313,47 @@ function PostDetailModal() {
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: editRepeatable }}
+                                disabled={isEditLendable}
                                 onPress={() => setEditRepeatable(!editRepeatable)}
-                                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.app, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 15 }}
+                                testID="edit-repeatable-toggle"
+                                style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, minHeight: 44, marginBottom: 4 }, isEditLendable && { opacity: 0.7 }]}
                             >
-                                <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: editRepeatable ? palette.orange500 : colors.border.strong, backgroundColor: editRepeatable ? colors.action.fab : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                                    {editRepeatable && <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>✓</Text>}
+                                <View style={{ width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: editRepeatable ? colors.brand.fill : colors.border.strong, backgroundColor: editRepeatable ? colors.brand.fill : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                                    {editRepeatable && <Text style={{ color: colors.text.onBrand, fontWeight: '800', fontSize: 14 }}>✓</Text>}
                                 </View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700' }}>{t('Recurring Need / Offer')}</Text>
-                                    <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 2 }}>{t('Post remains active after completion.')}</Text>
+                                    <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '500', lineHeight: 18 }}>{t('🔁 Repeatable — keep listing active for ongoing bookings')}</Text>
+                                    {isEditLendable && <Text style={styles.editLockedHint}>{t(EDIT_LOCK_LINES.lendableRepeatable)}</Text>}
                                 </View>
                             </Pressable>
                             )}
 
+                            {/* #108 Cash-also-needed toggle (shared with create form) */}
+                            <CashAlsoNeededField
+                                checked={editCashAlsoNeeded}
+                                onChange={setEditCashAlsoNeeded}
+                                type={editType}
+                                testID="edit-cash-also-needed"
+                            />
+
                             {/* Put this in your shop (slice S4′): an Offer only */}
                             {editType === 'offer' ? (
-                                <View style={{ marginBottom: 15 }}>
+                                <View style={{ marginBottom: 10 }}>
                                     <ShopToggle state={editShop} on={editInShop} onChange={setEditInShop} colors={colors} testID="edit-post-shop" />
                                 </View>
                             ) : null}
 
-                            {/* Photos */}
-                            <Text style={styles.editPhotoLabel}>
-                                {t('PHOTOS ({n}/{max})', { n: editPhotos.length, max: 5 })}
-                                {photos.length > 0 ? <Text style={styles.requiredStar}> *</Text> : null}
-                            </Text>
-                            <View style={styles.editPhotosRow}>
-                                {editPhotos.map((uri, i) => (
-                                    uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
-                                        <View key={i} style={styles.editPhotoThumb}>
-                                            <Image accessibilityLabel={t('Post photo')} source={{ uri }} style={styles.editPhotoImg} />
-                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo from the post')} style={styles.editPhotoRemove} onPress={() => setEditPhotos(prev => prev.filter((_, j) => j !== i))}>
-                                                <Text style={styles.editPhotoRemoveText}>✕</Text>
-                                            </Pressable>
-                                        </View>
-                                    ) : null
-                                ))}
-                                {editPhotos.length < 5 && (
-                                    <Pressable accessibilityRole="button" accessibilityLabel={t('Add photo')} style={styles.editPhotoAdd} onPress={pickEditPhoto}>
-                                        <Text style={styles.editPhotoAddIcon}>+</Text>
-                                    </Pressable>
-                                )}
-                            </View>
+                            {/* #143 step 4 — Where does this travel? (shared with create form; public local listings only) */}
+                            {isEditPublicLocal && (
+                                <ListingReachField
+                                    reach={editReach}
+                                    onReachChange={setEditReach}
+                                    reachPeers={editReachPeers}
+                                    onReachPeersChange={setEditReachPeers}
+                                    peerList={reachablePeerList}
+                                    testID="edit-reach-field"
+                                />
+                            )}
 
                             {/* Save / Cancel */}
                             <View style={styles.editBtnRow}>

@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import {
-    isSyntheticAccount, isBeanAmount, isPriceUnit, formatHundredths, halves, isPerItem, loanDays, perItemLines, priceUnitDealKind, shareOf, standingLines, type ItemOption, type ItemTakeUp,
+    isSyntheticAccount, isBeanAmount, isPriceUnit, formatHundredths, halves, isPerItem, loanDays, perItemLines, priceUnitDealKind, priceUnitTakesQuantity, shareOf, standingLines, type ItemOption, type ItemTakeUp,
     type ItemTakeUpIn, type PriceUnit, type PushNoticeKind, word, wordsFor,
 } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
@@ -446,6 +446,9 @@ export function requestPost(
     // is refused there too, not ignored (F3). A quantity given and out of range (below POST_HOURS_MIN too: 5e-324 hours
     // rounded the deal's rate) gets the quantity's own words, on a priced-per-unit listing as on a fixed one.
     if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);
+    if (priceType === 'per_kg' && hours != null) {
+        throw new Error(word('This listing is priced per kilo and does not take a quantity — please update the BeanPool app and try again.'));
+    }
     if (takesQuantity && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${priceType} post`);
     }
@@ -1197,6 +1200,9 @@ export function acceptPost(
         if (!isPriceUnit(priceType)) throw new Error(`Unknown price type: ${priceType}`);
         const takesQuantity = priceUnitDealKind(priceType) === 'quantity';
         if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
+        if (priceType === 'per_kg' && hours != null) {
+            throw new Error(word('This listing is priced per kilo and does not take a quantity — please update the BeanPool app and try again.'));
+        }
         if (takesQuantity && !isDealQuantity(hours)) {
             throw new Error(`Must provide a valid quantity for a ${priceType} post`);
         }
@@ -1519,9 +1525,7 @@ export function completePostTransaction(
     // lending hold while the deal is open (engine/posts.ts assertPriceNotFrozen, lendColumnsOnEdit), so what they say
     // here is what the deal was struck under.
     const postPriceType = post?.price_type || 'fixed';
-    const oneFeeLoan = post?.lendable === 1 && postPriceType === 'fixed';
-    const fixedAmountUnit = isPriceUnit(postPriceType) && priceUnitDealKind(postPriceType) === 'fixed';
-    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !oneFeeLoan && !itemDeal && !fixedAmountUnit;
+    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !itemDeal && priceUnitTakesQuantity(postPriceType);
 
     // A final quantity that is given and isn't a finite one in range is refused, not ignored, on a fixed deal as on an
     // hourly one: Infinity (F6), and a negative, 0 or text, which used to pay the booked hours (F3). None given pays them.

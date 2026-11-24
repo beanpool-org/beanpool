@@ -106,11 +106,11 @@ async function main() {
     const alice = makeMember('Alice', 5000);
     const bob = makeMember('Bob', 5000);
 
-    // 1. Features flag advertised on /api/community/info
+    // 1. Features flag held off on /api/community/info until both stores carry the mobile build (PRICE_UNITS_KG_YEAR_BUILT)
     const infoRes = await fetch(`${BASE}/api/community/info`);
     const info = await infoRes.json() as any;
-    assert(infoRes.status === 200 && info?.features?.priceUnitsKgYear === true,
-        `GET /api/community/info advertises features.priceUnitsKgYear === true (${JSON.stringify(info?.features?.priceUnitsKgYear)})`);
+    assert(infoRes.status === 200 && typeof info?.features === 'object' && !('priceUnitsKgYear' in info.features),
+        `GET /api/community/info holds features.priceUnitsKgYear off until mobile builds ship (red if PRICE_UNITS_KG_YEAR_BUILT is true) (${JSON.stringify(info?.features?.priceUnitsKgYear)})`);
 
     // 2. Exhaustive table: ALL units × (Offer, Need) × (create, edit, deal amount, release)
     const unitPrice = hc(10); // 10 Beans
@@ -154,6 +154,10 @@ async function main() {
             if (dealKind === 'fixed') {
                 // Both `fixed` and `per_kg`: deal amount = posted price_c, no hours required, never re-rated at release
                 if (kind === 'offer') {
+                    if (unit === 'per_kg') {
+                        const badHours = await post(bob, '/api/marketplace/posts/accept', { postId, buyerPublicKey: bob.pk, hours: 3 });
+                        assert(badHours.status === 400, `${label} offer accept with hours refused 400 so old clients cannot silently under-hold (${brief(badHours)})`);
+                    }
                     const acc = await post(bob, '/api/marketplace/posts/accept', { postId, buyerPublicKey: bob.pk });
                     const txId = acc.body?.transaction?.id as string;
                     assert(acc.status === 200 && txRow(txId).amount_c === unitPrice,
@@ -162,6 +166,10 @@ async function main() {
                     assert(rel.status === 200 && txRow(txId).status === 'completed' && txRow(txId).amount_c === unitPrice,
                         `${label} offer release settles exact posted price_c=${unitPrice} (${brief(rel)})`);
                 } else {
+                    if (unit === 'per_kg') {
+                        const badHours = await post(bob, '/api/marketplace/posts/request', { postId, buyerPublicKey: bob.pk, hours: 3 });
+                        assert(badHours.status === 400, `${label} need request with hours refused 400 so old clients cannot silently under-hold (${brief(badHours)})`);
+                    }
                     const req = await post(bob, '/api/marketplace/posts/request', { postId, buyerPublicKey: bob.pk });
                     const txId = req.body?.transaction?.id as string;
                     assert(req.status === 200 && txRow(txId).amount_c === unitPrice,
@@ -260,6 +268,20 @@ async function main() {
         id: goodPost.body?.post?.id, authorPublicKey: alice.pk, priceType: 'per_litre',
     });
     assert(badEdit.status === 400, `unknown priceType 'per_litre' refused on edit (${brief(badEdit)})`);
+
+    // 4b. Fail-safe allow-list at release: if a legacy/future row carries an unknown price_type with booked hours,
+    // completePostTransaction holds the fixed amount and never fails open to re-rating.
+    const hourlyForLegacy = await post(alice, '/api/marketplace/posts', createBody('offer', 'hourly', alice, unitPrice));
+    const legacyPostId = hourlyForLegacy.body?.post?.id as string;
+    const legacyAcc = await post(bob, '/api/marketplace/posts/accept', { postId: legacyPostId, buyerPublicKey: bob.pk, hours: bookedQty });
+    const legacyTxId = legacyAcc.body?.transaction?.id as string;
+    const legacyHeld = dealAmountFor(unitPrice, bookedQty);
+    db.prepare(`UPDATE posts SET price_type = 'per_litre' WHERE id = ?`).run(legacyPostId);
+    const legacyRel = await post(bob, '/api/marketplace/transactions/complete', {
+        transactionId: legacyTxId, confirmerPublicKey: bob.pk, finalHours: confirmedQty,
+    });
+    assert(legacyRel.status === 200 && txRow(legacyTxId).status === 'completed' && txRow(legacyTxId).amount_c === legacyHeld,
+        `unknown price_type at release holds exact amount_c=${legacyHeld} without failing open to re-rating (${brief(legacyRel)})`);
 
     // 5. Ledger conservation across all deals
     const a = runLedgerAudit();

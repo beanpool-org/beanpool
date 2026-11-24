@@ -466,9 +466,9 @@ export interface NodeFeatures {
      *  engine/per-item.ts): the create and edit forms offer the unit Each only where it is (@beanpool/core perItemOffered).
      *  Present on every node from 1.4.1 (PER_ITEM_BUILT); absent on an older one, so a phone's forms offer Each only there. */
     perItem?: true;
-    /** Present, and true, on every node of this build: it accepts `yearly` (per year) and `per_kg` (per kilo) as listing
-     *  price units on Needs and Offers (@beanpool/core kgYearPriceUnitsOffered). Absent on an older node that refuses them,
-     *  so the apps hide both units there. */
+    /** Present, and true, once both app stores carry the mobile build with `yearly` (per year) and `per_kg` (per kilo)
+     *  labels and `priceUnitTakesQuantity` (PRICE_UNITS_KG_YEAR_BUILT): the forms offer both units only where it is
+     *  (@beanpool/core kgYearPriceUnitsOffered). Absent until then, and absent on an older node that refuses them. */
     priceUnitsKgYear?: true;
     /** True on every node of this build: it stores a voice line as one (engine/voice-lines.ts, DESIGN-cross-chat-voice-fable.md
      *  §5.4, slice V2), in a direct chat and in a locked group's. The apps offer the microphone only where it is
@@ -496,6 +496,14 @@ export interface NodeFeatures {
  * (app-store-versions.ts DEFAULT_MIN_APP_VERSION), so such a phone is told "Update required" instead.
  */
 const PER_ITEM_BUILT = true;
+
+/**
+ * Held false until both app stores carry the phone build with `yearly` and `per_kg` labels and `priceUnitTakesQuantity`
+ * (mirroring PER_ITEM_BUILT above): a 1.4.7 phone renders both units with no unit suffix and mis-classifies `per_kg`
+ * as a quantity-multiplied unit on take-up and release. Flip true alongside raising DEFAULT_MIN_APP_VERSION once both
+ * stores carry that mobile build.
+ */
+export const PRICE_UNITS_KG_YEAR_BUILT = false;
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
 const OVERRIDE_PREFIX = `${NODE_PROFILE_KEY}.`;
@@ -765,7 +773,8 @@ export function getNodeFeatures(): NodeFeatures {
         // A capability of the build, as pins are: on every node from 1.4.1.
         ...(PER_ITEM_BUILT ? { perItem: true as const } : {}),
         // Per year (`yearly`) and per kilo (`per_kg`) price units on Needs and Offers (core kgYearPriceUnitsOffered).
-        priceUnitsKgYear: true as const,
+        // Held off by PRICE_UNITS_KG_YEAR_BUILT until both stores carry the mobile build and DEFAULT_MIN_APP_VERSION is raised.
+        ...(PRICE_UNITS_KG_YEAR_BUILT ? { priceUnitsKgYear: true as const } : {}),
         // And voice lines (engine/voice-lines.ts): every profile stores one. The apps offer the microphone only where it is said.
         voiceLines: true,
         ...(s.forum ? { forum: true as const } : {}),

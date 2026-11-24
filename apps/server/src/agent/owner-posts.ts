@@ -89,7 +89,7 @@ import {
 } from '@beanpool/core';
 import { EVENT_REPEAT_WEEKDAYS, readRepeatRule } from '@beanpool/engine';
 import { db } from '../db/db.js';
-import { featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
+import { featureOffMessage, getProfileSwitches, PRICE_UNITS_KG_YEAR_BUILT } from '../config/node-profile.js';
 import { featureOffFor } from '../routes/profile-feature-gate.js';
 import { PollOtherError, readPollOtherAnswers } from '../engine/poll-other.js';
 import { canOperateTreasury, closePoll, createPost, getPosts, MAX_PHOTO_BASE64_CHARS, removePost, updatePost } from '../state-engine.js';
@@ -98,8 +98,11 @@ import { createEventFromBody } from '../routes/event-post.js';
 import { EVENT_PRIVATE_NOTE_MAX, type EventTimeOut } from '../engine/posts.js';
 import { copyUpdates } from '../engine/event-copy.js';
 import { assertFreeTags, POST_PRICE_TYPES } from '../engine/post-fields.js';
-/** Price units an owner's assistant may set on create or edit: every listing unit except `each` (which requires a count). */
-export const AGENT_PRICE_TYPES = POST_PRICE_TYPES.filter((p) => p !== 'each');
+/** Price units an owner's assistant may set on create or edit: every offered listing unit except `each` (which requires a count).
+ *  Holds `yearly` and `per_kg` off while PRICE_UNITS_KG_YEAR_BUILT is false, matching features.priceUnitsKgYear. */
+export const AGENT_PRICE_TYPES = POST_PRICE_TYPES.filter(
+    (p) => p !== 'each' && (PRICE_UNITS_KG_YEAR_BUILT || (p !== 'yearly' && p !== 'per_kg')),
+);
 import { assertMayAddPhotos, assertMayEditPhotos, assertMayPost } from '../engine/probation.js';
 import { enterprisePostLimit } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';

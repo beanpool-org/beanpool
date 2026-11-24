@@ -156,7 +156,7 @@ import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
-import { createWebPushRoutes, logWebPushPostRefusal, logWebPushPreAuthRefusal } from './routes/web-push.js';
+import { createWebPushRoutes, logWebPushPreAuthRefusal } from './routes/web-push.js';
 import { createNodeKeyRoutes } from './routes/node-key.js';
 import { createAddressListRoutes } from './routes/address-list.js';
 import { createRelayRoutes } from './routes/relay.js';
@@ -1463,10 +1463,10 @@ export async function startHttpsServer(port: number): Promise<number> {
     // OPTIONS 204 or a router answers 405 (agent/oauth-route.ts).
     app.use(oauthDoorOff());
 
-    // Log refusals of POST /api/web-push that stop in upstream middleware (rate limit, body limit, signature,
-    // identity read-only, private preview) before the route handler runs, budgeted per minute.
-    // Pre-auth rejections (!ctx.state.actor: unsigned, bad_key, key_invalidated, account_closed, sample_id, etc.)
-    // write to stdout only so unauthenticated/revoked/sample-id requests never mutate SQLite (system_logs).
+    // Log refusals of POST /api/web-push that stop in upstream middleware (rate limit, body limit, signature/spoof
+    // check, identity read-only, private preview) before route-level standing authorization runs, budgeted per minute.
+    // Always write to stdout only so unauthenticated, self-minted keypair, rate-limited, revoked, and sample-id
+    // rejections never mutate SQLite (system_logs) or consume the verified refusal budget.
     app.use(async (ctx, next) => {
         const isWebPushPost = ctx.method === 'POST' && routedPath(ctx.path) === '/api/web-push';
         await next();
@@ -1474,8 +1474,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             const rawCode = typeof (ctx.body as any)?.code === 'string' ? (ctx.body as any).code : null;
             if (rawCode === SAMPLE_ID_REFUSAL) return;
             const code = rawCode && /^[a-z0-9_]{1,40}$/.test(rawCode) ? rawCode : `http_${ctx.status}`;
-            if (ctx.state?.actor) logWebPushPostRefusal(code);
-            else logWebPushPreAuthRefusal(code);
+            logWebPushPreAuthRefusal(code);
         }
     });
 

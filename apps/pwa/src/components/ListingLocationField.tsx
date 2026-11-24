@@ -160,7 +160,7 @@ export function ListingLocationField({
                     className={`flex-1 min-w-[7.5rem] min-h-[48px] flex flex-col items-center justify-center gap-1 py-2.5 px-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                         hasPin && !pinDropOpen
                             ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
-                            : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                            : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700'
                     }`}
                 >
                     <span className="text-lg leading-none" aria-hidden="true">📍</span>
@@ -174,7 +174,7 @@ export function ListingLocationField({
                     className={`flex-1 min-w-[7.5rem] min-h-[48px] flex flex-col items-center justify-center gap-1 py-2.5 px-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                         pinDropOpen
                             ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500'
-                            : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                            : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700'
                     }`}
                 >
                     <span className="text-lg leading-none" aria-hidden="true">📌</span>

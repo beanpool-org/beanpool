@@ -38,6 +38,9 @@ export function parseStoredReachPeers(raw: unknown): string[] {
     return [];
 }
 
+/** Round a GPS coordinate to four decimal places (~11 m), matching the create form. */
+const roundCoord = (deg: number) => Math.round(deg * 10000) / 10000;
+
 /**
  * Request the device's GPS position rounded to 4 decimals (~11 m), matching the create form.
  * Loads expo-location dynamically so screens importing this helper stay safe in non-native test envs.
@@ -66,8 +69,8 @@ export async function requestDeviceLocation(): Promise<{ lat: number; lng: numbe
     try {
         const loc = await Location.getCurrentPositionAsync({});
         return {
-            lat: Math.round(loc.coords.latitude * 10000) / 10000,
-            lng: Math.round(loc.coords.longitude * 10000) / 10000,
+            lat: roundCoord(loc.coords.latitude),
+            lng: roundCoord(loc.coords.longitude),
         };
     } catch {
         Alert.alert(t('Error'), t("Could not get your location. Try 'Drop a pin' instead."));
@@ -398,8 +401,8 @@ export function ListingPinDropModal({
 
     const handlePress = (e: any) => {
         const { latitude, longitude } = e.nativeEvent.coordinate;
-        setPickedLat(Math.round(latitude * 10000) / 10000);
-        setPickedLng(Math.round(longitude * 10000) / 10000);
+        setPickedLat(roundCoord(latitude));
+        setPickedLng(roundCoord(longitude));
     };
 
     const MapViewComp = mapKit?.MapView;

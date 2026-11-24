@@ -187,7 +187,7 @@ describe('web Edit Post form behaviour', () => {
             },
         });
 
-        await openEdit(listing, { peers: [{ peerId: 'peer-byron', callsign: 'Byron' } as any] });
+        await openEdit(listing, { peers: [{ peerId: 'peer-riverside', callsign: 'Riverside' } as any] });
 
         // Read-only type & audience scope
         expect(screen.getByTestId('edit-type-readonly')).toHaveTextContent('Listing type stays as posted');

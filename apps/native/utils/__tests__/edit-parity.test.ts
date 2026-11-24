@@ -220,7 +220,7 @@ describe('phone create-vs-edit field parity table', () => {
 });
 
 // ── 2. Render checks of phone Edit Post screen ───────────────────────────────────────────────────────────────
-const NODE = 'https://mullum.example';
+const NODE = 'https://riverside.example.org';
 const PHOTO = `${NODE}/api/marketplace/posts/p-1/photos/0?k=abc`;
 const BASE_POST = {
     id: 'p-1', type: 'offer', status: 'active', title: 'Trailer hire', description: 'Needs fuel money', category: 'tools',
@@ -280,7 +280,7 @@ async function openEdit(postOver: Record<string, unknown> = {}, extra: { peers?:
 
 describe('phone Edit Post form behaviour', () => {
     it('shows cash-also-needed ticked with Offer wording & nudge, unticking saves cash_also_needed: 0, and updates location & reach', async () => {
-        await openEdit({}, { peers: [{ peerId: 'peer-byron', callsign: 'Byron' }] });
+        await openEdit({}, { peers: [{ peerId: 'peer-riverside', callsign: 'Riverside' }] });
 
         // Type is read-only (no toggle switching Offer to Need)
         expect(host.querySelector('[data-testid="edit-type-readonly"]')?.textContent).toContain('Listing type stays as posted');

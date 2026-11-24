@@ -22,17 +22,18 @@ vi.mock('../components/ReportModal', () => ({ ReportModal: () => null }));
 vi.mock('../components/StartCommunityScreen', () => ({ StartCommunityScreen: () => null }));
 
 const ME = 'me-pk';
-const identity: BeanPoolIdentity = { publicKey: ME, privateKey: 'k', callsign: 'Damo', createdAt: '2026-09-17T00:00:00.000Z' };
+const identity: BeanPoolIdentity = { publicKey: ME, privateKey: 'k', callsign: 'Tessa', createdAt: '2026-09-17T00:00:00.000Z' };
 const WHERE = 'Riverside district: Northgate, Eastwood, Lowtown, surrounds';
 const PHOTO_A = '/api/marketplace/posts/nr/photos/0?v=1&k=AAA';
 const PHOTO_B = '/api/marketplace/posts/nr/photos/1?v=1&k=BBB';
+const PHOTO_C = '/api/marketplace/posts/nr/photos/2?v=1&k=CCC';
 
 function makePost(photos: string[] = []): LearnPost {
     return {
         id: 'nr',
         type: 'knowledge',
         category: 'emergencies',
-        title: 'Flood watch in the Northern Rivers',
+        title: 'Flood watch in the Riverside valley',
         description: 'Check the SES warnings and road closures before driving.',
         authorPublicKey: 'ada-pk',
         authorCallsign: 'Ada',
@@ -135,6 +136,19 @@ describe.each(['light', 'dark'] as const)('Learn page Where: and photos on the w
         fireEvent.click(remaining[0]);
         const dialog = screen.getByRole('dialog');
         expect(dialog.querySelector('img')?.getAttribute('src')).toBe(PHOTO_B);
+    });
+
+    it('keeps ImageLightbox on the tapped photo if an earlier photo fails while it is open', async () => {
+        await openPage(makePost([PHOTO_A, PHOTO_B, PHOTO_C]));
+        const buttons = within(screen.getByTestId('learn-post-photos')).getAllByRole('button');
+        expect(buttons).toHaveLength(3);
+        fireEvent.click(buttons[1]);
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.querySelector('img')?.getAttribute('src')).toBe(PHOTO_B);
+
+        const firstImg = buttons[0].querySelector('img')!;
+        fireEvent.error(firstImg);
+        expect(screen.getByRole('dialog').querySelector('img')?.getAttribute('src')).toBe(PHOTO_B);
     });
 
     it('when the enlarged photo in ImageLightbox fails to load: shows the error alert and Retry (never a blank screen)', async () => {

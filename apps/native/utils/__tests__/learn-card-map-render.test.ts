@@ -22,6 +22,8 @@ const h = vi.hoisted(() => ({
     autoSettle: true,
     /** Every expo-image render's props & callbacks for assertions. */
     images: [] as Array<{ uri: string; cachePolicy?: string; transition?: number; contentFit?: string; onLoad?: () => void; onError?: () => void }>,
+    /** Every React Native Image render's callbacks (used by ChatPhotoViewer) for assertions. */
+    rnImages: [] as Array<{ uri: string; onLoad?: () => void; onError?: () => void }>,
 }));
 
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), navigate: vi.fn(), canGoBack: vi.fn(() => true) }));
@@ -87,6 +89,7 @@ vi.mock('react-native', async () => {
         Image: ({ source, style, accessibilityLabel, resizeMode, onLoad, onError }: any) => {
             const uri: string = source?.uri ?? '';
             effect(() => {
+                h.rnImages.push({ uri, onLoad, onError });
                 if (!h.autoSettle || !uri) return;
                 if (h.failUris.has(uri)) onError?.();
                 else onLoad?.();
@@ -128,6 +131,7 @@ vi.mock('expo-modules-core', () => ({ requireNativeModule: vi.fn(() => ({})), re
 import { KnowledgeDetail } from '../../components/learn/KnowledgeDetail';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { ChatPhotoViewer } from '../../components/chat/ChatPhoto';
+import { darkColors, lightColors } from '../../constants/colors';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { layOut } from './yoga-dom-layout';
 
@@ -139,12 +143,12 @@ const PHOTO_A_V2 = 'https://valley.example.org/api/marketplace/posts/nr/photos/0
 function makePage(photos: string[] = []): KnowledgePage {
     return {
         id: 'nr',
-        title: 'Flood watch in the Northern Rivers',
+        title: 'Flood watch in the Riverside valley',
         description: 'Check the SES warnings and road closures before driving.',
         category: 'emergencies',
         photos,
         authorPublicKey: 'b'.repeat(64),
-        authorCallsign: 'Damo',
+        authorCallsign: 'Tessa',
         status: 'active',
         active: 1,
         createdAt: '2026-11-01T00:00:00.000Z',
@@ -169,6 +173,7 @@ beforeEach(() => {
     h.failUris.clear();
     h.autoSettle = true;
     h.images.length = 0;
+    h.rnImages.length = 0;
     vi.clearAllMocks();
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -247,17 +252,35 @@ describe.each(['light', 'dark'] as const)('Learn page Where: + photos (%s, 320 d
         expect(q('modal')?.querySelector('img')?.getAttribute('data-src')).toBe(PHOTO_B);
     });
 
-    it('ChatPhotoViewer on load failure: never a blank screen — shows Image Failed + ≥48 dp Try again that fits 320 dp × 1.3x and retries', async () => {
+    it('ChatPhotoViewer shows a loading spinner until the image loads', async () => {
+        h.autoSettle = false;
+        await show(createElement(ChatPhotoViewer, { uri: PHOTO_A, onClose: vi.fn() }));
+        expect(q('photo-viewer-loading')).toBeTruthy();
+        expect(q('photo-viewer-error')).toBeNull();
+        expect(h.rnImages).toHaveLength(1);
+        await act(async () => { h.rnImages[0].onLoad?.(); });
+        await settle();
+        expect(q('photo-viewer-loading')).toBeNull();
+        expect(q('photo-viewer-error')).toBeNull();
+    });
+
+    it('ChatPhotoViewer on load failure: never a blank screen — shows Photo failed to load + ≥48 dp Try again that fits 320 dp × 1.3x and retries', async () => {
+        const expectedColors = theme === 'dark' ? darkColors : lightColors;
         h.failUris.add(PHOTO_A);
         const onClose = vi.fn();
         await show(createElement(ChatPhotoViewer, { uri: PHOTO_A, onClose }));
         const errBox = q('photo-viewer-error')!;
         expect(errBox).toBeTruthy();
         expect(errBox.getAttribute('role')).toBe('alert');
-        expect(errBox.textContent).toContain('Image Failed');
+        expect(errBox.textContent).toContain('Photo failed to load');
+        expect(errBox.textContent).not.toContain('Image Failed');
+        expect(JSON.parse(errBox.getAttribute('data-style') || '{}').backgroundColor).toBe(expectedColors.surface.card);
         const retry = q('photo-viewer-retry')!;
         expect(retry).toBeTruthy();
         expect(retry.textContent).toContain('Try again');
+        expect(JSON.parse(retry.getAttribute('data-style') || '{}').backgroundColor).toBe(expectedColors.brand.fill);
+        const retryText = retry.querySelector('span')!;
+        expect(JSON.parse(retryText.getAttribute('data-style') || '{}').color).toBe(expectedColors.text.onBrand);
         const layout = layOut(q('modal')!, { width: 320, height: 569 }, { fontScale: 1.3 });
         expect(layout.height(retry)).toBeGreaterThanOrEqual(48);
         expect(layout.box(errBox).left + layout.box(errBox).width).toBeLessThanOrEqual(320);

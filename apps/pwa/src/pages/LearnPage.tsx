@@ -556,7 +556,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
 }) {
     const [state, setState] = useState<{ id: string; post: LearnPost | null } | 'failed' | null>(null);
     const [tries, setTries] = useState(0);
-    const [photo, setPhoto] = useState<{ index: number; trigger: HTMLElement | null } | null>(null);
+    const [photo, setPhoto] = useState<{ src: string; trigger: HTMLElement | null } | null>(null);
     // Photo URLs that failed to load on this page: hidden so the page never shows an empty box under "Where:".
     const [failedPhotos, setFailedPhotos] = useState<ReadonlySet<string>>(() => new Set());
     const [reporting, setReporting] = useState(false);
@@ -724,7 +724,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                 {shownPhotos.length > 0 && (
                     <div data-testid="learn-post-photos" className="flex flex-col gap-2">
                         {shownPhotos.map((src, i) => (
-                            <button key={`${i}-${src}`} type="button" onClick={(e) => setPhoto({ index: i, trigger: e.currentTarget })}
+                            <button key={`${i}-${src}`} type="button" onClick={(e) => setPhoto({ src, trigger: e.currentTarget })}
                                 aria-label={t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: shownPhotos.length, title: post.title })}
                                 className="p-0 border-0 bg-transparent cursor-pointer rounded-xl overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn">
                                 <img src={src} alt="" loading="lazy" onError={() => markPhotoFailed(src)} className="w-full aspect-[4/3] object-cover" />
@@ -844,11 +844,11 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                     </button>
                 )}
             </article>
-            {photo && shownPhotos.length > 0 && (
+            {photo && shownPhotos.includes(photo.src) && (
                 <ImageLightbox
                     isOpen
                     photos={shownPhotos}
-                    initialIndex={Math.min(photo.index, shownPhotos.length - 1)}
+                    initialIndex={shownPhotos.indexOf(photo.src)}
                     title={post.title}
                     triggerElement={photo.trigger}
                     onClose={() => setPhoto(null)}

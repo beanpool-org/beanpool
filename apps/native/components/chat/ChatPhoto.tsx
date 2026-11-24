@@ -126,7 +126,7 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                         }}
                     >
                         <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading, textAlign: 'center' }}>
-                            {t('Image Failed')}
+                            {t('Photo failed to load')}
                         </Text>
                         <Pressable
                             testID="photo-viewer-retry"
@@ -148,7 +148,7 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                                 justifyContent: 'center',
                             }}
                         >
-                            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.inverse, textAlign: 'center' }}>
+                            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.onBrand, textAlign: 'center' }}>
                                 {t('Try again')}
                             </Text>
                         </Pressable>

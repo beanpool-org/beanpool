@@ -1,19 +1,17 @@
 /**
- * Web (PWA) price unit labels and old-node feature gating:
- * verifies every unit in PRICE_UNITS has its card, Home, visitor-lobby, shopfront, and composer/edit label,
- * and that an old node's features answer hides yearly and per_kg.
+ * Web (PWA) price unit words and old-node feature gating, by what the functions return (no source text is read):
+ * every unit in PRICE_UNITS has its Home, visitor-lobby and shopfront line, and its own deal words on the Market and an
+ * enterprise's page (lib/price-unit-words.ts), and an old node's features answer hides yearly and per_kg. The screens
+ * themselves are rendered in pages/MarketplacePage.price-units.test.tsx and pages/TreasuryDetailPage.price-units.test.tsx.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { PRICE_UNITS, priceUnitsOffered, setLanguage, type PriceUnit } from '@beanpool/core';
+import { PRICE_UNITS, dealQuantityUnit, priceUnitTakesQuantity, priceUnitsOffered, setLanguage, type PriceUnit } from '@beanpool/core';
+import { actualWorkedLabel, enterpriseReleaseCopy, estimatedLabel, estimateLength, priceUnitSuffix, requestQuantityWords } from './price-unit-words';
 import { askedUnit } from './home-cards';
 import { visitorPriceText } from './visitor-lobby';
 import { listingPriceLine, shopSectionsOf, type ShopfrontListing } from './shopfront';
 
 afterEach(() => setLanguage('en'));
-
-const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
 
 const shopListing = (overrides: Partial<ShopfrontListing> = {}): ShopfrontListing => ({
     id: 'p1',
@@ -85,24 +83,49 @@ describe('web labels for every price unit (old and new)', () => {
         expect(sections.find((s) => s.id === 'toBuy')?.listings.map((l) => l.id)).toEqual(['kg']);
     });
 
-    it('web forms and card render yearly and per_kg gated by priceUnitsOffered and use priceUnitTakesQuantity', () => {
-        const mapSrc = read('../pages/MapPage.tsx');
-        const marketSrc = read('../pages/MarketplacePage.tsx');
-        const cardSrc = read('../components/MarketplaceCard.tsx');
-        const treasurySrc = read('../pages/TreasuryDetailPage.tsx');
+    it('table: every unit has its own deal words on the web (take-up label, quantity, request, release label, keeper prompt)', () => {
+        // One row per unit: what MarketplacePage and TreasuryDetailPage draw for it (lib/price-unit-words.ts). A unit that
+        // takes a quantity has a label naming it; one that doesn't (Total, Each) has none in the commitment sentence.
+        const expected: Record<PriceUnit, {
+            suffix: string; takeUp: string; length: string | null; request: string; release: string; prompt: string; invalid: string;
+        }> = {
+            fixed: { suffix: '', takeUp: 'ESTIMATED UNITS', length: null, request: '', release: 'ACTUAL UNITS WORKED', prompt: 'Enter units worked for "Eggs":', invalid: 'Please enter a valid positive quantity.' },
+            each: { suffix: '', takeUp: 'ESTIMATED UNITS', length: null, request: '', release: 'ACTUAL UNITS WORKED', prompt: 'Enter units worked for "Eggs":', invalid: 'Please enter a valid positive quantity.' },
+            hourly: { suffix: '/Hr', takeUp: 'ESTIMATED HOURS', length: '2.5 hr', request: '2.5 hours estimated', release: 'ACTUAL HOURS WORKED', prompt: 'Enter hours worked for "Eggs":', invalid: 'Please enter a valid positive number of hours.' },
+            daily: { suffix: '/Dy', takeUp: 'ESTIMATED DAYS', length: '2.5 d', request: '2.5 days', release: 'ACTUAL DAYS WORKED', prompt: 'Enter days worked for "Eggs":', invalid: 'Please enter a valid positive number of days.' },
+            weekly: { suffix: '/Wk', takeUp: 'ESTIMATED WEEKS', length: '2.5 w', request: '2.5 weeks', release: 'ACTUAL WEEKS WORKED', prompt: 'Enter weeks worked for "Eggs":', invalid: 'Please enter a valid positive number of weeks.' },
+            monthly: { suffix: '/Mo', takeUp: 'ESTIMATED MONTHS', length: '2.5 m', request: '2.5 months', release: 'ACTUAL MONTHS WORKED', prompt: 'Enter months worked for "Eggs":', invalid: 'Please enter a valid positive number of months.' },
+            yearly: { suffix: '/Yr', takeUp: 'ESTIMATED YEARS', length: '2.5 yr', request: '2.5 years', release: 'ACTUAL YEARS WORKED', prompt: 'Enter years worked for "Eggs":', invalid: 'Please enter a valid positive number of years.' },
+            per_kg: { suffix: '/kg', takeUp: 'WEIGHT (KILOS)', length: '2.5 kg', request: '2.5 kilos', release: 'ACTUAL WEIGHT (KILOS)', prompt: 'Enter the weight in kilos for "Eggs":', invalid: 'Please enter a valid positive number of kilos.' },
+        };
+        expect(Object.keys(expected)).toEqual([...PRICE_UNITS]);
+        for (const unit of PRICE_UNITS) {
+            const row = expected[unit];
+            expect(priceUnitSuffix(unit), unit).toBe(row.suffix);
+            expect(estimatedLabel(unit), unit).toBe(row.takeUp);
+            expect(estimateLength(unit, 2.5), unit).toBe(row.length);
+            expect(requestQuantityWords(dealQuantityUnit(unit), false, 2.5), unit).toBe(row.request);
+            expect(actualWorkedLabel(unit), unit).toBe(row.release);
+            expect(enterpriseReleaseCopy(unit, 'Eggs'), unit).toEqual({ question: row.prompt, invalid: row.invalid });
+            // A unit priced by quantity has words naming it on every deal screen; the rest fall back to units.
+            expect(row.length !== null, `${unit} names its quantity`).toBe(priceUnitTakesQuantity(unit));
+        }
+        // One kilo, singular; a loan by the week or day; an unknown unit falls back without throwing.
+        expect(requestQuantityWords('kilo', false, 1)).toBe('1 kilo');
+        expect(requestQuantityWords('week', true, 2)).toBe('for 2 weeks');
+        expect(priceUnitSuffix('per_litre')).toBe('');
+        expect(estimatedLabel('per_litre')).toBe('ESTIMATED UNITS');
+        expect(enterpriseReleaseCopy('per_litre').question).toBe('Enter units worked for "deal":');
+        expect(enterpriseReleaseCopy('per_kg').question).toBe('Enter the weight in kilos for "deal":');
+    });
 
-        expect(mapSrc).toContain("postUnits.includes('yearly')");
-        expect(mapSrc).toContain("postUnits.includes('per_kg')");
-        expect(marketSrc).toContain("editUnits.includes('yearly')");
-        expect(marketSrc).toContain("editUnits.includes('per_kg')");
-        expect(marketSrc).toContain('priceUnitTakesQuantity(selectedPost.priceType)');
-        expect(marketSrc).toContain("case 'yearly': return t('/Yr'");
-        expect(marketSrc).toContain("case 'per_kg': return t('/kg'");
-        expect(cardSrc).toContain("case 'yearly': return t('/yr'");
-        expect(cardSrc).toContain("case 'per_kg': return t('/kg'");
-        expect(treasurySrc).toContain('priceUnitsOffered(nodeInfo?.features');
-        expect(treasurySrc).toContain("Enter years worked for \"{title}\":");
-        expect(treasurySrc).toContain("setPostPriceType('fixed')");
+    it('every unit has its words in every language: none falls back to the fallback unit words in the pseudo-locale', () => {
+        setLanguage('xx' as any);
+        for (const unit of ['hourly', 'daily', 'weekly', 'monthly', 'yearly', 'per_kg'] as const) {
+            expect(estimatedLabel(unit), unit).not.toBe(estimatedLabel('fixed'));
+            expect(actualWorkedLabel(unit), unit).not.toBe(actualWorkedLabel('fixed'));
+            expect(estimatedLabel(unit), unit).toMatch(/^\[.*\]$/su);
+        }
     });
 
     it('old node features answer hides yearly and per_kg on both Offers and Needs', () => {

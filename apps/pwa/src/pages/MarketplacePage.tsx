@@ -25,18 +25,19 @@ import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isE
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal, type DealsTab } from '../components/MyDealsModal';
 import { BILL_DOOR } from '../lib/bill-door';
+import { actualWorkedLabel, estimatedLabel, estimateLength, priceUnitSuffix, requestQuantityWords } from '../lib/price-unit-words';
 import { StandingPanel, StandingTakeUp, type StandingChoice, type StandingLowerStep } from '../components/StandingDeal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import { MarketCircleLine } from '../components/MarketCircleLine';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
-    amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
+    amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, standingRoomOf, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive, upperCase,
     MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel,
-    standingFieldsFor, standingUnitForListing,
+    standingFieldsFor, standingUnitForListing, weightTakeUpLine,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
@@ -72,7 +73,7 @@ import { forumOn, perItemCard } from '@beanpool/core';
 import { LISTING_AFTER_JOIN_WORDS } from '@beanpool/core';
 import { BeansText } from '../components/BeansText';
 import {
-    carryTotalToEach, isPriceUnit, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
+    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
     perItemLotForOtherLine, perItemRefusalText, priceUnitTakesQuantity, priceUnitsOffered, type ItemLot, type PerItemField, type PriceUnit,
 } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
@@ -218,103 +219,9 @@ function getTimeAgo(date: Date): string {
     return t('{n}d ago', { n: days });
 }
 
-/** A listing's price unit after its amount ("/Hr"), as the phone's Market writes it; nothing for a fixed price. */
-function priceUnit(priceType: string | undefined): string {
-    if (!isPriceUnit(priceType)) return '';
-    switch (priceType) {
-        case 'hourly': return t('/Hr', undefined, 'price per hour');
-        case 'daily': return t('/Dy', undefined, 'price per day');
-        case 'weekly': return t('/Wk', undefined, 'price per week');
-        case 'monthly': return t('/Mo', undefined, 'price per month');
-        case 'yearly': return t('/Yr', undefined, 'price per year');
-        case 'per_kg': return t('/kg', undefined, 'price per kilo');
-        case 'fixed':
-        case 'each':
-            return '';
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
-
 /** A photo on the listing's page: a button that shows it whole in the lightbox, the frame's corners and size the caller's. */
 const PHOTO_BUTTON = 'overflow-hidden border-0 p-0 bg-nature-100 dark:bg-nature-900 cursor-zoom-in focus-visible:outline-none '
     + 'focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-nature-600 dark:focus-visible:ring-nature-300';
-
-/** The label over the hours a payer confirms when releasing a deal priced by the hour, day, week, month or year. */
-function actualWorkedLabel(priceType: string | undefined): string {
-    if (!isPriceUnit(priceType)) return t('ACTUAL UNITS WORKED');
-    switch (priceType) {
-        case 'hourly': return t('ACTUAL HOURS WORKED');
-        case 'daily': return t('ACTUAL DAYS WORKED');
-        case 'weekly': return t('ACTUAL WEEKS WORKED');
-        case 'monthly': return t('ACTUAL MONTHS WORKED');
-        case 'yearly': return t('ACTUAL YEARS WORKED');
-        case 'fixed':
-        case 'each':
-        case 'per_kg':
-            return t('ACTUAL UNITS WORKED');
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
-
-/** The label over the estimate a member gives when accepting a listing priced by the hour, day, week, month or year. */
-function estimatedLabel(priceType: string | undefined): string {
-    if (!isPriceUnit(priceType)) return t('ESTIMATED UNITS');
-    switch (priceType) {
-        case 'hourly': return t('ESTIMATED HOURS');
-        case 'daily': return t('ESTIMATED DAYS');
-        case 'weekly': return t('ESTIMATED WEEKS');
-        case 'monthly': return t('ESTIMATED MONTHS');
-        case 'yearly': return t('ESTIMATED YEARS');
-        case 'fixed':
-        case 'each':
-        case 'per_kg':
-            return t('ESTIMATED UNITS');
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
-
-/** An estimate's length in the commitment sentence ("3 hr"); null for a fixed price. */
-function estimateLength(priceType: string | undefined, n: number): string | null {
-    if (!isPriceUnit(priceType)) return null;
-    switch (priceType) {
-        case 'hourly': return t('{n} hr', { n }, 'a number of hours');
-        case 'daily': return t('{n} d', { n }, 'a number of days');
-        case 'weekly': return t('{n} w', { n }, 'a number of weeks');
-        case 'monthly': return t('{n} m', { n }, 'a number of months');
-        case 'yearly': return t('{n} yr', { n }, 'a number of years');
-        case 'fixed':
-        case 'each':
-        case 'per_kg':
-            return null;
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
-
-/** A request's estimated length, in the listing price's own unit ("for {n} days" or "for {n} weeks" for a loan). */
-function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n: number): string {
-    if (isLoan) {
-        if (unit === 'week') return tn(n, 'for {n} week', 'for {n} weeks');
-        return tn(n, 'for {n} day', 'for {n} days');
-    }
-    if (unit === 'day') return tn(n, '{n} day', '{n} days');
-    if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
-    if (unit === 'month') return tn(n, '{n} month', '{n} months');
-    if (unit === 'year') return tn(n, '{n} year', '{n} years');
-    if (unit === 'hour') return tn(n, '{n} hours estimated', '{n} hours estimated');
-    return '';
-}
 
 /** Why the profile gate stops an accept: the whole sentence for what is missing (lib/profile-status describeMissing). */
 function profileGateSentence(status: ProfileStatus): string {
@@ -1902,7 +1809,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const deals = listingDeals(keptDeals.length > 0 ? [...myTransactions, ...keptDeals] : myTransactions,
             { id: selectedPost.id, authorPublicKey: selectedPost.authorPublicKey, type: selectedPost.type, status: selectedPost.status }, me, keeperOf);
         const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === selectedTxId) - Number(a.tx.id === selectedTxId)) : [];
-        // Only time-priced units (`hourly`, `daily`, `weekly`, `monthly`, `yearly`) ask for a quantity; `fixed`, `each`, and `per_kg` pay what is held.
+        // Units priced by quantity (`hourly`, `daily`, `weekly`, `monthly`, `yearly`, and `per_kg`, whose quantity is the weight in
+        // kilos) ask for one; `fixed` and `each` pay what is held.
         const asksTime = priceUnitTakesQuantity(selectedPost.priceType);
         // The buyer's "How many would you like?" (DESIGN-per-item-price-fable.md §2.2, slice P3): core's box, the phone's too; null for
         // any listing not priced each, which keeps its own confirm. Its Confirm sends exactly the total it shows.
@@ -2325,7 +2233,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <span>{formatHundredths(selectedPost.price_c)}</span>
                                         <span className={`inline-flex items-center shrink-0 ${PAGE_TYPE.priceUnit} ${PAGE_INK.secondary}`}>
                                             <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                                            {priceUnit(selectedPost.priceType)}
+                                            {priceUnitSuffix(selectedPost.priceType)}
                                         </span>
                                     </>))}
                                 </div>
@@ -2806,6 +2714,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <p className="text-[10px] text-nature-500 mt-1 text-center">
                                             {t('Credits will be reserved based on this estimate.')}
                                         </p>
+                                        {/* Per kilo: the kilos and what they come to, as the node will hold it (core weightTakeUpLine), as on the phone. */}
+                                        {selectedPost.priceType === 'per_kg' && (() => {
+                                            const line = weightTakeUpLine(selectedPost.price_c, acceptHoursRead);
+                                            return line ? <p data-testid="weight-take-up-line" className="text-xs font-bold text-nature-800 dark:text-nature-200 mt-2 text-center">{line}</p> : null;
+                                        })()}
                                     </div>
                                 )}
 

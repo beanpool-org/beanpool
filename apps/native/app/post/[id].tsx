@@ -24,7 +24,7 @@ import { PerItemFields } from '../../components/PerItemFields';
 import { chatMoment, noteNotifyMoment, useScreenShowing } from '../../components/NotifyLine';
 import { PerItemTakeUp } from '../../components/PerItemTakeUp';
 import {
-    carryTotalToEach, isPriceUnit, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
+    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
     perItemLotForOtherLine, perItemRefusalText, priceUnitTakesQuantity, priceUnitsOffered, type ItemLot, type PerItemField,
     ITEM_BOX_START, itemDealRow, itemDealTakenLine, itemSellerStock, itemTakeUpBox, itemTakeUpRefusalIn, type ItemBoxState,
 } from '@beanpool/core';
@@ -67,8 +67,9 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, perItemCard, upperCase, standingFieldsFor, standingRoomOf, standingUnitForListing, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, perItemCard, upperCase, standingFieldsFor, standingRoomOf, standingUnitForListing, aboutOfPost, chatAboutDrafts, formatHundredths, isHundredths, parseHundredths, weightTakeUpLine } from '@beanpool/core';
 import { dealAmountOrNull, priceAsTyped } from '../../utils/listing-money';
+import { committedOfferWords, confirmWorkedLabel, netWords, priceUnitWords, requestedNeedWords, requestQuantityWords, trustCommitmentCopy } from '../../utils/price-unit-words';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -108,206 +109,8 @@ function explainTradeError(e: any): { title: string; message: string } {
     return { title: t('Error'), message: signedRequestWords(raw.replace(/^[A-Z_]+:\s*/, '')) };
 }
 
-/** A request's estimated length, in the listing price's own unit ("for {n} days" or "for {n} weeks" for a loan). */
-function requestQuantityWords(unit: DealQuantityUnit | null, isLoan: boolean, n: number): string {
-    if (isLoan) {
-        if (unit === 'week') return tn(n, 'for {n} week', 'for {n} weeks');
-        return tn(n, 'for {n} day', 'for {n} days');
-    }
-    if (unit === 'day') return tn(n, '{n} day', '{n} days');
-    if (unit === 'week') return tn(n, '{n} week', '{n} weeks');
-    if (unit === 'month') return tn(n, '{n} month', '{n} months');
-    if (unit === 'year') return tn(n, '{n} year', '{n} years');
-    if (unit === 'hour') return tn(n, '{n} hours estimated', '{n} hours estimated');
-    return '';
-}
-
-/**
- * The commitment sentence for an Offer, in the price's own unit. Never a loan's: nothing is held while a loan is asked for.
- * `amount_c`: what the deal holds, whole hundredths of a Bean, written by formatHundredths.
- */
-function committedOfferWords(unit: DealQuantityUnit | null, hours: number, amount_c: number): string {
-    const credits = formatHundredths(amount_c);
-    if (unit === 'day') {
-        return tn(
-            hours,
-            'You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.',
-            'You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.',
-            { credits }
-        );
-    }
-    if (unit === 'week') {
-        return tn(
-            hours,
-            'You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.',
-            'You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.',
-            { credits }
-        );
-    }
-    if (unit === 'month') {
-        return tn(
-            hours,
-            'You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.',
-            'You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.',
-            { credits }
-        );
-    }
-    if (unit === 'year') {
-        return tn(
-            hours,
-            'You have committed {credits} credits ({n} year) to a Trust Wallet for this offer.',
-            'You have committed {credits} credits ({n} years) to a Trust Wallet for this offer.',
-            { credits }
-        );
-    }
-    if (unit === 'hour') {
-        return t('You have committed {credits} credits ({hours} hours) to a Trust Wallet for this offer.', { credits, hours });
-    }
-    return t('You have committed {credits} credits to a Trust Wallet for this offer.', { credits });
-}
-
-/**
- * The commitment sentence for a Need: in the price's own unit (a Need is never a loan). `amount_c`: what the deal holds,
- * whole hundredths; the net is what reaches the helper, the amount less the Commons fee as the node takes it (core feeOf).
- */
-function requestedNeedWords(unit: DealQuantityUnit | null, hours: number, amount_c: number): string {
-    const credits = formatHundredths(amount_c);
-    const net = netWords(amount_c);
-    if (unit === 'day') {
-        return tn(
-            hours,
-            'You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
-            'You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
-            { credits, net }
-        );
-    }
-    if (unit === 'week') {
-        return tn(
-            hours,
-            'You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
-            'You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
-            { credits, net }
-        );
-    }
-    if (unit === 'month') {
-        return tn(
-            hours,
-            'You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
-            'You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
-            { credits, net }
-        );
-    }
-    if (unit === 'year') {
-        return tn(
-            hours,
-            'You have requested to earn {credits} credits ({n} year) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
-            'You have requested to earn {credits} credits ({n} years) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.',
-            { credits, net }
-        );
-    }
-    if (unit === 'hour') {
-        return t('You have requested to earn {credits} credits ({hours} hours) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits, hours, net });
-    }
-    return t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits, net });
-}
-
-/** What reaches the payee of a deal holding `amount_c`: the amount less the Commons fee, truncated once (core feeOf). */
-function netWords(amount_c: unknown): string {
-    return isHundredths(amount_c) && amount_c >= 0 ? formatHundredths(amount_c - feeOf(amount_c)) : formatHundredths(null);
-}
-
 /** Lines kept as word() elsewhere (utils/market-global.ts, core), shown here in the member's language. */
 const LINES = { noBeansEditNote: NO_BEANS_EDIT_NOTE, childSafety: CHILD_SAFETY_REASON, childSafetyHint: CHILD_SAFETY_HINT };
-
-/** The unit after a price: per hour, day, week, month, year or kilo, or none for a total. */
-function priceUnitWords(priceType: string | null | undefined): string {
-    if (!isPriceUnit(priceType)) return '';
-    switch (priceType) {
-        case 'hourly': return t('/ Hr', undefined, 'price per hour');
-        case 'daily': return t('/ Dy', undefined, 'price per day');
-        case 'weekly': return t('/ Wk', undefined, 'price per week');
-        case 'monthly': return t('/ Mo', undefined, 'price per month');
-        case 'yearly': return t('/ Yr', undefined, 'price per year');
-        case 'per_kg': return t('/ kg', undefined, 'price per kilo');
-        case 'fixed':
-        case 'each':
-            return '';
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
-
-/** The label over the time a payer confirms at Release, for a deal priced by the hour, day, week, month or year. */
-function confirmWorkedLabel(priceType: string | null | undefined): string {
-    if (!isPriceUnit(priceType)) return t('CONFIRM ACTUAL UNITS WORKED');
-    switch (priceType) {
-        case 'hourly': return t('CONFIRM ACTUAL HOURS WORKED');
-        case 'daily': return t('CONFIRM ACTUAL DAYS WORKED');
-        case 'weekly': return t('CONFIRM ACTUAL WEEKS WORKED');
-        case 'monthly': return t('CONFIRM ACTUAL MONTHS WORKED');
-        case 'yearly': return t('CONFIRM ACTUAL YEARS WORKED');
-        case 'fixed':
-        case 'each':
-        case 'per_kg':
-            return t('CONFIRM ACTUAL UNITS WORKED');
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
-
-/** The label, screen-reader label, and placeholder for the quantity a member commits when taking up a time-priced listing. */
-function trustCommitmentCopy(priceType: string | null | undefined): { label: string; accessibilityLabel: string; placeholder: string } {
-    const fallback = {
-        label: t('TRUST COMMITMENT (UNITS)'),
-        accessibilityLabel: t('Trust commitment in units'),
-        placeholder: t('Units'),
-    };
-    if (!isPriceUnit(priceType)) return fallback;
-    switch (priceType) {
-        case 'hourly':
-            return {
-                label: t('TRUST COMMITMENT (HOURS)'),
-                accessibilityLabel: t('Trust commitment in hours'),
-                placeholder: t('Hours'),
-            };
-        case 'daily':
-            return {
-                label: t('TRUST COMMITMENT (DAYS)'),
-                accessibilityLabel: t('Trust commitment in days'),
-                placeholder: t('Days'),
-            };
-        case 'weekly':
-            return {
-                label: t('TRUST COMMITMENT (WEEKS)'),
-                accessibilityLabel: t('Trust commitment in weeks'),
-                placeholder: t('Weeks'),
-            };
-        case 'monthly':
-            return {
-                label: t('TRUST COMMITMENT (MONTHS)'),
-                accessibilityLabel: t('Trust commitment in months'),
-                placeholder: t('Months'),
-            };
-        case 'yearly':
-            return {
-                label: t('TRUST COMMITMENT (YEARS)'),
-                accessibilityLabel: t('Trust commitment in years'),
-                placeholder: t('Years'),
-            };
-        case 'fixed':
-        case 'each':
-        case 'per_kg':
-            return fallback;
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
 
 function PostDetailModal() {
     const insets = useSafeAreaInsets();
@@ -1183,7 +986,8 @@ function PostDetailModal() {
     // The buyer's "How many would you like?" (DESIGN-per-item-price-fable.md §2.2, slice P3): core's box, the web's too; null for
     // any listing not priced each, which keeps its own confirm. Its Confirm sends exactly the total it shows.
     const eachTakeUp = isOffer && !isLoan ? itemTakeUpBox(post, eachState, post.author_callsign || t('Peer')) : null;
-    // Only time-priced units (`hourly`, `daily`, `weekly`, `monthly`, `yearly`) ask for a quantity; `fixed`, `each`, and `per_kg` pay what is held.
+    // Units priced by quantity (`hourly`, `daily`, `weekly`, `monthly`, `yearly`, and `per_kg`, whose quantity is the weight in
+    // kilos) ask for one; `fixed` and `each` pay what is held.
     const asksTime = priceUnitTakesQuantity(post.price_type);
     // "I can do this" on a Need (cold start N4): the plain sentence under it, with the deal's own total (a price by the hour, day,
     // week, month or year is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
@@ -2433,6 +2237,11 @@ function PostDetailModal() {
                                             <Text style={styles.confirmBoxLabel}>{commitmentCopy.label}</Text>
                                             <TextInput accessibilityLabel={commitmentCopy.accessibilityLabel} style={styles.confirmBoxInput} value={acceptHours} onChangeText={setAcceptHours} placeholder={commitmentCopy.placeholder} placeholderTextColor={colors.text.muted} keyboardType="numeric" editable={asksTime} />
                                             <Text style={{ color: colors.text.muted, fontSize: 10, textAlign: 'center', marginTop: 4 }}>{t('Credits will be required upon approval.')}</Text>
+                                            {/* Per kilo: the kilos and what they come to, as the node will hold it (core weightTakeUpLine), as on the web. */}
+                                            {post.price_type === 'per_kg' && (() => {
+                                                const line = weightTakeUpLine(post.price_c, needQuantity);
+                                                return line ? <Text testID="weight-take-up-line" style={{ color: colors.text.body, fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginTop: 8 }}>{line}</Text> : null;
+                                            })()}
                                         </View>
                                     );
                                 })()}

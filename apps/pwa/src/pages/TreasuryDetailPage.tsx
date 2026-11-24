@@ -28,7 +28,7 @@ import { chatLineWords } from '../lib/chat-line-words';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
-    deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isPriceUnit, isSampleId, keeperWords, parseHundredths, priceUnitsOffered, priceUnitTakesQuantity, t, tn, word, amountRefusalWords, ANY_DECIMALS,
+    deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isSampleId, keeperWords, parseHundredths, priceUnitsOffered, priceUnitTakesQuantity, t, tn, word, amountRefusalWords, ANY_DECIMALS,
     isAmbiguousAmount, parseAmount, type PriceUnit, type WordKey, BANNER_PICTURE,
 } from '@beanpool/core';
 import { useCommunityInfo } from '../lib/features';
@@ -53,6 +53,7 @@ import {
     readsAsMember, shopCategoryOf, shopPhotoOf, shopSectionsOf, sinceLine, type ShopfrontListing,
 } from '../lib/shopfront';
 import { LocalCommunityStrip, LocalCommunityAction, LocalCommunityLine, type LocalCommunityWays } from '../components/LocalCommunityMark';
+import { enterpriseReleaseCopy } from '../lib/price-unit-words';
 
 /*
  * The page's words (words sweep W2): a project says leader / collaborators and an enterprise lead keeper / keepers
@@ -77,50 +78,6 @@ const ENTERPRISE_PRICE_TYPE_LABEL: Record<Exclude<PriceUnit, 'each'>, WordKey> =
     yearly: word('Yearly (/yr)'),
     per_kg: word('Per kilo (/kg)'),
 };
-
-/** Prompt and validation words when a keeper releases a quantity-priced enterprise deal. */
-function enterpriseReleaseCopy(priceType: string | undefined, postTitle?: string): { question: string; invalid: string } {
-    const fallback = {
-        question: postTitle ? t('Enter units worked for "{title}":', { title: postTitle }) : t('Enter units worked for "deal":'),
-        invalid: t('Please enter a valid positive quantity.'),
-    };
-    if (!isPriceUnit(priceType)) return fallback;
-    switch (priceType) {
-        case 'hourly':
-            return {
-                question: postTitle ? t('Enter hours worked for "{title}":', { title: postTitle }) : t('Enter hours worked for "deal":'),
-                invalid: t('Please enter a valid positive number of hours.'),
-            };
-        case 'daily':
-            return {
-                question: postTitle ? t('Enter days worked for "{title}":', { title: postTitle }) : t('Enter days worked for "deal":'),
-                invalid: t('Please enter a valid positive number of days.'),
-            };
-        case 'weekly':
-            return {
-                question: postTitle ? t('Enter weeks worked for "{title}":', { title: postTitle }) : t('Enter weeks worked for "deal":'),
-                invalid: t('Please enter a valid positive number of weeks.'),
-            };
-        case 'monthly':
-            return {
-                question: postTitle ? t('Enter months worked for "{title}":', { title: postTitle }) : t('Enter months worked for "deal":'),
-                invalid: t('Please enter a valid positive number of months.'),
-            };
-        case 'yearly':
-            return {
-                question: postTitle ? t('Enter years worked for "{title}":', { title: postTitle }) : t('Enter years worked for "deal":'),
-                invalid: t('Please enter a valid positive number of years.'),
-            };
-        case 'fixed':
-        case 'each':
-        case 'per_kg':
-            return fallback;
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
 
 /** The P&L's periods (the phone's LEDGER_PERIODS labels): marked here, translated where shown. */
 const LEDGER_PERIOD_WORDS: Readonly<Record<'all' | '30d' | '90d' | '365d', WordKey>> = {

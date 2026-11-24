@@ -119,6 +119,11 @@ export function shopSectionsOf(listings: readonly ShopfrontListing[]): ShopSecti
         .map((id) => ({ id, title: sectionTitle(id, groups[id].length), listings: groups[id] }));
 }
 
+/** How many Beans a price in whole hundredths is, for the plural form its words take (1 Bean, 2.50 Beans); 0 for no figure. */
+function beansCount(price_c: unknown): number {
+    return typeof price_c === 'number' && Number.isFinite(price_c) ? price_c / 100 : 0;
+}
+
 /** Its price in words, or null where the community shows no Beans (the worldwide one). */
 export function listingPriceLine(l: ShopfrontListing, showsBeans: boolean): string | null {
     if (!showsBeans) return null;
@@ -133,8 +138,9 @@ export function listingPriceLine(l: ShopfrontListing, showsBeans: boolean): stri
         case 'daily': return t('{amount} 🫘 a day', { amount });
         case 'weekly': return t('{amount} 🫘 a week', { amount });
         case 'monthly': return t('{amount} 🫘 a month', { amount });
-        case 'yearly': return t('{amount} Beans a year', { amount });
-        case 'per_kg': return t('{amount} Beans a kilo', { amount });
+        // Beans as a word, counted (tn), so a language with more plural forms inflects it (core beansPriceWords' keys).
+        case 'yearly': return tn(beansCount(l.price_c), '{n} Beans a year', '{n} Beans a year', { n: amount });
+        case 'per_kg': return tn(beansCount(l.price_c), '{n} Beans a kilo', '{n} Beans a kilo', { n: amount });
         case 'fixed':
         case 'each':
             return t('{amount} 🫘', { amount });

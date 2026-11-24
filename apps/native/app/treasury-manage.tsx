@@ -26,7 +26,7 @@ import {
     stepDownConfirmText, removeKeeperConfirmText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
-import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, isPriceUnit, keeperWords, priceUnitTakesQuantity, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, type PriceUnit } from '@beanpool/core';
+import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, keeperWords, priceUnitTakesQuantity, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -43,72 +43,12 @@ import { shopCategoryOf } from '../utils/shopfront';
 import { leadsIt, mayManage, notKeeperLine } from '../utils/enterprise-manage';
 import { decodeThreadMessage, removedLine } from '../utils/enterprise-thread';
 import { twoParagraphs } from '../utils/alert-words';
+import { enterpriseWorkedCopy } from '../utils/price-unit-words';
 
 type LifecycleAction = 'pause' | 'resume' | 'windUp' | 'cancelWindUp' | 'finaliseWindUp';
 
 /** Sentences marked in utils/enterprise-season.ts, translated here where they are shown. */
 const SEASON_LINES = { resume: RESUME_CONFIRM_TEXT };
-
-/** Modal heading, prompt, and validation copy when a keeper confirms a quantity-priced enterprise deal. */
-function enterpriseWorkedCopy(priceType: string | null | undefined, title: string): {
-    heading: string;
-    prompt: string;
-    invalidTitle: string;
-    invalidMessage: string;
-} {
-    const fallback = {
-        heading: t('Confirm Units Worked'),
-        prompt: t('Enter actual units worked for "{title}":', { title }),
-        invalidTitle: t('Invalid Quantity'),
-        invalidMessage: t('Please enter a valid positive quantity.'),
-    };
-    if (!isPriceUnit(priceType)) return fallback;
-    switch (priceType) {
-        case 'hourly':
-            return {
-                heading: t('Confirm Hours Worked'),
-                prompt: t('Enter actual hours worked for "{title}":', { title }),
-                invalidTitle: t('Invalid Hours'),
-                invalidMessage: t('Please enter a valid positive number of hours.'),
-            };
-        case 'daily':
-            return {
-                heading: t('Confirm Days Worked'),
-                prompt: t('Enter actual days worked for "{title}":', { title }),
-                invalidTitle: t('Invalid Days'),
-                invalidMessage: t('Please enter a valid positive number of days.'),
-            };
-        case 'weekly':
-            return {
-                heading: t('Confirm Weeks Worked'),
-                prompt: t('Enter actual weeks worked for "{title}":', { title }),
-                invalidTitle: t('Invalid Weeks'),
-                invalidMessage: t('Please enter a valid positive number of weeks.'),
-            };
-        case 'monthly':
-            return {
-                heading: t('Confirm Months Worked'),
-                prompt: t('Enter actual months worked for "{title}":', { title }),
-                invalidTitle: t('Invalid Months'),
-                invalidMessage: t('Please enter a valid positive number of months.'),
-            };
-        case 'yearly':
-            return {
-                heading: t('Confirm Years Worked'),
-                prompt: t('Enter actual years worked for "{title}":', { title }),
-                invalidTitle: t('Invalid Years'),
-                invalidMessage: t('Please enter a valid positive number of years.'),
-            };
-        case 'fixed':
-        case 'each':
-        case 'per_kg':
-            return fallback;
-        default: {
-            const _exhaustive: never = priceType;
-            return _exhaustive;
-        }
-    }
-}
 
 /**
  * An enterprise's (or a project's) Manage console, its keepers' (slice S7 of

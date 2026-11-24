@@ -316,6 +316,8 @@ export interface NodeDataPayload {
     escrowDisputesCount?: number;
     /** Requests to join waiting for an answer (front doors S1); absent from a server from before them. */
     knockCount?: number;
+    /** Local knowledge suggestions waiting for an owner or admin to check (engine/knowledge-drafts.ts). */
+    knowledgeDraftCount?: number;
     /** Each member's posts and messages counts; no member's trades (queue item 29). */
     memberStats?: Record<string, unknown>;
     /**
@@ -3982,4 +3984,101 @@ export async function signOutEverywhere(): Promise<SignOutEverywhereResult> {
     const said = typeof body.error === 'string' && body.error ? body.error : null;
     if (res.status === 401) return { ok: false, message: said ? `${said}. Sign in again, then try once more.` : 'Your sign-in here has already ended. Sign in again, then try once more.' };
     return { ok: false, message: said ?? `The node did not sign you out (${res.status}). Nothing changed.` };
+}
+
+export async function fetchAdminKnowledgeDrafts(
+    nodeUrl: string,
+    credential?: string,
+    limit = 50,
+    offset = 0,
+): Promise<{ drafts: any[]; total: number; unchecked: { total: number; rows: any[] } }> {
+    const res = await fetch(
+        resolveNodeApiUrl(nodeUrl, `/api/local/admin/knowledge/drafts?limit=${limit}&offset=${offset}`),
+        { headers: buildAdminHeaders(credential), credentials: 'same-origin' },
+    );
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const err = new Error(body?.error || `HTTP ${res.status}`) as Error & { status?: number; code?: string };
+        err.status = res.status;
+        if (typeof body?.code === 'string') err.code = body.code;
+        throw err;
+    }
+    const drafts = Array.isArray(body?.drafts) ? body.drafts : [];
+    const rows = Array.isArray(body?.unchecked?.rows) ? body.unchecked.rows : [];
+    return {
+        drafts,
+        total: typeof body?.total === 'number' ? body.total : drafts.length,
+        unchecked: {
+            total: typeof body?.unchecked?.total === 'number' ? body.unchecked.total : rows.length,
+            rows,
+        },
+    };
+}
+
+export async function fetchAdminKnowledgeDraft(nodeUrl: string, id: string, credential?: string): Promise<any | null> {
+    const res = await fetch(
+        resolveNodeApiUrl(nodeUrl, `/api/local/admin/knowledge/drafts/${encodeURIComponent(id)}`),
+        { headers: buildAdminHeaders(credential), credentials: 'same-origin' },
+    );
+    if (res.status === 404) return null;
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const err = new Error(body?.error || `HTTP ${res.status}`) as Error & { status?: number; code?: string };
+        err.status = res.status;
+        if (typeof body?.code === 'string') err.code = body.code;
+        throw err;
+    }
+    return body?.draft ?? null;
+}
+
+export async function approveAdminKnowledgeDraft(
+    nodeUrl: string,
+    id: string,
+    payload: Record<string, unknown>,
+    credential?: string,
+): Promise<{ post: any }> {
+    const res = await fetch(
+        resolveNodeApiUrl(nodeUrl, `/api/local/admin/knowledge/drafts/${encodeURIComponent(id)}/approve`),
+        {
+            method: 'POST',
+            headers: buildAdminHeaders(credential),
+            credentials: 'same-origin',
+            body: JSON.stringify(payload),
+        },
+    );
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const err = new Error(body?.error || `HTTP ${res.status}`) as Error & { status?: number; code?: string };
+        err.status = res.status;
+        if (typeof body?.code === 'string') err.code = body.code;
+        throw err;
+    }
+    return body;
+}
+
+export async function declineAdminKnowledgeDraft(
+    nodeUrl: string,
+    id: string,
+    reason: string,
+    words: string,
+    credential?: string,
+): Promise<{ ok: true }> {
+    const said = words.trim();
+    const res = await fetch(
+        resolveNodeApiUrl(nodeUrl, `/api/local/admin/knowledge/drafts/${encodeURIComponent(id)}/no`),
+        {
+            method: 'POST',
+            headers: buildAdminHeaders(credential),
+            credentials: 'same-origin',
+            body: JSON.stringify({ reason, ...(said ? { words: said } : {}) }),
+        },
+    );
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const err = new Error(body?.error || `HTTP ${res.status}`) as Error & { status?: number; code?: string };
+        err.status = res.status;
+        if (typeof body?.code === 'string') err.code = body.code;
+        throw err;
+    }
+    return body;
 }

@@ -12,6 +12,8 @@ import type { RolesViewer } from './NodeRolesPanel';
 
 /** The Alerts card (AlertsPanel, under Backups & Restore): where each of the server's alerts is listed and marked seen. */
 export const SERVER_ALERTS_ANCHOR = 'server-alerts';
+/** The Local knowledge drafts card (KnowledgeDraftsPanel, under People & Safety → Triage & Moderation). */
+export const KNOWLEDGE_DRAFTS_ANCHOR = 'knowledge-drafts';
 
 type HomeTab = 'shape' | 'people' | 'economy' | 'bulletin' | 'appliance';
 
@@ -269,6 +271,20 @@ export function HomeScreen({
             text: `${knockCount === 1 ? '1 person' : `${knockCount} people`} asked to join: answer them in the BeanPool app, under People → Invites`,
             tab: 'people',
             sub: 'invites',
+        });
+    }
+
+    // Local knowledge suggestions waiting for an owner or admin to check: opens Triage & Moderation at the drafts panel.
+    const knowledgeDraftCount = typeof nodeData?.knowledgeDraftCount === 'number' ? nodeData.knowledgeDraftCount : 0;
+    const canCheckKnowledge = !viewer || viewer.kind === 'token' || viewer.role === 'owner' || viewer.role === 'admin';
+    if (canCheckKnowledge && knowledgeDraftCount > 0) {
+        actionItems.push({
+            key: 'knowledge-drafts',
+            icon: '📖',
+            text: `Local knowledge to check: ${knowledgeDraftCount}`,
+            tab: 'people',
+            sub: 'moderation',
+            anchor: KNOWLEDGE_DRAFTS_ANCHOR,
         });
     }
 

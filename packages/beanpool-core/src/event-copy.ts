@@ -95,6 +95,7 @@ export function beansPriceWords(price: CopyPrice): string {
     if (!c) return t(FREE_PRICE_WORDS.short);
     const n = c / 100;
     const shown = { n: formatHundredths(c) };
+    if (!isPriceUnit(price.per)) return tn(n, '{n} Beans', '{n} Beans', shown);
     switch (price.per) {
         case 'fixed': return tn(n, '{n} Beans', '{n} Beans', shown);
         case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour', shown);
@@ -107,7 +108,7 @@ export function beansPriceWords(price: CopyPrice): string {
         case 'each': return perItemLines.each(c);
         default: {
             const _exhaustive: never = price.per;
-            throw new RangeError(`Unknown price type: ${String(_exhaustive)}`);
+            return _exhaustive;
         }
     }
 }

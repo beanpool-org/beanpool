@@ -7,7 +7,7 @@ import { t } from './words.js';
 import { formatHundredths, isHundredths, quantityHundredths, shareOf } from './hundredths.js';
 import { amountRefusalWords, isAmbiguousAmount, type ParsedAmount } from './amount-input.js';
 import { standingLowerMoves, type StandingAsk, type StandingPeriodUnit, type StandingPhase } from './standing-deal.js';
-import { isPriceUnit, priceUnitDealKind } from './price-units.js';
+import { priceUnitTakesQuantity } from './price-units.js';
 
 export type DealRole = 'payer' | 'payee';
 
@@ -448,10 +448,8 @@ export function releaseAmount(deal: ReleaseDeal, units: number | undefined, list
     const held = isHundredths(deal.amount_c) && deal.amount_c > 0 ? deal.amount_c : 0;
     const booked = Number(deal.hours);
     const pt = listing.priceType || 'fixed';
-    const oneFeeLoan = !!listing.lendable && pt === 'fixed';
     const items = pt === 'each' || deal.itemOption === 'each' || deal.itemOption === 'lot';
-    const fixedAmount = isPriceUnit(pt) && priceUnitDealKind(pt) === 'fixed';
-    if (!(Number.isFinite(booked) && booked > 0) || oneFeeLoan || items || fixedAmount || units === undefined) return held;
+    if (!(Number.isFinite(booked) && booked > 0) || items || !priceUnitTakesQuantity(pt) || units === undefined) return held;
     if (!(Number.isFinite(units) && units > 0)) return 0;
     // As the node pays it (engine/escrow.ts): what it holds times the time confirmed over the time booked, both in
     // hundredths of a unit, truncated once (the payer keeps a part below a hundredth).

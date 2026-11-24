@@ -68,9 +68,11 @@ describe('PRICE_UNITS canonical order and exhaustive rules', () => {
         expect(priceUnitTakesQuantity('per_litre')).toBe(false);
         expect(standingUnitOf('yearly')).toBeNull();
         expect(standingUnitOf('per_kg')).toBeNull();
+        // Runtime fallback when a deserialized payload carries an unrecognized unit: never throw
+        expect(beansPriceWords({ price_c: 1000, per: 'per_litre' as PriceUnit })).toBe('10 Beans');
     });
 
-    it('releaseAmount re-rates quantity units (including yearly) and never re-rates fixed/each/per_kg', () => {
+    it('releaseAmount re-rates quantity units (including yearly) and never re-rates fixed/each/per_kg or unknown units', () => {
         // Booked 2 units at 1,000 c each -> 2,000 c held; confirmed 1.5 -> 1,500 c for quantity units, 2,000 c for fixed-amount units.
         for (const unit of PRICE_UNITS) {
             const released = releaseAmount({ amount_c: 2000, hours: 2 }, 1.5, { priceType: unit });
@@ -80,6 +82,8 @@ describe('PRICE_UNITS canonical order and exhaustive rules', () => {
                 expect(released, unit).toBe(2000);
             }
         }
+        // Fail-safe allow-list: an unrecognized/future unit holds what was paid and never fails open to re-rating.
+        expect(releaseAmount({ amount_c: 2000, hours: 2 }, 1.5, { priceType: 'per_litre' })).toBe(2000);
     });
 });
 

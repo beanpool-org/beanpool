@@ -7,16 +7,17 @@
 /**
  * `knock`: someone asked to join the community (front doors S1). Its own kind, not the admin's: it is answered in People →
  * Invites, where the admin line (the manager's Settings) can't take anyone. `ask`: a member asked an owner or admin to
- * invite someone (server engine/invite-asks.ts), answered in the same place. `bill`: a bill waiting on its payer (bills.ts),
- * a money step beside a deal's.
+ * invite someone (server engine/invite-asks.ts), answered in the same place. `learn`: members' suggestions of Local
+ * knowledge waiting for an owner or admin (engine/knowledge-drafts.ts), answered in Learn → To check. `bill`: a bill
+ * waiting on its payer (bills.ts), a money step beside a deal's.
  */
-export type NeedsYouKind = 'admin' | 'knock' | 'ask' | 'deal' | 'bill' | 'vote' | 'invite' | 'message' | 'group';
+export type NeedsYouKind = 'admin' | 'knock' | 'ask' | 'learn' | 'deal' | 'bill' | 'vote' | 'invite' | 'message' | 'group';
 
 /**
  * Highest first. The highest sits nearest the right-hand controls and keeps its spot as others
  * come and go; the lowest are the first to fold into "•••".
  */
-export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'knock', 'ask', 'deal', 'bill', 'vote', 'invite', 'message', 'group'];
+export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'knock', 'ask', 'learn', 'deal', 'bill', 'vote', 'invite', 'message', 'group'];
 
 /**
  * Whether a line of "Needs you" counts in the bell's dot and its label. Every line does but two calm ones, listed and not

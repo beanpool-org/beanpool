@@ -13,8 +13,8 @@ describe('needs-you core helpers', () => {
     ];
 
     it('NEEDS_YOU_PRIORITY is ordered highest first', () => {
-        // A bill waiting on its payer is a money step beside a deal's (DESIGN-getting-paid-fable §4.4).
-        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'ask', 'deal', 'bill', 'vote', 'invite', 'message', 'group']);
+        // Local knowledge to check sits after a member's ask; a bill waiting on its payer is beside a deal's.
+        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'ask', 'learn', 'deal', 'bill', 'vote', 'invite', 'message', 'group']);
         expect(NEEDS_YOU_SLOT).toBe(48);
     });
 

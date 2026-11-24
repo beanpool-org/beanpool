@@ -1535,7 +1535,7 @@ function PostDetailModal() {
                 price_c: price?.ok ? price.value : 0,
                 price_type: editEach ? 'each' : editUnit,
                 ...(itemSave && itemSave.ok ? itemSave.fields : {}),
-                repeatable: editEach ? false : (isEditLendable ? true : editRepeatable),
+                repeatable: editEach ? false : editRepeatable,
                 cash_also_needed: editCashAlsoNeeded ? 1 : 0,
                 ...(editLat != null && editLng != null ? { lat: editLat, lng: editLng } : {}),
                 ...(isEditPublicLocal && reachablePeerList.length > 0 ? {

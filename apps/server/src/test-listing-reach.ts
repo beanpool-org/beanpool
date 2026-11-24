@@ -268,6 +268,18 @@ async function main() {
     assert(nosyView !== undefined && !('reachPeers' in nosyView),
         '12d. and a signed-in NEIGHBOUR does not — the gate is authorship, not whether you bothered to sign');
 
+    const enterprise = makeMember('Coop');
+    const keeper = makeMember('Keeper');
+    db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(enterprise, keeper);
+    const entNamed = createPost('offer', 'other', 'Coop apples', 'd', 10, 'fixed', enterprise,
+        undefined, undefined, undefined, false, undefined, false, { reach: 'peers', reachPeers: [BYRON] });
+    const keeperView = getPosts({ id: entNamed!.id, viewerPubkey: keeper })[0];
+    const outsiderView = getPosts({ id: entNamed!.id, viewerPubkey: otherMember })[0];
+    assert(keeperView?.reachPeers?.length === 1 && keeperView.reachPeers[0] === BYRON,
+        `12e. an active enterprise KEEPER gets the enterprise's reachPeers (got ${JSON.stringify(keeperView?.reachPeers)}) so editing it never wipes the chosen peers`);
+    assert(outsiderView !== undefined && !('reachPeers' in outsiderView),
+        '12f. while another member still does not see the enterprise\'s reachPeers');
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ #143 step 4 (reach): a listing travels only where its author said, and a borrowed one never travels on.');

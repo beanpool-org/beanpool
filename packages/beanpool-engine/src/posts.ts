@@ -2595,7 +2595,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             out.push(removal);
             continue;
         }
-        if (post.authorPublicKey !== viewer) delete post.reachPeers;
+        if (post.authorPublicKey !== viewer && !(viewer && !viewerIsVisitor && !filter?.guest && viewerKeeps().has(post.authorPublicKey))) {
+            delete post.reachPeers;
+        }
         // What made it (an owner's AI assistant, apps/server agent/owner-posts.ts), on its author's own read only, or a keeper's
         // of the enterprise that wrote it (design S2 §2.8: "via assistant" on their own listing): never to another reader.
         if (typeof r.created_via === 'string' && r.created_via && viewer && !viewerIsVisitor && !filter?.guest

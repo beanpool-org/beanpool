@@ -10,7 +10,7 @@
  * release), its phone twin the "every price unit, taken up on the phone" table in
  * apps/native/utils/__tests__/post-detail-words-render.test.ts.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PRICE_UNITS, dealAmountFor, feeOf, formatHundredths, needAnswerLine, releaseAmount, type PriceUnit } from '@beanpool/core';
 import { MarketplacePage } from './MarketplacePage';
@@ -83,8 +83,8 @@ function stubNode(posts: unknown[]) {
 
 const settle = async () => { await act(async () => { await new Promise(r => setTimeout(r, 30)); }); };
 const said: string[] = [];
-let accept: ReturnType<typeof vi.spyOn>;
-let request: ReturnType<typeof vi.spyOn>;
+let accept: MockInstance<typeof api.acceptMarketplacePost>;
+let request: MockInstance<typeof api.requestMarketplacePost>;
 
 beforeEach(() => {
     vi.restoreAllMocks();

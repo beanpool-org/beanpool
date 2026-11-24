@@ -688,7 +688,7 @@ describe('every price unit, taken up on the phone: the box, the total, and what 
     };
     const listingOf = (kind: 'offer' | 'need', unit: PriceUnit) => ({
         id: `l-${kind}-${unit}`, type: kind, status: 'active', title: `Thing ${kind} ${unit}`, description: 'For the table test', category: 'food',
-        author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_c: UNIT_PRICE, price_type: unit, photos: JSON.stringify(['https://mullum.example/p/1.jpg']),
+        author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_c: UNIT_PRICE, price_type: unit, photos: OFFER.photos,
         audience_scope: 'public', created_at: iso(now - 60 * 60_000), ...(unit === 'each' ? { units_left: 9 } : {}),
     });
 

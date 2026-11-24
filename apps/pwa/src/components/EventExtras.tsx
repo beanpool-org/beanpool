@@ -270,18 +270,21 @@ export function EventReminder({ post, identity, myRsvp, choice: given }: Reminde
     const remindersOff = reminderComing && notifyRemindersOff(browser);
     const [lang] = useLanguage();
     const [turningOn, setTurningOn] = useState(false);
-    const [said, setSaid] = useState<string | null>(null);
+    const [said, setSaid] = useState<{ text: string; failed: boolean } | null>(null);
     const turnOn = () => {
         if (!identity || !browser || turningOn) return;
         setSaid(null);
         // The browser blocks this site: only its own settings undo that, so nothing is asked; the line says where.
-        if (notifyTurnOn(browser, readNotifyAsk(identity.publicKey)) === 'settings') { setSaid(t(TELL_ME_WORDS.blocked)); return; }
+        if (notifyTurnOn(browser, readNotifyAsk(identity.publicKey)) === 'settings') {
+            setSaid({ text: t(TELL_ME_WORDS.blocked), failed: false });
+            return;
+        }
         setTurningOn(true);
         // The browser's prompt is the first thing this tap waits on; its answer kept as a named line's Tell me keeps it.
         void turnOnAsk(identity, lang, 'line').then(r => {
             setTurningOn(false);
-            if (r.result === 'blocked') setSaid(t(TELL_ME_WORDS.blocked));
-            else if (r.result === 'failed') setSaid(webPushFailureMessage(r.failure));
+            if (r.result === 'blocked') setSaid({ text: t(TELL_ME_WORDS.blocked), failed: false });
+            else if (r.result === 'failed') setSaid({ text: webPushFailureMessage(r.failure), failed: true });
             noteBrowserChanged();
         });
     };
@@ -319,7 +322,16 @@ export function EventReminder({ post, identity, myRsvp, choice: given }: Reminde
                         {t(WEB_PUSH_ROW_WORDS.turnOn)}
                     </button>
                 </div>
-                {said && <p role="status" dir="auto" data-testid="event-reminders-said" className={`m-0 text-xs break-words ${PAGE_INK.secondary}`}>{said}</p>}
+                {said && (
+                    <p
+                        role={said.failed ? 'alert' : 'status'}
+                        dir="auto"
+                        data-testid="event-reminders-said"
+                        className={`m-0 text-xs break-words ${said.failed ? 'text-bp-ink-danger' : PAGE_INK.secondary}`}
+                    >
+                        {said.text}
+                    </p>
+                )}
             </div>
         );
     }

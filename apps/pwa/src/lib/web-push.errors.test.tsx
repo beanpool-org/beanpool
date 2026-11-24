@@ -16,12 +16,16 @@ import { NodeTooOldError, hearNodeVersionForTests, resetNodeVersionGateForTests 
 import { WebPushRow } from '../components/WebPushRow';
 import { TellMeCard } from '../components/TellMeCard';
 import { NotifyAsk } from '../components/NotifyAsk';
+import { EventReminder } from '../components/EventExtras';
 
 vi.mock('./api', () => ({
     signedFetchAt: vi.fn(),
     sendSignedAt: vi.fn(async () => {}),
     getNodeApiUrl: vi.fn(() => ''),
     getPushNoticeDetails: vi.fn(),
+    getMyEvents: vi.fn(async () => []),
+    getNotificationPreferences: vi.fn(async () => ({})),
+    setEventReminder: vi.fn(async () => ({ success: true })),
 }));
 
 const MEMBER = 'ab'.repeat(32);
@@ -320,6 +324,94 @@ const FAILURE_TABLE: FailureCase[] = [
         expectedSentence: WEB_PUSH_FAILURE_WORDS.badRequest,
     },
     {
+        name: 'node refused: 401 with no code (middleware signature missing)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR }), { status: 401 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: null,
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.unsigned,
+    },
+    {
+        name: 'node refused: 429 with no code (gateway burst limit — never tells user to wait until tomorrow)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR }), { status: 429 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: null,
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.fallback,
+    },
+    {
+        name: 'node refused: 429 day_budget (gateway day budget — not key_rate_limited)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR, code: 'day_budget' }), { status: 429 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: 'day_budget',
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.fallback,
+    },
+    {
+        name: 'node refused: 403 with no code (middleware signature error — not no_open_request)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR }), { status: 403 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: null,
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.fallback,
+    },
+    {
+        name: 'node refused: 403 key_invalidated (not no_open_request)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR, code: 'key_invalidated' }), { status: 403 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: 'key_invalidated',
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.fallback,
+    },
+    {
+        name: 'node refused: 404 with no code (proxy misroute — not feature_off)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR }), { status: 404 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: null,
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.fallback,
+    },
+    {
+        name: 'node refused: 503 with no code (proxy/restart — nodeUnreachable, not no_seal_key)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR }), { status: 503 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: null,
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.nodeUnreachable,
+    },
+    {
+        name: 'node refused: 503 store_full (not no_seal_key)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR, code: 'store_full' }), { status: 503 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: 'store_full',
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.fallback,
+    },
+    {
         name: 'node refused: 500 with no code',
         setup: () => {
             setupHappyBrowser();
@@ -405,21 +497,28 @@ describe('other callers sharing these steps (TellMeCard, tellMeAtHome, keepWebPu
         document.documentElement.classList.remove('dark');
     });
 
-    it('TellMeCard on the waiting page shows browser-side and node-code sentences, and falls back to TELL_ME_WORDS.failed on unknown 500', async () => {
+    it('TellMeCard on the waiting page shows browser-side and node-code sentences, keeps Tell me mounted for retry, and falls back to TELL_ME_WORDS.failed on unknown 500', async () => {
         const { registration } = setupHappyBrowser();
         registration.pushManager.subscribe = vi.fn(async () => { throw new Error(RAW_SECRET_ERR); });
         render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Riverside', subscribe: tellMeWhenTheyAnswer }));
         fireEvent.click(screen.getByTestId('tell-me'));
         const off = await screen.findByTestId('tell-me-off');
+        expect(off.getAttribute('role')).toBe('alert');
         expect(off.textContent).toBe(WEB_PUSH_FAILURE_WORDS.browser);
         expect(off.textContent).not.toContain(RAW_SECRET_ERR);
+        expect(screen.getByTestId('tell-me')).not.toBeDisabled();
         cleanup();
 
         setupHappyBrowser();
-        vi.mocked(signedFetchAt).mockResolvedValue(new Response(JSON.stringify({ error: RAW_SECRET_ERR, code: 'no_open_request' }), { status: 403 }));
+        vi.mocked(signedFetchAt)
+            .mockResolvedValueOnce(new Response(JSON.stringify({ error: RAW_SECRET_ERR, code: 'no_open_request' }), { status: 403 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, subId: 'c'.repeat(64), pushKey: 'd'.repeat(64), vapidKey: VAPID_KEY }), { status: 201 }));
         render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Riverside', subscribe: tellMeWhenTheyAnswer }));
         fireEvent.click(screen.getByTestId('tell-me'));
         expect((await screen.findByTestId('tell-me-off')).textContent).toBe(WEB_PUSH_FAILURE_WORDS.noOpenRequest);
+        // Transient/refused failure keeps the button mounted so the user can retry in place.
+        fireEvent.click(screen.getByTestId('tell-me'));
+        expect(await screen.findByTestId('tell-me-on')).toBeTruthy();
         cleanup();
 
         setupHappyBrowser();
@@ -427,6 +526,7 @@ describe('other callers sharing these steps (TellMeCard, tellMeAtHome, keepWebPu
         render(createElement(TellMeCard, { origin: window.location.origin, identity, name: 'Riverside', subscribe: tellMeWhenTheyAnswer }));
         fireEvent.click(screen.getByTestId('tell-me'));
         expect((await screen.findByTestId('tell-me-off')).textContent).toBe(TELL_ME_WORDS.failed);
+        expect(screen.getByTestId('tell-me')).not.toBeDisabled();
     });
 
     it('TellMeCard compact (Home Find card via tellMeAtHome) shows bad_host on non-https and code-specific sentences on refusal', async () => {
@@ -481,5 +581,34 @@ describe('other callers sharing these steps (TellMeCard, tellMeAtHome, keepWebPu
             expect(alert.className).toContain('text-bp-ink-danger');
             cleanup();
         }
+    });
+
+    it('EventReminder renders failures with role="alert" and danger ink, and blocked with role="status" and secondary ink', async () => {
+        const start = Date.now() + 7 * 24 * 3_600_000;
+        const post: any = {
+            id: 'ev-err-1', type: 'event', status: 'active', eventState: 'scheduled',
+            eventStartAt: new Date(start).toISOString(), eventEndAt: new Date(start + 3_600_000).toISOString(),
+        };
+        const choice = { offsets: null, defaults: [1440], marketplaceOn: true, known: true, setOffsets: vi.fn() };
+
+        const { registration } = setupHappyBrowser();
+        registration.pushManager.subscribe = vi.fn(async () => { throw new Error(RAW_SECRET_ERR); });
+        render(createElement(EventReminder, { post, identity, myRsvp: 'going', choice }));
+        fireEvent.click(screen.getByTestId('event-reminders-turn-on'));
+        const failedSaid = await screen.findByTestId('event-reminders-said');
+        expect(failedSaid.textContent).toBe(WEB_PUSH_FAILURE_WORDS.browser);
+        expect(failedSaid.getAttribute('role')).toBe('alert');
+        expect(failedSaid.className).toContain('text-bp-ink-danger');
+        expect(failedSaid.textContent).not.toContain(RAW_SECRET_ERR);
+        cleanup();
+
+        setupHappyBrowser();
+        (globalThis as any).Notification.permission = 'denied';
+        render(createElement(EventReminder, { post, identity, myRsvp: 'going', choice }));
+        fireEvent.click(screen.getByTestId('event-reminders-turn-on'));
+        const blockedSaid = await screen.findByTestId('event-reminders-said');
+        expect(blockedSaid.textContent).toBe(TELL_ME_WORDS.blocked);
+        expect(blockedSaid.getAttribute('role')).toBe('status');
+        expect(blockedSaid.className).not.toContain('text-bp-ink-danger');
     });
 });

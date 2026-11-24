@@ -48,11 +48,7 @@ export function TellMeCard({ origin, identity, name, subscribe = tellMeWhenTheyA
             else setState({ kind: 'off', place: r.place });
         });
     };
-    const off = state.kind === 'off'
-        ? cannotLines(state.place)
-        : state.kind === 'failed'
-            ? { lines: [webPushFailureMessage(state.failure, compact ? 'member' : 'waiting')], getApp: null }
-            : null;
+    const off = state.kind === 'off' ? cannotLines(state.place) : null;
     const head = compact ? 'text-sm' : 'text-base';
     return (
         <div data-testid={`${testId}-card`} className={compact ? 'mt-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700' : 'mb-4 p-4 max-[359px]:p-3 rounded-xl border border-nature-200 dark:border-nature-800'}>
@@ -66,18 +62,27 @@ export function TellMeCard({ origin, identity, name, subscribe = tellMeWhenTheyA
                     <p dir="auto" className={`m-0 mb-1 ${head} font-bold break-words`}>{t(TW.title)}</p>
                     <p dir="auto" className="m-0 mb-3 text-sm text-text-secondary break-words">{t(TW.line, { name })}</p>
                     {off ? (
-                        <div role={state.kind === 'failed' ? 'alert' : 'status'} data-testid={`${testId}-off`} className="grid gap-2">
+                        <div role="status" data-testid={`${testId}-off`} className="grid gap-2">
                             {off.getApp && (
                                 <a href={off.getApp} rel="noopener noreferrer" data-testid={`${testId}-get-app`} className={`${PRIMARY} no-underline`}>{t(PEEK_WORDS.getApp)}</a>
                             )}
                             {off.lines.map(line => (
-                                <p key={line} dir="auto" className={state.kind === 'failed' ? 'm-0 text-sm text-bp-ink-danger break-words' : 'm-0 text-sm break-words'}>{line}</p>
+                                <p key={line} dir="auto" className="m-0 text-sm break-words">{line}</p>
                             ))}
                         </div>
                     ) : (
-                        <button type="button" data-testid={testId} className={PRIMARY} disabled={state.kind === 'asking'} aria-busy={state.kind === 'asking'} onClick={tap}>
-                            {state.kind === 'asking' ? t(TW.asking) : t(TW.button)}
-                        </button>
+                        <div className="grid gap-2">
+                            {state.kind === 'failed' && (
+                                <div role="alert" data-testid={`${testId}-off`} className="grid gap-2">
+                                    <p dir="auto" className="m-0 text-sm text-bp-ink-danger break-words">
+                                        {webPushFailureMessage(state.failure, compact ? 'member' : 'waiting')}
+                                    </p>
+                                </div>
+                            )}
+                            <button type="button" data-testid={testId} className={PRIMARY} disabled={state.kind === 'asking'} aria-busy={state.kind === 'asking'} onClick={tap}>
+                                {state.kind === 'asking' ? t(TW.asking) : t(TW.button)}
+                            </button>
+                        </div>
                     )}
                 </>
             )}

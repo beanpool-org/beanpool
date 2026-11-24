@@ -3,8 +3,8 @@
  * Learn page "Where:" and photo / full-screen viewer rendering (lane learn-card-map, slot 1540):
  * A Learn page stores only a plain text place name (`knowledge.place`, never coordinates, never a map); what sits directly
  * under "Where:" is PhotoCarousel (220 dp) and on tap ChatPhotoViewer. When a photo fails to load, PhotoCarousel must drop it
- * (collapsing to nothing when none load — never an empty light/dark box or a tappable blank slot), and ChatPhotoViewer uses
- * expo-image with memory-disk caching plus a loading indicator and a themed Retry fallback so tapping a photo never yields a
+ * (collapsing to nothing when none load — never an empty light/dark box or a tappable blank slot), and ChatPhotoViewer shows
+ * a loading indicator and a themed Retry fallback so tapping a photo never yields a
  * blank full-screen overlay. Measured in light and dark at 320 dp × 1.3x font.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -84,7 +84,15 @@ vi.mock('react-native', async () => {
         Text: host('span'),
         Pressable: host('button'),
         ScrollView: host('div'),
-        Image: host('img'),
+        Image: ({ source, style, accessibilityLabel, resizeMode, onLoad, onError }: any) => {
+            const uri: string = source?.uri ?? '';
+            effect(() => {
+                if (!h.autoSettle || !uri) return;
+                if (h.failUris.has(uri)) onError?.();
+                else onLoad?.();
+            }, [uri]);
+            return el('img', { 'data-src': uri, 'data-fit': resizeMode ?? '', 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(flat(style)) });
+        },
         ActivityIndicator: ({ accessibilityLabel }: any) => el('span', { 'data-testid': 'spinner', 'aria-label': accessibilityLabel }, '…'),
         Modal: ({ visible, children }: any) => (visible ? el('div', { 'data-testid': 'modal' }, children) : null),
         StatusBar: { pushStackEntry: () => ({}), popStackEntry: () => {} },
@@ -123,7 +131,7 @@ import { ChatPhotoViewer } from '../../components/chat/ChatPhoto';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { layOut } from './yoga-dom-layout';
 
-const WHERE = 'Northern Rivers NSW: Byron Bay, Mullumbimby, Lismore, surrounds';
+const WHERE = 'Riverside district: Northgate, Eastwood, Lowtown, surrounds';
 const PHOTO_A = 'https://valley.example.org/api/marketplace/posts/nr/photos/0?v=1&k=AAA';
 const PHOTO_B = 'https://valley.example.org/api/marketplace/posts/nr/photos/1?v=1&k=BBB';
 const PHOTO_A_V2 = 'https://valley.example.org/api/marketplace/posts/nr/photos/0?v=2&k=AAA2';
@@ -186,7 +194,7 @@ describe.each(['light', 'dark'] as const)('Learn page Where: + photos (%s, 320 d
         expect(q('modal')).toBeNull();
     });
 
-    it('with a working photo: draws it at 288 × 220 with transition 0, and tapping opens ChatPhotoViewer on expo-image memory-disk', async () => {
+    it('with a working photo: draws it at 288 × 220 with transition 0, and tapping opens ChatPhotoViewer', async () => {
         await show(createElement(KnowledgeDetail, { page: makePage([PHOTO_A]) }));
         expect(host.textContent).toContain(`Where: ${WHERE}`);
         const img = host.querySelector('img')!;
@@ -207,7 +215,6 @@ describe.each(['light', 'dark'] as const)('Learn page Where: + photos (%s, 320 d
         const fullImg = modal.querySelector('img[aria-label="Full-size photo"]')!;
         expect(fullImg).toBeTruthy();
         expect(fullImg.getAttribute('data-src')).toBe(PHOTO_A);
-        expect(fullImg.getAttribute('data-cache')).toBe('memory-disk');
         expect(fullImg.getAttribute('data-fit')).toBe('contain');
         expect(q('photo-viewer-error')).toBeNull();
         expect(q('photo-viewer-loading')).toBeNull();

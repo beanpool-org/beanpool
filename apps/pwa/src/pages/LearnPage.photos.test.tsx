@@ -23,7 +23,7 @@ vi.mock('../components/StartCommunityScreen', () => ({ StartCommunityScreen: () 
 
 const ME = 'me-pk';
 const identity: BeanPoolIdentity = { publicKey: ME, privateKey: 'k', callsign: 'Damo', createdAt: '2026-09-17T00:00:00.000Z' };
-const WHERE = 'Northern Rivers NSW: Byron Bay, Mullumbimby, Lismore, surrounds';
+const WHERE = 'Riverside district: Northgate, Eastwood, Lowtown, surrounds';
 const PHOTO_A = '/api/marketplace/posts/nr/photos/0?v=1&k=AAA';
 const PHOTO_B = '/api/marketplace/posts/nr/photos/1?v=1&k=BBB';
 

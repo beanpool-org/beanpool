@@ -7,7 +7,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Image, ActivityIndicator } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import { LightBarModal } from '../LightBarModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -67,9 +66,8 @@ export function ChatWaitingPhoto({ uri, styles, disabled, onRemove }: { uri: str
 
 /**
  * The photo full screen, over the chat or a detail page (the listing's, the event's and Learn's, whose frame crops:
- * DESIGN-detail-pages-fable.md §2.6, slice DP4), until tapped or closed. Nothing when `uri` is null. Uses expo-image
- * (sharing PhotoCarousel's memory-disk cache so cached photos open offline too) and shows a clear fallback if the photo
- * fails to load — never a blank full-screen overlay.
+ * DESIGN-detail-pages-fable.md §2.6, slice DP4), until tapped or closed. Nothing when `uri` is null. Shows a spinner while the photo
+ * loads and a clear fallback with Try again if it fails — never a blank full-screen overlay.
  */
 export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
     const { colors } = useTheme();
@@ -91,13 +89,11 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                 onPress={onClose}
             >
                 {status !== 'error' ? (
-                    <ExpoImage
+                    <Image
                         key={`${uri}#${retryKey}`}
                         source={{ uri }}
                         style={{ width: '100%', height: '100%' }}
-                        contentFit="contain"
-                        cachePolicy="memory-disk"
-                        transition={0}
+                        resizeMode="contain"
                         onLoad={() => setStatus('loaded')}
                         onError={() => setStatus('error')}
                         accessibilityLabel={t('Full-size photo')}

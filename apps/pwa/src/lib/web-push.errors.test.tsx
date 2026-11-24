@@ -174,6 +174,28 @@ const FAILURE_TABLE: FailureCase[] = [
         expectedSentence: WEB_PUSH_FAILURE_WORDS.key,
     },
     {
+        name: 'key read refused: 503 standby (standby with no local vapid.key)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ error: RAW_SECRET_ERR, code: 'standby' }), { status: 503 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: 'standby',
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.standby,
+    },
+    {
+        name: 'key read refused: 503 no_key (unreadable vapid.key)',
+        setup: () => {
+            setupHappyBrowser();
+            vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ error: RAW_SECRET_ERR, code: 'no_key' }), { status: 503 }));
+        },
+        expectedKind: 'failed',
+        expectedReason: 'refused',
+        expectedCode: 'no_key',
+        expectedSentence: WEB_PUSH_FAILURE_WORDS.noKey,
+    },
+    {
         name: 'key read network error',
         setup: () => {
             setupHappyBrowser();

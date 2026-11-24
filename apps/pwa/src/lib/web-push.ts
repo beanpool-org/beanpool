@@ -199,10 +199,10 @@ export function forgetWebPushPin(origin: string, publicKey: string): void {
 /**
  * Why turning on or keeping web push failed after permission (or where permission itself threw):
  * - `browser`: the browser couldn't register/activate the worker or make a push subscription
- * - `key`: reading the community's web push key failed (non-2xx, bad JSON, missing/invalid key, or network error)
+ * - `key`: reading the community's web push key failed (non-2xx without a specific refusal code, bad JSON, missing/invalid key, or network error)
  * - `node_too_old`: the community's server is older than MIN_NODE_VERSION or its version couldn't be read
  * - `network`: posting the subscription to the community didn't reach it (network error or timeout)
- * - `refused`: the community answered POST /api/web-push with a refusal (`status` and its `code`, if any)
+ * - `refused`: the community answered POST /api/web-push (or GET /api/web-push/key with `standby`/`no_key`) with a refusal (`status` and its `code`, if any)
  */
 export type WebPushFailure =
     | { reason: 'browser' }
@@ -394,7 +394,15 @@ async function subscribeAtTap(origin: string, identity: BeanPoolIdentity, lang: 
         const keySignal = AbortSignal.timeout(TIMEOUT_MS);
         await refuseIfNodeTooOld(origin, keySignal);
         const keyRes = await fetch(`${origin}${WEB_PUSH_KEY_PATH}`, { cache: 'no-store', signal: keySignal });
-        const rawKey = keyRes.ok ? (await keyRes.json().catch(() => null))?.vapidKey : null;
+        const keyBody = await keyRes.json().catch(() => null);
+        if (!keyRes.ok) {
+            const code = typeof keyBody?.code === 'string' ? keyBody.code : null;
+            if (code === 'standby' || code === 'no_key') {
+                return { ok: false, place, reason: 'refused', status: keyRes.status, code };
+            }
+            return { ok: false, place, reason: 'key' };
+        }
+        const rawKey = keyBody?.vapidKey;
         if (typeof rawKey !== 'string' || !rawKey) return { ok: false, place, reason: 'key' };
         vapidKey = rawKey;
         applicationServerKey = fromBase64url(vapidKey);

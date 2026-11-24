@@ -28,9 +28,10 @@ import { chatLineWords } from '../lib/chat-line-words';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
-    deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isSampleId, keeperWords, parseHundredths, priceUnitTakesQuantity, t, tn, word, amountRefusalWords, ANY_DECIMALS,
-    isAmbiguousAmount, parseAmount, type WordKey, BANNER_PICTURE,
+    deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isPriceUnit, isSampleId, keeperWords, parseHundredths, priceUnitsOffered, priceUnitTakesQuantity, t, tn, word, amountRefusalWords, ANY_DECIMALS,
+    isAmbiguousAmount, parseAmount, type PriceUnit, type WordKey, BANNER_PICTURE,
 } from '@beanpool/core';
+import { useCommunityInfo } from '../lib/features';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { ReportModal } from '../components/ReportModal';
 import { PostPhotoPicker, MAX_POST_PHOTOS } from '../components/PostPhotoPicker';
@@ -64,6 +65,61 @@ import { LocalCommunityStrip, LocalCommunityAction, LocalCommunityLine, type Loc
 /** What stands in for a message a keeper (a project's collaborator) removed: the same words the remove confirm quotes. */
 function removedLine(project: boolean): string {
     return project ? t('removed by a collaborator') : t('removed by a keeper');
+}
+
+/** Enterprise listing price units (every listing unit except `each`): marked here, translated where shown. */
+const ENTERPRISE_PRICE_TYPE_LABEL: Record<Exclude<PriceUnit, 'each'>, WordKey> = {
+    fixed: word('Fixed Total'),
+    hourly: word('Hourly (/hr)'),
+    daily: word('Daily (/day)'),
+    weekly: word('Weekly (/wk)'),
+    monthly: word('Monthly (/mo)'),
+    yearly: word('Yearly (/yr)'),
+    per_kg: word('Per kilo (/kg)'),
+};
+
+/** Prompt and validation words when a keeper releases a quantity-priced enterprise deal. */
+function enterpriseReleaseCopy(priceType: string | undefined, postTitle?: string): { question: string; invalid: string } {
+    const fallback = {
+        question: postTitle ? t('Enter units worked for "{title}":', { title: postTitle }) : t('Enter units worked for "deal":'),
+        invalid: t('Please enter a valid positive quantity.'),
+    };
+    if (!isPriceUnit(priceType)) return fallback;
+    switch (priceType) {
+        case 'hourly':
+            return {
+                question: postTitle ? t('Enter hours worked for "{title}":', { title: postTitle }) : t('Enter hours worked for "deal":'),
+                invalid: t('Please enter a valid positive number of hours.'),
+            };
+        case 'daily':
+            return {
+                question: postTitle ? t('Enter days worked for "{title}":', { title: postTitle }) : t('Enter days worked for "deal":'),
+                invalid: t('Please enter a valid positive number of days.'),
+            };
+        case 'weekly':
+            return {
+                question: postTitle ? t('Enter weeks worked for "{title}":', { title: postTitle }) : t('Enter weeks worked for "deal":'),
+                invalid: t('Please enter a valid positive number of weeks.'),
+            };
+        case 'monthly':
+            return {
+                question: postTitle ? t('Enter months worked for "{title}":', { title: postTitle }) : t('Enter months worked for "deal":'),
+                invalid: t('Please enter a valid positive number of months.'),
+            };
+        case 'yearly':
+            return {
+                question: postTitle ? t('Enter years worked for "{title}":', { title: postTitle }) : t('Enter years worked for "deal":'),
+                invalid: t('Please enter a valid positive number of years.'),
+            };
+        case 'fixed':
+        case 'each':
+        case 'per_kg':
+            return fallback;
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /** The P&L's periods (the phone's LEDGER_PERIODS labels): marked here, translated where shown. */
@@ -300,6 +356,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [postCategory, setPostCategory] = useState('food');
     const [postCredits, setPostCredits] = useState('');
     const [postPriceType, setPostPriceType] = useState('fixed');
+    const nodeInfo = useCommunityInfo();
+    const offeredPostUnits = priceUnitsOffered(nodeInfo?.features, postModalMode ?? 'offer')
+        .filter((u): u is Exclude<PriceUnit, 'each'> => u !== 'each');
+    const activePostPriceType: Exclude<PriceUnit, 'each'> = (offeredPostUnits as readonly string[]).includes(postPriceType)
+        ? (postPriceType as Exclude<PriceUnit, 'each'>)
+        : 'fixed';
     const [postDescription, setPostDescription] = useState('');
     const [postRepeatable, setPostRepeatable] = useState(true);
     const [postTags, setPostTags] = useState<string[]>([]);
@@ -917,9 +979,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const handleCompleteDeal = async (txId: string, postTitle?: string, credits?: number, priceType?: string, initialHours?: number) => {
         let finalHours: number | undefined;
         if (priceUnitTakesQuantity(priceType)) {
-            // The hours as typed, in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, any decimals, as before.
-            const question = postTitle ? t('Enter hours worked for "{title}":', { title: postTitle }) : t('Enter hours worked for "deal":');
-            const input = window.prompt(question, initialHours ? formatNumber(initialHours) : '1');
+            // The quantity as typed, in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, any decimals, as before.
+            const copy = enterpriseReleaseCopy(priceType, postTitle);
+            const input = window.prompt(copy.question, initialHours ? formatNumber(initialHours) : '1');
             if (input === null) return;
             const read = parseAmount(input, undefined, ANY_DECIMALS);
             if (!read.ok && isAmbiguousAmount(read.refusal)) {
@@ -928,7 +990,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             }
             const parsed = read.ok ? read.value : NaN;
             if (isNaN(parsed) || parsed <= 0) {
-                alert(t('Please enter a valid positive number of hours.'));
+                alert(copy.invalid);
                 return;
             }
             finalHours = parsed;
@@ -1001,7 +1063,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     title: postTitle.trim(),
                     category: postCategory,
                     price_c: creditsNum,
-                    priceType: postPriceType,
+                    priceType: activePostPriceType,
                     description: postDescription.trim() || undefined,
                     repeatable: postRepeatable,
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
@@ -1013,7 +1075,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     title: postTitle.trim(),
                     category: postCategory,
                     price_c: creditsNum,
-                    priceType: postPriceType,
+                    priceType: activePostPriceType,
                     description: postDescription.trim() || undefined,
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
                     ...(postTags.length > 0 ? { tags: postTags } : {}),
@@ -1024,6 +1086,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setPostTitle('');
             setPostDescription('');
             setPostCredits('');
+            setPostPriceType('fixed');
             setPostPhotos([]);
             setPostTags([]);
             setPostFreeTags([]);
@@ -1413,6 +1476,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             // Its new Offer starts in its shop's category (Marty, 25 Oct 2026); the keeper can change it.
                                                             const shopCategory = shopCategoryOf(detail?.shop);
                                                             if (shopCategory) setPostCategory(shopCategory);
+                                                            setPostPriceType('fixed');
                                                             setPostRepeatable(true);
                                                             setPostError(null);
                                                         }}
@@ -1425,6 +1489,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         disabled={detail.paused || detail.status === 'winding_up' || detail.status === 'completed'}
                                                         onClick={() => {
                                                             setPostModalMode('need');
+                                                            setPostPriceType('fixed');
                                                             setPostRepeatable(false);
                                                             setPostError(null);
                                                         }}
@@ -2983,12 +3048,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         {t('Price Type')}
                                     </label>
                                     <select
-                                        value={postPriceType}
+                                        value={activePostPriceType}
                                         onChange={(e) => setPostPriceType(e.target.value)}
                                         className="w-full bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                     >
-                                        <option value="fixed">{t('Fixed Total')}</option>
-                                        <option value="hourly">{t('Hourly (/hr)')}</option>
+                                        {offeredPostUnits.map((unit) => (
+                                            <option key={unit} value={unit}>{t(ENTERPRISE_PRICE_TYPE_LABEL[unit])}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>

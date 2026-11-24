@@ -89,6 +89,7 @@ describe('web labels for every price unit (old and new)', () => {
         const mapSrc = read('../pages/MapPage.tsx');
         const marketSrc = read('../pages/MarketplacePage.tsx');
         const cardSrc = read('../components/MarketplaceCard.tsx');
+        const treasurySrc = read('../pages/TreasuryDetailPage.tsx');
 
         expect(mapSrc).toContain("postUnits.includes('yearly')");
         expect(mapSrc).toContain("postUnits.includes('per_kg')");
@@ -99,6 +100,9 @@ describe('web labels for every price unit (old and new)', () => {
         expect(marketSrc).toContain("case 'per_kg': return t('/kg'");
         expect(cardSrc).toContain("case 'yearly': return t('/yr'");
         expect(cardSrc).toContain("case 'per_kg': return t('/kg'");
+        expect(treasurySrc).toContain('priceUnitsOffered(nodeInfo?.features');
+        expect(treasurySrc).toContain("Enter years worked for \"{title}\":");
+        expect(treasurySrc).toContain("setPostPriceType('fixed')");
     });
 
     it('old node features answer hides yearly and per_kg on both Offers and Needs', () => {

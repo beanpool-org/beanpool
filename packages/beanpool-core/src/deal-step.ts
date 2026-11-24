@@ -3,10 +3,11 @@
  * Pure and universal: imported by both apps and the server.
  */
 
-import { t } from './words.js';
-import { formatHundredths, isHundredths, quantityHundredths, shareOf } from './hundredths.js';
+import { t, tn } from './words.js';
+import { dealAmountFor, formatHundredths, isHundredths, quantityHundredths, shareOf } from './hundredths.js';
 import { amountRefusalWords, isAmbiguousAmount, type ParsedAmount } from './amount-input.js';
 import { standingLowerMoves, type StandingAsk, type StandingPeriodUnit, type StandingPhase } from './standing-deal.js';
+import { priceUnitTakesQuantity } from './price-units.js';
 
 export type DealRole = 'payer' | 'payee';
 
@@ -446,9 +447,9 @@ export interface ReleaseListing {
 export function releaseAmount(deal: ReleaseDeal, units: number | undefined, listing: ReleaseListing): number {
     const held = isHundredths(deal.amount_c) && deal.amount_c > 0 ? deal.amount_c : 0;
     const booked = Number(deal.hours);
-    const oneFeeLoan = !!listing.lendable && (listing.priceType || 'fixed') === 'fixed';
-    const items = listing.priceType === 'each' || deal.itemOption === 'each' || deal.itemOption === 'lot';
-    if (!(Number.isFinite(booked) && booked > 0) || oneFeeLoan || items || units === undefined) return held;
+    const pt = listing.priceType || 'fixed';
+    const items = pt === 'each' || deal.itemOption === 'each' || deal.itemOption === 'lot';
+    if (!(Number.isFinite(booked) && booked > 0) || items || !priceUnitTakesQuantity(pt) || units === undefined) return held;
     if (!(Number.isFinite(units) && units > 0)) return 0;
     // As the node pays it (engine/escrow.ts): what it holds times the time confirmed over the time booked, both in
     // hundredths of a unit, truncated once (the payer keeps a part below a hundredth).
@@ -464,4 +465,22 @@ export function releaseLine(deal: ReleaseDeal, listing: ReleaseListing, typed: P
     if (typed && !typed.ok && isAmbiguousAmount(typed.refusal)) return amountRefusalWords(typed.refusal);
     const units = typed ? (typed.ok ? typed.value : NaN) : undefined;
     return t('Transferring {n} B to {name}', { n: formatHundredths(releaseAmount(deal, units, listing)), name: payeeName });
+}
+
+/**
+ * The line under the weight box when a member takes up a listing priced per kilo, both apps, Offer and Need: the kilos
+ * they typed, the price a kilo and what that comes to, the figure the node holds (dealAmountFor: whole hundredths,
+ * truncated once). "2.5 kilos at 7.50 Beans a kilo comes to 18.75 Beans." Null until what is typed is a weight above 0 the
+ * deal can hold (as the hours box shows no figure until then), and for a price that is not whole hundredths.
+ */
+export function weightTakeUpLine(price_c: unknown, typed: ParsedAmount | null): string | null {
+    if (!typed || !typed.ok || !(typed.value > 0) || !isHundredths(price_c) || price_c < 0) return null;
+    let total: number;
+    try {
+        total = dealAmountFor(price_c, typed.value);
+    } catch {
+        return null;
+    }
+    return tn(typed.value, '{n} kilo at {price} Beans a kilo comes to {total} Beans.', '{n} kilos at {price} Beans a kilo comes to {total} Beans.',
+        { price: formatHundredths(price_c), total: formatHundredths(total) });
 }

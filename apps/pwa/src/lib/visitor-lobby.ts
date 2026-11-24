@@ -11,7 +11,7 @@
  */
 
 import {
-    askHost, FREE_PRICE_WORDS, listingAfterJoinHost, listingsAfterJoinOf, perItemLine, perItemOf, t, tn, withListingAfterJoin, word, formatHundredths,
+    askHost, FREE_PRICE_WORDS, isPriceUnit, listingAfterJoinHost, listingsAfterJoinOf, perItemLine, perItemOf, t, tn, withListingAfterJoin, word, formatHundredths,
     type ListingsAfterJoin,
 } from '@beanpool/core';
 import type { CommunityInfo, MarketplacePost } from './api';
@@ -63,12 +63,22 @@ export function visitorPriceText(post: Pick<MarketplacePost, 'price_c' | 'priceT
     // whole hundredths, written as every figure is (formatHundredths); the plural form is read from its Beans.
     const n = post.price_c / 100;
     const shown = { n: formatHundredths(post.price_c) };
-    switch (post.priceType) {
+    const pt = post.priceType;
+    if (!isPriceUnit(pt)) return tn(n, '{n} Beans', '{n} Beans', shown);
+    switch (pt) {
         case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour', shown);
         case 'daily': return tn(n, '{n} Beans a day', '{n} Beans a day', shown);
         case 'weekly': return tn(n, '{n} Beans a week', '{n} Beans a week', shown);
         case 'monthly': return tn(n, '{n} Beans a month', '{n} Beans a month', shown);
-        default: return tn(n, '{n} Beans', '{n} Beans', shown);
+        case 'yearly': return tn(n, '{n} Beans a year', '{n} Beans a year', shown);
+        case 'per_kg': return tn(n, '{n} Beans a kilo', '{n} Beans a kilo', shown);
+        case 'fixed':
+        case 'each':
+            return tn(n, '{n} Beans', '{n} Beans', shown);
+        default: {
+            const _exhaustive: never = pt;
+            return _exhaustive;
+        }
     }
 }
 

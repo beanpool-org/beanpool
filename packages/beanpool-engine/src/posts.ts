@@ -94,7 +94,7 @@ export interface MarketplacePost {
     description: string;
     /** The price, whole hundredths of a Bean; 0 is Free. */
     price_c: number;
-    priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string;
+    priceType?: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'per_kg' | string;
     authorPublicKey: string;
     authorCallsign: string;
     createdAt: string;

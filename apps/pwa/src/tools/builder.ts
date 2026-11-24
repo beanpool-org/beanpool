@@ -167,7 +167,7 @@ export interface ComposerDraft {
     description: string;
     category: string | null;
     credits: number | null;
-    priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | null;
+    priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'per_kg' | null;
     repeatable: boolean;
     cashAlsoNeeded: boolean;
     /** Whether the tool's draft asked for "Put this in your shop". */
@@ -181,7 +181,7 @@ export interface ComposerDraft {
 /** The composer keeps at most this many photos. */
 const COMPOSER_PHOTOS = 5;
 
-const PRICE_TYPES = new Set(['fixed', 'hourly', 'daily', 'weekly', 'monthly']);
+const PRICE_TYPES = new Set(['fixed', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'per_kg']);
 export const COMPOSER_TITLE_CHARS = 120;
 export const COMPOSER_DESCRIPTION_CHARS = 2000;
 const clip = (s: unknown, n: number) => (typeof s === 'string' ? [...s].slice(0, n).join('') : '');

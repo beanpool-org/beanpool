@@ -404,6 +404,8 @@ export interface CommunityInfo {
         /** Present, and true, only once this node takes up an Offer priced for each one (DESIGN-per-item-price-fable.md §6; core
          *  perItemOffered): the create and edit forms offer the unit Each only then. Absent (until every slice is merged, or an older node): not offered. */
         perItem?: true;
+        /** Present, and true, when this node accepts `yearly` (per year) and `per_kg` (per kilo) price units (core kgYearPriceUnitsOffered). */
+        priceUnitsKgYear?: true;
         /** Present, and true, only where this community has a forum (core forumOn): the Chat tab's top is then Chats · Forum
          *  (pages/ChatTabPage.tsx, slice T0). Absent (its owners switched it off, or an older node): the tab as before. */
         forum?: true;
@@ -1826,7 +1828,7 @@ export interface MarketplacePost {
     title: string;
     description: string;
     price_c: number;
-    priceType: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+    priceType: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'per_kg';
     /** Priced for each one only (DESIGN-per-item-price-fable.md §3): how many can be taken up now, and the price for all of them as stored (core per-item.ts, where lot is `ItemLot | null`). */
     unitsLeft?: number;
     lot?: { units: number; price_c: number } | null;
@@ -2040,7 +2042,7 @@ export async function createMarketplacePost(post: {
     description: string;
     /** The price, whole hundredths of a Bean (0: free). */
     price_c: number;
-    priceType?: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+    priceType?: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'per_kg';
     /** Priced for each one (DESIGN-per-item-price-fable.md §3): how many the seller has (1 to 9,999) and, optionally, the price for all of them. */
     unitsLeft?: number;
     lot?: { price_c: number };
@@ -2485,7 +2487,7 @@ export async function updateMarketplacePost(
         title?: string;
         description?: string;
         price_c?: number;
-        priceType?: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+        priceType?: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'per_kg';
         /**
          * Priced for each one (§4.6): the count, the count the screen read (the node writes a changed count only if the row still
          * holds it, else 409 `units_changed` with `unitsLeft`), and the price for all of them: `{ price_c }` sets it, null clears

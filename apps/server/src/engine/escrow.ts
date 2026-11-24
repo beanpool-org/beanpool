@@ -3,8 +3,8 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import {
-    isSyntheticAccount, isBeanAmount, formatHundredths, halves, isPerItem, loanDays, perItemLines, shareOf, standingLines, type ItemOption, type ItemTakeUp,
-    type ItemTakeUpIn, type PushNoticeKind, word, wordsFor,
+    isSyntheticAccount, isBeanAmount, isPriceUnit, formatHundredths, halves, isPerItem, loanDays, perItemLines, priceUnitDealKind, priceUnitTakesQuantity, shareOf, standingLines, type ItemOption, type ItemTakeUp,
+    type ItemTakeUpIn, type PriceUnit, type PushNoticeKind, word, wordsFor,
 } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
@@ -349,6 +349,18 @@ function assertNoDealOnCopy(shownFromHost: string | null | undefined): void {
     if (shownFromHost != null) throw Object.assign(new Error(word("This is shown from another community, so it can't be bought or taken here.")), { code: LISTING_COPY_CODE, status: 409 });
 }
 
+/**
+ * Taking up a listing priced per kilo with no weight: the words an app that never asks for one (a build from before per
+ * kilo was a unit) shows its member, so the node never holds one kilo for a weight nobody said. Marked for the member's
+ * language (member-words.ts).
+ */
+export const WEIGHT_REQUIRED_ERROR = word('This listing is priced per kilo, so say how many kilos you want. If your BeanPool app does not ask, update it and try again.');
+
+/** A per-kilo take-up must say its weight (requestPost, acceptPost): refused in plain words when it says none. */
+function assertWeightGiven(priceType: PriceUnit, hours: number | undefined): void {
+    if (priceType === 'per_kg' && hours == null) throw new Error(WEIGHT_REQUIRED_ERROR);
+}
+
 export function requestPost(
     cb: EscrowCallbacks,
     postId: string,
@@ -438,21 +450,27 @@ export function requestPost(
         if (!hasListedOffer(db, requesterPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
     }
 
-    // Finite and in range (F6): `hours > 0` alone passed Infinity, and 0 × Infinity is NaN. A fixed price ignores the
-    // quantity, but one that is given and isn't one (Infinity, a negative, text) is refused there too, not ignored (F3).
-    // A quantity given and out of range (below POST_HOURS_MIN too: 5e-324 hours rounded the deal's rate) gets the
-    // quantity's own words, on a priced-per-unit listing as on a fixed one.
+    const priceType = post.price_type || 'fixed';
+    if (!isPriceUnit(priceType)) throw new Error(`Unknown price type: ${priceType}`);
+    const takesQuantity = priceUnitDealKind(priceType) === 'quantity';
+    // Finite and in range (F6): `hours > 0` alone passed Infinity, and 0 × Infinity is NaN. A fixed price ignores an
+    // absent quantity, but one that is given and isn't one (Infinity, a negative, text) is refused there too, not ignored
+    // (F3). A quantity given and out of range (below POST_HOURS_MIN too: 5e-324 hours rounded the deal's rate) gets the
+    // quantity's own words, on a priced-per-unit listing as on a fixed one. A per-kilo listing's quantity is the weight in
+    // kilos, asked for as an hourly one's hours are (Marty, 25 Nov 2026); one taken up with none is refused in plain words
+    // (assertWeightGiven), never held at one kilo.
     if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);
-    if (post.price_type !== 'fixed' && !isDealQuantity(hours)) {
-        throw new Error(`Must provide a valid quantity for a ${post.price_type} post`);
+    assertWeightGiven(priceType, hours);
+    if (takesQuantity && !isDealQuantity(hours)) {
+        throw new Error(`Must provide a valid quantity for a ${priceType} post`);
     }
     // A loan's days are kept on its deal whatever the fee (on one fee they move no Beans): they say when it is due back.
     const lendable = post.lendable === 1;
-    if (lendable) assertLoanLength(post.price_type, post.lend_max_days, hours);
-    const keptHours = post.price_type !== 'fixed' || (lendable && hours != null) ? hours : undefined;
+    if (lendable) assertLoanLength(priceType, post.lend_max_days, hours);
+    const keptHours = takesQuantity || (lendable && hours != null) ? hours : undefined;
 
     const requester = getMember(db, requesterPublicKey);
-    const finalCredits = post.price_type !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
+    const finalCredits = takesQuantity ? dealAmountFor(post.price_c, hours!) : post.price_c;
     assertDealAmount(finalCredits);
 
     const payerPubkey = isOffer ? requesterPublicKey : post.author_pubkey;
@@ -1190,12 +1208,16 @@ export function acceptPost(
             keptHours = item.n;
             return item.amount_c;
         }
+        const priceType = post.priceType || 'fixed';
+        if (!isPriceUnit(priceType)) throw new Error(`Unknown price type: ${priceType}`);
+        const takesQuantity = priceUnitDealKind(priceType) === 'quantity';
         if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
-        if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
-            throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
+        assertWeightGiven(priceType, hours);
+        if (takesQuantity && !isDealQuantity(hours)) {
+            throw new Error(`Must provide a valid quantity for a ${priceType} post`);
         }
-        keptHours = post.priceType !== 'fixed' ? hours : undefined;
-        return post.priceType !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
+        keptHours = takesQuantity ? hours : undefined;
+        return takesQuantity ? dealAmountFor(post.price_c, hours!) : post.price_c;
     }, { authSigner: opts?.authSigner, standing: !!standing });
     const finalCredits = parties.amount_c;
     // A take-up that says how a listing priced for each one is taken, of one that is not (its seller changed the unit while
@@ -1512,8 +1534,8 @@ export function completePostTransaction(
     // pays what it holds, whatever days are confirmed, as every deal on a fixed price does. The listing's price and its
     // lending hold while the deal is open (engine/posts.ts assertPriceNotFrozen, lendColumnsOnEdit), so what they say
     // here is what the deal was struck under.
-    const oneFeeLoan = post?.lendable === 1 && (post?.price_type || 'fixed') === 'fixed';
-    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !oneFeeLoan && !itemDeal;
+    const postPriceType = post?.price_type || 'fixed';
+    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !itemDeal && priceUnitTakesQuantity(postPriceType);
 
     // A final quantity that is given and isn't a finite one in range is refused, not ignored, on a fixed deal as on an
     // hourly one: Infinity (F6), and a negative, 0 or text, which used to pay the booked hours (F3). None given pays them.
@@ -1521,7 +1543,24 @@ export function completePostTransaction(
         throw new Error(DEAL_QUANTITY_ERROR.replace(/^The quantity/, 'The final quantity'));
     }
     assertDealRowAmount(row.amount_c, 'pending');
-    const units = ({ hourly: 'hours', daily: 'days', weekly: 'weeks', monthly: 'months' } as Record<string, string>)[post?.price_type] ?? 'units';
+    const unitNoun = (pt: PriceUnit): string => {
+        switch (pt) {
+            case 'hourly': return 'hours';
+            case 'daily': return 'days';
+            case 'weekly': return 'weeks';
+            case 'monthly': return 'months';
+            case 'yearly': return 'years';
+            case 'per_kg': return 'kilos';
+            case 'fixed':
+            case 'each':
+                return 'units';
+            default: {
+                const _exhaustive: never = pt;
+                return _exhaustive;
+            }
+        }
+    };
+    const units = isPriceUnit(postPriceType) ? unitNoun(postPriceType) : 'units';
     // Each refusal below names the way out that works in the only states that reach it (#1445 re-review, measured):
     // a booked quantity outside 0.01–10000 is itself refused as a final quantity, and neither app can confirm a per-unit
     // deal with none, so only the cancel works there; a row whose credits were set near the largest number by hand can't

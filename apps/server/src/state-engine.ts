@@ -6010,7 +6010,7 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
     // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
     // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
     // sent back unchanged, is not held to a length limit it was stored before (#1493).
-    const storedText = db.prepare('SELECT title, description, category, tags, free_tags FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
+    const storedText = db.prepare('SELECT title, description, category, tags, free_tags, price_type FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
     assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.price_c !== undefined) updates = { ...updates, price_c: beansOffPrice(updates.price_c) };
     // A keeper may edit their enterprise's Offer or Need signed with their own key: the signed caller only, by the rule the

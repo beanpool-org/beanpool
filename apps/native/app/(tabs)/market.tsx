@@ -72,7 +72,7 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, freshBanner, recordFreshBannerDismissal, MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, type WordKey } from '@beanpool/core';
 // A price for each one: the card's pieces (slice P2).
-import { perItemCard } from '@beanpool/core';
+import { isPriceUnit, perItemCard } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
 import { isPostPinned, anyLivePin, marketPins } from '../../utils/pins';
 
@@ -111,13 +111,24 @@ const FOR_YOU_HEADING = word('★ For You Feed');
 /** A listing's type badge, in the member's language (the listing branch only: polls and events have cards of their own). */
 const typeBadge = (type: string): string => (type === 'offer' ? t('OFFER') : t('NEED'));
 
-/** The unit after a listing's price: per hour, day, week or month, or none for a total. */
+/** The unit after a listing's price: per hour, day, week, month, year or kilo, or none for a total. */
 function priceUnit(priceType: string | null | undefined): string {
-    if (priceType === 'hourly') return t('/Hr', undefined, 'price per hour');
-    if (priceType === 'daily') return t('/Dy', undefined, 'price per day');
-    if (priceType === 'weekly') return t('/Wk', undefined, 'price per week');
-    if (priceType === 'monthly') return t('/Mo', undefined, 'price per month');
-    return '';
+    if (!isPriceUnit(priceType)) return '';
+    switch (priceType) {
+        case 'hourly': return t('/Hr', undefined, 'price per hour');
+        case 'daily': return t('/Dy', undefined, 'price per day');
+        case 'weekly': return t('/Wk', undefined, 'price per week');
+        case 'monthly': return t('/Mo', undefined, 'price per month');
+        case 'yearly': return t('/Yr', undefined, 'price per year');
+        case 'per_kg': return t('/kg', undefined, 'price per kilo');
+        case 'fixed':
+        case 'each':
+            return '';
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /** The compact row's author line: whole sentences per variant, with the Elder mark and the member's own. */

@@ -10,6 +10,8 @@
  * Plain functions only: this file is in the barrel the phone app bundles (barrel-is-universal.test.ts).
  */
 
+import { isPriceUnit } from './price-units.js';
+
 /** How a loan's fee may be counted: one fee (Free is 0), per day, or per week. */
 export const LENDABLE_PRICE_TYPES = ['fixed', 'daily', 'weekly'] as const;
 
@@ -36,25 +38,37 @@ export function loanDays(priceType: string | null | undefined, units: unknown): 
     return null;
 }
 
-export type DealQuantityUnit = 'hour' | 'day' | 'week' | 'month';
+export type DealQuantityUnit = 'hour' | 'day' | 'week' | 'month' | 'year' | 'kilo';
 
 /**
  * The unit a deal's quantity (`marketplace_transactions.hours`) is counted in: hours for an hourly price, days for daily,
- * weeks for weekly, months for monthly, and days for a lendable Offer on one fee (fixed, Free included). Null for a
- * fixed-price listing that is not lendable (no quantity line).
+ * weeks for weekly, months for monthly, years for yearly, kilos for per_kg (the weight taken up), and days for a lendable
+ * Offer on one fee (fixed, Free included). Null for fixed (non-lendable) and each (no quantity line).
  */
 export function dealQuantityUnit(
     priceType: string | null | undefined,
     lendable?: unknown,
 ): DealQuantityUnit | null {
     const pt = priceType || 'fixed';
-    if (pt === 'hourly') return 'hour';
-    if (pt === 'daily') return 'day';
-    if (pt === 'weekly') return 'week';
-    if (pt === 'monthly') return 'month';
-    const isLend = lendable === true || lendable === 1 || lendable === '1' || lendable === 'true';
-    if (pt === 'fixed' && isLend) return 'day';
-    return null;
+    if (!isPriceUnit(pt)) return null;
+    switch (pt) {
+        case 'hourly': return 'hour';
+        case 'daily': return 'day';
+        case 'weekly': return 'week';
+        case 'monthly': return 'month';
+        case 'yearly': return 'year';
+        case 'per_kg': return 'kilo';
+        case 'fixed': {
+            const isLend = lendable === true || lendable === 1 || lendable === '1' || lendable === 'true';
+            return isLend ? 'day' : null;
+        }
+        case 'each':
+            return null;
+        default: {
+            const _exhaustive: never = pt;
+            return _exhaustive;
+        }
+    }
 }
 
 /**

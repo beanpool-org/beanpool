@@ -13,7 +13,7 @@
  *
  * No answer is null, never an empty shop: a page says it couldn't read rather than showing nothing for sale.
  */
-import { SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, freePriceWords, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word, type ShopCategory, type TierName, type WordKey, formatHundredths } from '@beanpool/core';
+import { SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, freePriceWords, isPriceUnit, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word, type ShopCategory, type TierName, type WordKey, formatHundredths } from '@beanpool/core';
 import { getMarketplacePosts, signedFetch } from './api';
 import { MARKETPLACE_CATEGORIES_BY_ID } from './marketplace';
 import { readShop, type MyShop } from './shop';
@@ -44,7 +44,7 @@ export interface ShopfrontListing {
 }
 
 const LIVE = new Set(['active', 'pending']);
-const BY_TIME = new Set(['hourly', 'daily', 'weekly', 'monthly']);
+const BY_TIME = new Set(['hourly', 'daily', 'weekly', 'monthly', 'yearly']);
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 
 /** A listing as the node sends it; null for an event, a poll or anything else. */
@@ -123,6 +123,11 @@ export function shopSectionsOf(listings: readonly ShopfrontListing[]): ShopSecti
         .map((id) => ({ id, title: sectionTitle(id, groups[id].length), listings: groups[id] }));
 }
 
+/** How many Beans a price in whole hundredths is, for the plural form its words take (1 Bean, 2.50 Beans); 0 for no figure. */
+function beansCount(price_c: unknown): number {
+    return typeof price_c === 'number' && Number.isFinite(price_c) ? price_c / 100 : 0;
+}
+
 /** Its price in words, or null where the community shows no Beans. */
 export function listingPriceLine(l: ShopfrontListing, showsBeans: boolean): string | null {
     if (!showsBeans) return null;
@@ -130,11 +135,23 @@ export function listingPriceLine(l: ShopfrontListing, showsBeans: boolean): stri
     const free = freePriceWords(l.price_c, l.type);
     if (free) return free;
     const amount = formatHundredths(l.price_c);
-    if (l.priceType === 'hourly') return t('{amount} 🫘 an hour', { amount });
-    if (l.priceType === 'daily') return t('{amount} 🫘 a day', { amount });
-    if (l.priceType === 'weekly') return t('{amount} 🫘 a week', { amount });
-    if (l.priceType === 'monthly') return t('{amount} 🫘 a month', { amount });
-    return t('{amount} 🫘', { amount });
+    if (!isPriceUnit(l.priceType)) return t('{amount} 🫘', { amount });
+    switch (l.priceType) {
+        case 'hourly': return t('{amount} 🫘 an hour', { amount });
+        case 'daily': return t('{amount} 🫘 a day', { amount });
+        case 'weekly': return t('{amount} 🫘 a week', { amount });
+        case 'monthly': return t('{amount} 🫘 a month', { amount });
+        // Beans as a word, counted (tn), so a language with more plural forms inflects it (core beansPriceWords' keys).
+        case 'yearly': return tn(beansCount(l.price_c), '{n} Beans a year', '{n} Beans a year', { n: amount });
+        case 'per_kg': return tn(beansCount(l.price_c), '{n} Beans a kilo', '{n} Beans a kilo', { n: amount });
+        case 'fixed':
+        case 'each':
+            return t('{amount} 🫘', { amount });
+        default: {
+            const _exhaustive: never = l.priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /** What one of its listings is doing now, when it is not simply on the board. */

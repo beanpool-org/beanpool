@@ -81,7 +81,7 @@ export interface MarketplacePost {
     description: string;
     /** The price, whole hundredths of a Bean. */
     price_c: number;
-    priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+    priceType: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'per_kg';
     /** An Offer priced for each one (the node sends priceType 'each'; the union above is widened by the slice that offers it, P4): how many can be taken now, and the price for all of them as stored (core per-item.ts). */
     unitsLeft?: number;
     lot?: { units: number; price_c: number } | null;

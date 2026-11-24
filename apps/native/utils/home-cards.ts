@@ -32,7 +32,7 @@ import {
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
     FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeShape, type WelcomeShape, welcomeFacts as coreWelcomeFacts, type WelcomeFacts,
     readerMayInvite, arrivingCards, keepArrivedCard, learnHomeLines, type HomeLearnCard, type LearnHomeOpens,
-    COMMUNITY_WELCOME_DISMISSED_KEY,
+    COMMUNITY_WELCOME_DISMISSED_KEY, isPriceUnit,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -1187,11 +1187,22 @@ export function marketInOrder<T extends { category: string; distanceKm?: number 
  * per hour, day, week or month; none for a fixed price (a total) or a kind this build does not know.
  */
 export function askedUnit(priceType: string | null | undefined): string {
-    if (priceType === 'hourly') return t('/Hr', undefined, 'price per hour');
-    if (priceType === 'daily') return t('/Dy', undefined, 'price per day');
-    if (priceType === 'weekly') return t('/Wk', undefined, 'price per week');
-    if (priceType === 'monthly') return t('/Mo', undefined, 'price per month');
-    return '';
+    if (!isPriceUnit(priceType)) return '';
+    switch (priceType) {
+        case 'hourly': return t('/Hr', undefined, 'price per hour');
+        case 'daily': return t('/Dy', undefined, 'price per day');
+        case 'weekly': return t('/Wk', undefined, 'price per week');
+        case 'monthly': return t('/Mo', undefined, 'price per month');
+        case 'yearly': return t('/Yr', undefined, 'price per year');
+        case 'per_kg': return t('/kg', undefined, 'price per kilo');
+        case 'fixed':
+        case 'each':
+            return '';
+        default: {
+            const _exhaustive: never = priceType;
+            return _exhaustive;
+        }
+    }
 }
 
 /**

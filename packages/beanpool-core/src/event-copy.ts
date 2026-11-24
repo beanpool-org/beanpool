@@ -10,6 +10,7 @@ import { t, tn } from './words.js';
 import { formatHundredths } from './hundredths.js';
 import { FREE_PRICE_WORDS } from './listing-price.js';
 import { perItemLines } from './per-item.js';
+import { isPriceUnit, type PriceUnit } from './price-units.js';
 
 /** A copy's from-line and its door, as the node sends them on `shownFrom`. */
 export interface ShownFromLine {
@@ -26,7 +27,7 @@ export interface ShownFromLine {
 export interface CopyPrice {
     price_c: number;
     /** `each`: the price for one of several (per-item.ts); a copy says no count and no price for all, which change at home. */
-    per: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'each';
+    per: PriceUnit;
 }
 
 /** Null for any other post. `from` is null where the directory shows no community for it: no line and no door. */
@@ -51,7 +52,7 @@ export function copyPriceOf(raw: unknown): CopyPrice | null {
     // Whole hundredths only: anything else (a decimal, a sign) is no price.
     if (more !== undefined || !figure || !/^\d{1,12}$/.test(figure)) return null;
     const n = Number(figure);
-    return per === 'fixed' || per === 'hourly' || per === 'daily' || per === 'weekly' || per === 'monthly' || per === 'each' ? { price_c: n, per } : null;
+    return isPriceUnit(per) ? { price_c: n, per } : null;
 }
 
 function fromLineOf(raw: unknown): ShownFromLine | null {
@@ -94,14 +95,21 @@ export function beansPriceWords(price: CopyPrice): string {
     if (!c) return t(FREE_PRICE_WORDS.short);
     const n = c / 100;
     const shown = { n: formatHundredths(c) };
+    if (!isPriceUnit(price.per)) return tn(n, '{n} Beans', '{n} Beans', shown);
     switch (price.per) {
+        case 'fixed': return tn(n, '{n} Beans', '{n} Beans', shown);
         case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour', shown);
         case 'daily': return tn(n, '{n} Beans a day', '{n} Beans a day', shown);
         case 'weekly': return tn(n, '{n} Beans a week', '{n} Beans a week', shown);
         case 'monthly': return tn(n, '{n} Beans a month', '{n} Beans a month', shown);
+        case 'yearly': return tn(n, '{n} Beans a year', '{n} Beans a year', shown);
+        case 'per_kg': return tn(n, '{n} Beans a kilo', '{n} Beans a kilo', shown);
         // The price for one (per-item.ts), in the card's own words: "300 Beans each in Byron".
         case 'each': return perItemLines.each(c);
-        default: return tn(n, '{n} Beans', '{n} Beans', shown);
+        default: {
+            const _exhaustive: never = price.per;
+            return _exhaustive;
+        }
     }
 }
 

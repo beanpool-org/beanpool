@@ -5,7 +5,7 @@ import { LightBarModal } from '../../components/LightBarModal';
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, formatHundredths, freePriceWords, isLiveStanding, itemDealTitle, itemTrustLine, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
+import { dealStateWords, dealStep, formatHundredths, freePriceWords, isLiveStanding, isPriceUnit, itemDealTitle, itemTrustLine, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -2145,9 +2145,27 @@ function ChatScreen({ id, inPlace }: { id: string; inPlace?: { community: string
                             {/* English writes one form for both; a language with more forms has them. */}
                             {/* Priced at 0 it reads Free (core listing-price.ts), as on every card, whatever the unit. */}
                             {/* Whole hundredths (price_c): the figure by formatHundredths, "—" for none, never a number made up. */}
-                            {showsBeans && <Text style={styles.stickyPostCredits}>{freePriceWords(postContext.price_c, null) ?? (postContext.priceType === 'hourly'
-                                ? tn((postContext.price_c ?? 0) / 100, '{n} Beans / hr', '{n} Beans / hr', { n: formatHundredths(postContext.price_c) })
-                                : tn((postContext.price_c ?? 0) / 100, '{n} Beans', '{n} Beans', { n: formatHundredths(postContext.price_c) }))}</Text>}
+                            {showsBeans && <Text style={styles.stickyPostCredits}>{freePriceWords(postContext.price_c, null) ?? (() => {
+                                const count = (postContext.price_c ?? 0) / 100;
+                                const shown = { n: formatHundredths(postContext.price_c) };
+                                const pt = postContext.priceType;
+                                if (!isPriceUnit(pt)) return tn(count, '{n} Beans', '{n} Beans', shown);
+                                switch (pt) {
+                                    case 'hourly': return tn(count, '{n} Beans / hr', '{n} Beans / hr', shown);
+                                    case 'daily': return tn(count, '{n} Beans a day', '{n} Beans a day', shown);
+                                    case 'weekly': return tn(count, '{n} Beans a week', '{n} Beans a week', shown);
+                                    case 'monthly': return tn(count, '{n} Beans a month', '{n} Beans a month', shown);
+                                    case 'yearly': return tn(count, '{n} Beans a year', '{n} Beans a year', shown);
+                                    case 'per_kg': return tn(count, '{n} Beans a kilo', '{n} Beans a kilo', shown);
+                                    case 'fixed':
+                                    case 'each':
+                                        return tn(count, '{n} Beans', '{n} Beans', shown);
+                                    default: {
+                                        const _exhaustive: never = pt;
+                                        return _exhaustive;
+                                    }
+                                }
+                            })()}</Text>}
                         </View>
                     </View>
                     <View style={[styles.statusBadge,

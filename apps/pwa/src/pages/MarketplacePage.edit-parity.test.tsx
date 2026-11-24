@@ -12,6 +12,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MarketplacePage } from './MarketplacePage';
@@ -20,6 +21,34 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { setLanguage } from '@beanpool/core';
+
+const leafletSpies = vi.hoisted(() => ({
+    markerCalls: [] as Array<{ pos: unknown; opts: any }>,
+    divIconCalls: [] as any[],
+}));
+vi.mock('leaflet', () => {
+    const mapInstance = {
+        setView() { return this; },
+        on() { return this; },
+        remove() {},
+        getZoom() { return 13; },
+    };
+    const L = {
+        map: () => mapInstance,
+        control: { zoom: () => ({ addTo() { return this; } }) },
+        tileLayer: () => ({ addTo() { return this; } }),
+        divIcon: (opts: any) => {
+            leafletSpies.divIconCalls.push(opts);
+            return { __isDivIcon: true, opts };
+        },
+        marker: (pos: unknown, opts: any) => {
+            leafletSpies.markerCalls.push({ pos, opts });
+            return { addTo() { return this; }, on() { return this; }, setLatLng() { return this; } };
+        },
+    };
+    return { default: L, ...L };
+});
+vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
@@ -171,6 +200,8 @@ async function openEdit(listing: Record<string, unknown>, opts: { peers?: api.Re
 
 beforeEach(() => {
     vi.restoreAllMocks();
+    leafletSpies.markerCalls.length = 0;
+    leafletSpies.divIconCalls.length = 0;
     localStorage.clear();
     resetCommunityInfoOnce();
     info = { features: { beans: true, escrow: true, perItem: true } };
@@ -340,5 +371,59 @@ describe('web Edit Post form behaviour', () => {
             onSuccess({ coords: { latitude: -28.70001, longitude: 153.70001 } });
         });
         expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('ListingLocationField works under React StrictMode, shows loading aria-busy state, and marks geolocation errors with role="alert"', () => {
+        let onSuccess!: (pos: any) => void;
+        let onError!: () => void;
+        Object.defineProperty(navigator, 'geolocation', {
+            configurable: true,
+            value: {
+                getCurrentPosition: (ok: (pos: any) => void, err: () => void) => {
+                    onSuccess = ok;
+                    onError = err;
+                },
+            },
+        });
+        const onChange = vi.fn();
+        render(
+            <StrictMode>
+                <ListingLocationField lat={-28.55} lng={153.50} onChange={onChange} />
+            </StrictMode>,
+        );
+        const btn = screen.getByTestId('edit-location-my-location') as HTMLButtonElement;
+        expect(btn.disabled).toBe(false);
+        expect(btn.getAttribute('aria-busy')).toBe('false');
+        expect(btn.className).toContain('disabled:opacity-60');
+        expect(btn.className).toContain('disabled:cursor-wait');
+
+        fireEvent.click(btn);
+        expect(btn.disabled).toBe(true);
+        expect(btn.getAttribute('aria-busy')).toBe('true');
+        expect(btn.textContent).toContain('⏳');
+
+        act(() => {
+            onSuccess({ coords: { latitude: -28.61234, longitude: 153.61234 } });
+        });
+        expect(onChange).toHaveBeenCalledWith(-28.6123, 153.6123);
+        expect(btn.disabled).toBe(false);
+        expect(btn.getAttribute('aria-busy')).toBe('false');
+        expect(btn.textContent).toContain('📍');
+
+        fireEvent.click(btn);
+        act(() => { onError(); });
+        expect(btn.disabled).toBe(false);
+        const alert = screen.getByRole('alert');
+        expect(alert.textContent).toContain("Could not get your location");
+    });
+
+    it('ListingLocationField passes an explicit L.divIcon to Leaflet markers instead of L.Icon.Default', async () => {
+        const onChange = vi.fn();
+        render(<ListingLocationField lat={-28.55} lng={153.50} onChange={onChange} />);
+        fireEvent.click(screen.getByTestId('edit-location-drop-pin'));
+        await waitFor(() => expect(leafletSpies.markerCalls.length).toBeGreaterThanOrEqual(1));
+        expect(leafletSpies.divIconCalls.length).toBeGreaterThanOrEqual(1);
+        expect(leafletSpies.markerCalls[0].opts.draggable).toBe(true);
+        expect(leafletSpies.markerCalls[0].opts.icon?.__isDivIcon).toBe(true);
     });
 });

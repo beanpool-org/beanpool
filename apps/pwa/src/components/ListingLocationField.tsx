@@ -9,6 +9,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { approximateLocation, t } from '@beanpool/core';
 
+function makePinIcon(L: any) {
+    return L.divIcon({
+        html: '<div style="width:18px;height:18px;background:#047857;border-radius:50%;border:2.5px solid #ffffff;box-shadow:0 2px 6px rgba(0,0,0,0.35)"></div>',
+        className: 'bp-listing-pin',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+    });
+}
+
 export function ListingLocationField({
     lat,
     lng,
@@ -36,7 +45,10 @@ export function ListingLocationField({
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
     const mountedRef = useRef(true);
-    useEffect(() => () => { mountedRef.current = false; }, []);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const hasPin = lat != null && lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
 
@@ -117,7 +129,7 @@ export function ListingLocationField({
                     applyFreshPinRef.current(e.latlng.lat, e.latlng.lng);
                 });
                 if (hasPin) {
-                    const m = L.marker(center, { draggable: true }).addTo(map);
+                    const m = L.marker(center, { icon: makePinIcon(L), draggable: true }).addTo(map);
                     m.on('dragend', (e: any) => {
                         const next = e.target.getLatLng();
                         applyFreshPinRef.current(next.lat, next.lng);
@@ -148,7 +160,7 @@ export function ListingLocationField({
             if (markerRef.current) {
                 markerRef.current.setLatLng(pos);
             } else {
-                const m = L.marker(pos, { draggable: true }).addTo(map);
+                const m = L.marker(pos, { icon: makePinIcon(L), draggable: true }).addTo(map);
                 m.on('dragend', (e: any) => {
                     const next = e.target.getLatLng();
                     applyFreshPinRef.current(next.lat, next.lng);
@@ -167,13 +179,14 @@ export function ListingLocationField({
                     data-testid={`${testId}-my-location`}
                     onClick={handleMyLocation}
                     disabled={locating}
-                    className={`flex-1 min-w-[7.5rem] min-h-[48px] flex flex-col items-center justify-center gap-1 py-2.5 px-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
+                    aria-busy={locating}
+                    className={`flex-1 min-w-[7.5rem] min-h-[48px] flex flex-col items-center justify-center gap-1 py-2.5 px-3 rounded-xl border transition-all text-sm font-bold shadow-sm disabled:opacity-60 disabled:cursor-wait ${
                         hasPin && !pinDropOpen
                             ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
                             : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700'
                     }`}
                 >
-                    <span className="text-lg leading-none" aria-hidden="true">📍</span>
+                    <span className="text-lg leading-none" aria-hidden="true">{locating ? '⏳' : '📍'}</span>
                     <span>{t('My location')}</span>
                 </button>
                 <button
@@ -193,7 +206,7 @@ export function ListingLocationField({
             </div>
 
             {geoError && (
-                <p className="m-0 mb-2 text-xs font-semibold text-amber-700 dark:text-amber-300 break-words">{geoError}</p>
+                <p role="alert" className="m-0 mb-2 text-xs font-semibold text-amber-700 dark:text-amber-300 break-words">{geoError}</p>
             )}
 
             {pinDropOpen && (

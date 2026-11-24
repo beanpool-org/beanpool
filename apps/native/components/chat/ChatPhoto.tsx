@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Image, ActivityIndicator } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { LightBarModal } from '../LightBarModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -65,12 +66,20 @@ export function ChatWaitingPhoto({ uri, styles, disabled, onRemove }: { uri: str
 }
 
 /**
- * The photo full screen, over the chat or a detail page (the listing's and the event's, whose 4:3 frame crops: DESIGN-detail-pages-fable.md
- * §2.6, slice DP4), until tapped or closed. Nothing when `uri` is null.
+ * The photo full screen, over the chat or a detail page (the listing's, the event's and Learn's, whose frame crops:
+ * DESIGN-detail-pages-fable.md §2.6, slice DP4), until tapped or closed. Nothing when `uri` is null. Uses expo-image
+ * (sharing PhotoCarousel's memory-disk cache so cached photos open offline too) and shows a clear fallback if the photo
+ * fails to load — never a blank full-screen overlay.
  */
 export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+    const [retryKey, setRetryKey] = useState(0);
+    useEffect(() => {
+        setStatus('loading');
+        setRetryKey(0);
+    }, [uri]);
     if (!uri) return null;
     return (
         // Its own window: the close button takes the status-bar inset itself (a Dynamic Island's 59 pt is more than 50).
@@ -81,7 +90,74 @@ export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose:
                 style={{ flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' }}
                 onPress={onClose}
             >
-                <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" accessibilityLabel={t('Full-size photo')} />
+                {status !== 'error' ? (
+                    <ExpoImage
+                        key={`${uri}#${retryKey}`}
+                        source={{ uri }}
+                        style={{ width: '100%', height: '100%' }}
+                        contentFit="contain"
+                        cachePolicy="memory-disk"
+                        transition={0}
+                        onLoad={() => setStatus('loaded')}
+                        onError={() => setStatus('error')}
+                        accessibilityLabel={t('Full-size photo')}
+                    />
+                ) : null}
+                {status === 'loading' ? (
+                    <View
+                        pointerEvents="none"
+                        style={{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }}
+                        testID="photo-viewer-loading"
+                    >
+                        <ActivityIndicator size="large" color={colors.text.inverse} accessibilityLabel={t('Loading photo')} />
+                    </View>
+                ) : null}
+                {status === 'error' ? (
+                    <Pressable
+                        onPress={(e) => e?.stopPropagation?.()}
+                        accessibilityRole="alert"
+                        testID="photo-viewer-error"
+                        style={{
+                            maxWidth: 288,
+                            marginHorizontal: 16,
+                            padding: 20,
+                            borderRadius: 16,
+                            backgroundColor: colors.surface.card,
+                            borderWidth: 1,
+                            borderColor: colors.border.default,
+                            alignItems: 'center',
+                            gap: 12,
+                        }}
+                    >
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading, textAlign: 'center' }}>
+                            {t('Image Failed')}
+                        </Text>
+                        <Pressable
+                            testID="photo-viewer-retry"
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Try again')}
+                            onPress={(e) => {
+                                e?.stopPropagation?.();
+                                setStatus('loading');
+                                setRetryKey((k) => k + 1);
+                            }}
+                            style={{
+                                minHeight: 48,
+                                minWidth: 120,
+                                paddingHorizontal: 20,
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                backgroundColor: colors.brand.fill,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                        >
+                            <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.inverse, textAlign: 'center' }}>
+                                {t('Try again')}
+                            </Text>
+                        </Pressable>
+                    </Pressable>
+                ) : null}
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={t('Close photo')}

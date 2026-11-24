@@ -41,13 +41,17 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
     const frame = useTheme().colors.surface.subtle;
     const [width, setWidth] = useState(0);
     const [index, setIndex] = useState(0);
+    // URIs that failed to load: dropped from the carousel so a page never sits on an empty box (or opens a blank viewer on tap).
+    // Keyed by URI so a fresh URL/version from a sync tries again.
+    const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
     const scroller = useRef<ScrollView>(null);
 
-    const valid = (photos || []).filter(isValid);
+    const valid = (photos || []).filter(isValid).filter((uri) => !failed.has(uri));
     const count = valid.length;
-    // The list can get shorter while the carousel stays drawn (a Learn page's Edit taking a photo off, #3355 review): the place
-    // swiped to must come back inside it, the counter and dots at once ("3 / 2" with no dot lit otherwise) and the scroll
-    // itself (Android's horizontal scroll view keeps its offset when its content shrinks, leaving an empty frame).
+    // The list can get shorter while the carousel stays drawn (a Learn page's Edit taking a photo off, #3355 review; or a photo
+    // failing to load): the place swiped to must come back inside it, the counter and dots at once ("3 / 2" with no dot lit
+    // otherwise) and the scroll itself (Android's horizontal scroll view keeps its offset when its content shrinks, leaving an
+    // empty frame).
     const shown = count > 0 ? Math.min(index, count - 1) : 0;
     useEffect(() => {
         if (count === 0 || index <= count - 1) return;
@@ -63,6 +67,14 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
         if (width <= 0) return;
         const i = Math.round(e.nativeEvent.contentOffset.x / width);
         if (i !== index) setIndex(Math.max(0, Math.min(valid.length - 1, i)));
+    };
+    const markFailed = (uri: string) => {
+        setFailed((prev) => {
+            if (prev.has(uri)) return prev;
+            const next = new Set(prev);
+            next.add(uri);
+            return next;
+        });
     };
 
     return (
@@ -84,7 +96,8 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
                                 style={{ width, height }}
                                 contentFit="cover"
                                 cachePolicy="memory-disk"
-                                transition={150}
+                                transition={0}
+                                onError={() => markFailed(uri)}
                                 accessibilityLabel={label}
                             />
                         );

@@ -557,6 +557,8 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
     const [state, setState] = useState<{ id: string; post: LearnPost | null } | 'failed' | null>(null);
     const [tries, setTries] = useState(0);
     const [photo, setPhoto] = useState<{ index: number; trigger: HTMLElement | null } | null>(null);
+    // Photo URLs that failed to load on this page: hidden so the page never shows an empty box under "Where:".
+    const [failedPhotos, setFailedPhotos] = useState<ReadonlySet<string>>(() => new Set());
     const [reporting, setReporting] = useState(false);
     // Keeping it right (K5): this member's tap and the count it answered, "Still right" done, the out-of-date note being
     // written (null: the box is shut), the fix or edit form open with the page it opened on, a fix sent, and the node's last
@@ -579,6 +581,7 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
         let live = true;
         showing.current += 1;
         setState(null);
+        setPhoto(null); setFailedPhotos(new Set());
         setHelped(null); setStillRight(false); setMarking(null); setEditing(null); setRefusal(null);
         const read = preview ? Promise.resolve(samplePosts().find((p) => p.id === id) ?? null) : getLearnPost(id);
         read.then((post) => { if (live) setState({ id, post }); }, () => { if (live) setState('failed'); });
@@ -637,6 +640,15 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
     const pinned = pinLive(post as never);
     // Only addresses the web's image allow-list lets through (lib/avatar.ts, PWA-2): a refused one is not drawn, never fetched.
     const photos = (post.photos ?? []).map((p) => (typeof p === 'string' ? resolveImageUrl(p) : null)).filter((p): p is string => !!p);
+    const shownPhotos = photos.filter((src) => !failedPhotos.has(src));
+    const markPhotoFailed = (src: string) => {
+        setFailedPhotos((prev) => {
+            if (prev.has(src)) return prev;
+            const next = new Set(prev);
+            next.add(src);
+            return next;
+        });
+    };
     const language = k.lang && k.lang !== shownLanguage() ? languageNameOf(k.lang) : null;
     const own = !!identity && post.authorPublicKey === identity.publicKey;
     // A preview names nobody and has nothing to report: it is Example Valley's.
@@ -709,13 +721,13 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                 <PostTagChips tags={[]} freeTags={post.freeTags} onPick={NO_LIBRARY_TAG} onPickFree={onTag} freeTagLabel={(tag) => t(KNOWLEDGE_TAG_WORDS.searchFor, { tag })} />
                 {!preview && identity && onOpenTopic && <ForumLinkedTopics kind="learn" id={post.id} heading={t(LINK_WORDS.fromForum)} onOpenTopic={onOpenTopic} />}
 
-                {photos.length > 0 && (
+                {shownPhotos.length > 0 && (
                     <div data-testid="learn-post-photos" className="flex flex-col gap-2">
-                        {photos.map((src, i) => (
+                        {shownPhotos.map((src, i) => (
                             <button key={`${i}-${src}`} type="button" onClick={(e) => setPhoto({ index: i, trigger: e.currentTarget })}
-                                aria-label={t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: photos.length, title: post.title })}
+                                aria-label={t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: shownPhotos.length, title: post.title })}
                                 className="p-0 border-0 bg-transparent cursor-pointer rounded-xl overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn">
-                                <img src={src} alt="" loading="lazy" className="w-full aspect-[4/3] object-cover" />
+                                <img src={src} alt="" loading="lazy" onError={() => markPhotoFailed(src)} className="w-full aspect-[4/3] object-cover" />
                             </button>
                         ))}
                     </div>
@@ -832,7 +844,16 @@ function PageView({ id, preview, identity, samplePosts, onBack, onOpenProfile, o
                     </button>
                 )}
             </article>
-            {photo && <ImageLightbox isOpen photos={photos} initialIndex={photo.index} title={post.title} triggerElement={photo.trigger} onClose={() => setPhoto(null)} />}
+            {photo && shownPhotos.length > 0 && (
+                <ImageLightbox
+                    isOpen
+                    photos={shownPhotos}
+                    initialIndex={Math.min(photo.index, shownPhotos.length - 1)}
+                    title={post.title}
+                    triggerElement={photo.trigger}
+                    onClose={() => setPhoto(null)}
+                />
+            )}
             {reporting && identity && (
                 <ReportModal isOpen onClose={() => setReporting(false)} reporterPubkey={identity.publicKey} targetPubkey={post.authorPublicKey}
                     targetName={post.authorCallsign} targetPostId={post.id} onReported={() => setReporting(false)} />

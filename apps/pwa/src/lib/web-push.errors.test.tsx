@@ -8,10 +8,10 @@ import { createElement } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { notifyJoinWords } from '@beanpool/core';
 import {
-    TELL_ME_WORDS, WEB_PUSH_FAILURE_WORDS, keepWebPushAtOpen, tellMeAtHome, tellMeWhenTheyAnswer, turnOnWebPush,
+    TELL_ME_WORDS, WEB_PUSH_FAILURE_WORDS, isWebPushFailure, keepWebPushAtOpen, tellMeAtHome, tellMeWhenTheyAnswer, turnOnWebPush,
     webPushFailureMessage, type PushEnv, type WebPushFailure,
 } from './web-push';
-import { getNodeApiUrl, sendSignedAt, signedFetchAt } from './api';
+import { getNodeApiUrl, signedFetchAt } from './api';
 import { NodeTooOldError, hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 import { WebPushRow } from '../components/WebPushRow';
 import { TellMeCard } from '../components/TellMeCard';
@@ -376,15 +376,13 @@ describe('web push failure table: every failure point -> exact sentence shown', 
             vi.restoreAllMocks();
             tc.setup();
             const r = await turnOnWebPush(window.location.origin, identity, 'en', env());
-            expect(r.ok, tc.name).toBe(false);
-            if (!r.ok) {
+            expect(isWebPushFailure(r), tc.name).toBe(true);
+            if (isWebPushFailure(r)) {
                 expect(r.reason, tc.name).toBe(tc.expectedReason);
                 if (tc.expectedReason === 'refused' && r.reason === 'refused') {
                     expect(r.code, tc.name).toBe(tc.expectedCode);
                 }
-                if (r.reason !== 'cannot' && r.reason !== 'blocked' && r.reason !== 'dismissed') {
-                    expect(webPushFailureMessage(r), tc.name).toBe(tc.expectedSentence);
-                }
+                expect(webPushFailureMessage(r), tc.name).toBe(tc.expectedSentence);
             }
         }
     });

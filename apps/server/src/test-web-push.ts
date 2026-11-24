@@ -386,6 +386,7 @@ async function main(): Promise<void> {
             method: 'POST',
             path: '/api/web-push',
             host: opts.host,
+            request: {},
             state: opts.actor ? { actor: opts.actor } : {},
             requestBody: opts.body,
             status: 404,
@@ -408,7 +409,7 @@ async function main(): Promise<void> {
             expectedStatus: 503,
             expectedCode: 'standby',
             trigger: async () => {
-                setNodeRole('standby');
+                setNodeRole('backup');
                 try { return await call(owner, 'POST', '/api/web-push', subscription(secretBrowser)); }
                 finally { setNodeRole('primary'); }
             },

@@ -57,6 +57,7 @@ describe('no window confirm() for a destructive action', () => {
             'components/modules/BulletinSection.tsx',
             'components/modules/ConnectedAssistantsPanel.tsx',
             'components/modules/EconomySection.tsx',
+            'components/modules/KnowledgeDraftsPanel.tsx',
             'components/modules/OffboxBackupsPanel.tsx',
             'components/modules/OwnAddressCard.tsx',
             'components/modules/PeopleSafetySection.tsx',

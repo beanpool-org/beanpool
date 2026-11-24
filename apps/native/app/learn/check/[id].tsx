@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator, Alert, DeviceEventEmitter, Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+    ActivityIndicator, DeviceEventEmitter, Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Image } from 'expo-image';
@@ -17,6 +17,7 @@ import {
     type KnowledgeDraftWhole, type KnowledgePhotoCredit,
 } from '@beanpool/core';
 import { useStyles, useTheme } from '../../ThemeContext';
+import { Alert } from '../../../utils/keyboard-alert';
 import { leaveScreen } from '../../../utils/leave-screen';
 import { forgetHomeForHeader } from '../../../utils/home-store';
 import { askForPostPhoto } from '../../../utils/post-photo';
@@ -292,7 +293,7 @@ export default function LearnCheckOneScreen() {
                 ))}
                 {canOpen ? (
                     <Pressable accessibilityRole="link" style={s.linkBtn} testID="learn-check-credit-page" onPress={() => void Linking.openURL(credit.url)}>
-                        <Text style={s.linkTitle}>{`${t(LEARN_CHECK_WORDS.openPage)} ↗`}</Text>
+                        <Text style={s.linkTitle}>{t(LEARN_CHECK_WORDS.openPage)}<Text importantForAccessibility="no">{' ↗'}</Text></Text>
                     </Pressable>
                 ) : null}
             </View>
@@ -347,7 +348,7 @@ export default function LearnCheckOneScreen() {
                                     style={[s.topicChip, on && s.topicChipOn]}
                                     onPress={() => patchForm({ topic: tp.id })}
                                 >
-                                    <Text style={[s.topicChipText, on && s.topicChipTextOn]}>{`${tp.emoji} ${t(tp.label)}`}</Text>
+                                    <Text style={[s.topicChipText, on && s.topicChipTextOn]}><Text importantForAccessibility="no">{tp.emoji}{' '}</Text>{t(tp.label)}</Text>
                                 </Pressable>
                             );
                         })}
@@ -364,11 +365,11 @@ export default function LearnCheckOneScreen() {
                     />
                     <TagPicker
                         freeOnly
-                        libraryTags={[]}
-                        onLibraryChange={NO_LIBRARY}
+                        testID="learn-check-tags"
+                        onChange={NO_LIBRARY}
                         freeTags={form.freeTags}
-                        onFreeChange={(freeTags) => patchForm({ freeTags })}
-                        hint={t(KNOWLEDGE_TAG_WORDS.hint)}
+                        onFreeTagsChange={(freeTags) => patchForm({ freeTags })}
+                        hints={[t(KNOWLEDGE_TAG_WORDS.hint)]}
                     />
                     <Text style={s.inputLabel}>{t(LEARN_WRITE.sourcesLabel)}</Text>
                     {form.sources.map((src, i) => (
@@ -581,7 +582,7 @@ export default function LearnCheckOneScreen() {
                                     style={s.linkBtn}
                                     onPress={() => void Linking.openURL(src.url)}
                                 >
-                                    <Text style={s.linkTitle}>{`${src.label || host} ↗`}</Text>
+                                    <Text style={s.linkTitle}>{src.label || host}<Text importantForAccessibility="no">{' ↗'}</Text></Text>
                                     <Text style={s.linkHost}>{host}</Text>
                                 </Pressable>
                             ) : (
@@ -596,9 +597,9 @@ export default function LearnCheckOneScreen() {
 
                 <View style={s.box}>
                     <Text style={s.boxLabel}>{t(LEARN_CHECK_WORDS.beforeApprove)}</Text>
-                    <Text style={s.bullet}>{`• ${t(LEARN_CHECK_WORDS.checkRule1)}`}</Text>
-                    <Text style={s.bullet}>{`• ${t(LEARN_CHECK_WORDS.checkRule2)}`}</Text>
-                    <Text style={s.bullet}>{`• ${t(LEARN_CHECK_WORDS.checkRule3)}`}</Text>
+                    <View style={{ flexDirection: 'row', gap: 6 }}><Text style={s.bullet} importantForAccessibility="no">•</Text><Text style={[s.bullet, { flex: 1, minWidth: 0 }]}>{t(LEARN_CHECK_WORDS.checkRule1)}</Text></View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}><Text style={s.bullet} importantForAccessibility="no">•</Text><Text style={[s.bullet, { flex: 1, minWidth: 0 }]}>{t(LEARN_CHECK_WORDS.checkRule2)}</Text></View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}><Text style={s.bullet} importantForAccessibility="no">•</Text><Text style={[s.bullet, { flex: 1, minWidth: 0 }]}>{t(LEARN_CHECK_WORDS.checkRule3)}</Text></View>
                 </View>
 
                 {d.needsSourcesTicked ? (

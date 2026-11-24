@@ -136,11 +136,11 @@ export default function LearnCheckListScreen() {
                                             key={d.id}
                                             testID={`learn-check-row-${d.id}`}
                                             accessibilityRole="button"
-                                            accessibilityLabel={`${d.title}. ${kind}, ${from}, ${waited}`}
+                                            accessibilityLabel={[d.title, kind, from, waited].join(', ')}
                                             style={s.row}
                                             onPress={() => openDraft(d)}
                                         >
-                                            <Text style={s.rowTitle}>{`${topicOf(d.topic).emoji} ${d.title}`}</Text>
+                                            <Text style={s.rowTitle}><Text importantForAccessibility="no">{topicOf(d.topic).emoji}{' '}</Text>{d.title}</Text>
                                             <View style={s.metaRow}>
                                                 <Text style={s.metaStrong}>{kind}</Text>
                                                 <Text style={s.meta}>{from}</Text>

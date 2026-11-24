@@ -166,7 +166,8 @@ export function forgetNodeRole(nodeUrl: string, publicKey: string): void {
 export async function fetchAdminQueue(nodeUrl: string, identity: BeanPoolIdentity): Promise<{ total: number; items: AdminQueueItem[] } | null> {
     try {
         // `asks=1`: this app answers a member's ask that an admin invite someone (apps/server engine/admin-queue.ts).
-        const url = `${base(nodeUrl)}/api/node-admin/queue?asks=1`;
+        // `learn=1`: this app opens To check in Learn (app/learn/check.tsx), where members' suggestions are answered.
+        const url = `${base(nodeUrl)}/api/node-admin/queue?asks=1&learn=1`;
         const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });

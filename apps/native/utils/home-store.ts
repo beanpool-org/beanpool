@@ -98,7 +98,8 @@ export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null)
     // `words`: and First steps' "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D2), the same way.
     // `bills`: and a line for each bill waiting on the member ({ to: 'bill', id }), which opens its sheet in Your deals → Bills
     // (components/Bills.tsx; DESIGN-getting-paid-fable §4.4).
-    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks,first-need,words,bills${p ? pointParams(p) : ''}`;
+    // `learn`: and Learn's To check (slice K4): "Local knowledge to check: 3" in Needs you, and the Learn card's "3 to check ›".
+    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks,first-need,words,bills,learn${p ? pointParams(p) : ''}`;
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {

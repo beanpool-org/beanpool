@@ -1573,6 +1573,7 @@ export default function HomeScreen() {
                         now={now}
                         onOpen={postId => router.push({ pathname: '/post/[id]', params: { id: postId, kind: 'knowledge' } })}
                         onSeeAll={() => router.push('/learn')}
+                        onToCheck={() => router.push('/learn/check')}
                         onAddFirst={() => router.push('/learn/new')}
                         onKeep={tailor && isArrivingCard(shown, id) ? () => changeLayout(keepCard(layoutRef.current, id, Date.now())) : undefined}
                     />,

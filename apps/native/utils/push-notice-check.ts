@@ -519,7 +519,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats?view=messages' | '/(tabs)/chats?view=groups' | '/(tabs)/chats?view=forum' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | '/(tabs)/people?view=community&credit=vouchers' | `/(tabs)/people?view=community&credit=vouchers&voucher=${string}`
-    | `/post/${string}` | `/chat/${string}` | '/learn/mine'
+    | `/post/${string}` | `/chat/${string}` | '/learn/mine' | '/learn/check'
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1` | `/(tabs)/market?dealsTab=bills&bill=${string}`;
 
 /**
@@ -609,8 +609,9 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // Chats for a member who left the tab there.
     if (FORUM_SCREENS.has(d.screen) || (kind && FORUM_KINDS.has(kind))) return CHAT_FORUM_ROUTE;
     if (kind && GROUP_CHAT_KINDS.has(kind)) return CHAT_GROUPS_ROUTE;
-    // An owner or admin answered the member's suggestion of Local knowledge (community.knowledge-answer): My suggestions, where
-    // it shows as added (a tap opens the page) or not, with the reason (slice K4).
+    // Local knowledge (slice K4): a member's suggestion to check lands on To check; an owner's or admin's answer to one's own
+    // lands on My suggestions.
+    if (d.screen === 'learn-check') return '/learn/check';
     if (d.screen === 'learn-mine') return '/learn/mine';
     // A bill (engine/bills.ts `{ screen: 'bill', billId }`; DESIGN-getting-paid-fable §4.4): Your deals → Bills, with its sheet.
     if (d.screen === 'bill' && typeof d.billId === 'string' && BILL_ID.test(d.billId)) return `/(tabs)/market?dealsTab=bills&bill=${d.billId}`;

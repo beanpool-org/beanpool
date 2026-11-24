@@ -23,6 +23,8 @@ export interface LearnWriter {
     checks: boolean;
     /** The member's own suggestions waiting; 0 until heard, and for an owner or admin. */
     waiting: number;
+    /** Suggestions waiting for an owner or admin to check; 0 until heard, and for a member. */
+    toCheck: number;
 }
 
 /** GET /api/knowledge/drafts/mine as My suggestions reads it, or null when it can't be had. */
@@ -38,6 +40,18 @@ export async function readMyDrafts(signal?: AbortSignal): Promise<{ waiting: Kno
     }
 }
 
+/** How many Local knowledge drafts are waiting for an owner or admin to check (GET /api/knowledge/drafts?limit=1&offset=0), or 0 when unavailable. */
+export async function readToCheckCount(signal?: AbortSignal): Promise<number> {
+    try {
+        const res = await signedGet('/api/knowledge/drafts?limit=1&offset=0', signal ? { signal } : undefined);
+        if (!res.ok) return 0;
+        const body = await res.json();
+        return typeof body?.total === 'number' && Number.isFinite(body.total) ? Math.max(0, body.total) : 0;
+    } catch {
+        return 0;
+    }
+}
+
 /**
  * The node said otherwise about this member's role (`publish_instead`, or `admins_only` from an owner or admin no longer): the
  * remembered role is out of date, so it is asked again the next time Learn comes into view, not ten minutes later.
@@ -48,10 +62,10 @@ export async function forgetLearnRole(identity: { publicKey?: string } | null | 
     if (url) forgetNodeRole(url, identity.publicKey);
 }
 
-/** `countWaiting` false: the role alone (a page's tools, slice K5), with no read of My suggestions. */
+/** `countWaiting` false: the role alone (a page's tools, slice K5), with no read of My suggestions or To check. */
 export function useLearnWriter(live: boolean, countWaiting = true): LearnWriter {
     const { identity } = useIdentity();
-    const [writer, setWriter] = useState<LearnWriter>({ checks: false, waiting: 0 });
+    const [writer, setWriter] = useState<LearnWriter>({ checks: false, waiting: 0, toCheck: 0 });
     useFocusEffect(useCallback(() => {
         if (!live || !identity?.publicKey || !identity.privateKey) return undefined;
         let gone = false;
@@ -60,7 +74,8 @@ export function useLearnWriter(live: boolean, countWaiting = true): LearnWriter 
             const role = url ? (await cachedNodeRoleHeard(url, identity))?.role : null;
             const checks = role === 'owner' || role === 'admin';
             const mine = checks || !countWaiting ? null : await readMyDrafts();
-            if (!gone) setWriter({ checks, waiting: mine?.waiting.length ?? 0 });
+            const toCheck = checks && countWaiting ? await readToCheckCount() : 0;
+            if (!gone) setWriter({ checks, waiting: mine?.waiting.length ?? 0, toCheck });
         })().catch(() => {});
         return () => { gone = true; };
     }, [live, identity, countWaiting]));

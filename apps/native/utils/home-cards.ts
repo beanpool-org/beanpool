@@ -31,7 +31,7 @@ import {
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
     HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
     FIRST_STEPS_WORDS, firstStepsCount, firstStepsLeft, firstStepsOver, welcomeShape, type WelcomeShape, welcomeFacts as coreWelcomeFacts, type WelcomeFacts,
-    readerMayInvite, arrivingCards, keepArrivedCard, learnHomeLines, type HomeLearnCard, type LearnHomeOpens,
+    readerMayInvite, arrivingCards, keepArrivedCard, knowledgeToCheckLine, learnHomeLines, type HomeLearnCard, type LearnHomeOpens,
     COMMUNITY_WELCOME_DISMISSED_KEY,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
@@ -69,11 +69,11 @@ export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
     ...toolHomeCardIds(),
 ]);
 /**
- * The doors the Learn card may open beyond a page and Learn (core learnHomeLines): the form (slice K4, app/learn/new.tsx), so an
- * owner's or admin's "Add the first thing…" is drawn. To check is K4's second part, not on the phone yet, so "N to check ›" is
- * not drawn and Home doesn't send `lands=learn` (the node sends `toCheck` only to an app that does).
+ * The doors the Learn card may open beyond a page and Learn (core learnHomeLines): To check (app/learn/check.tsx), so an
+ * owner's or admin's "N to check ›" is drawn, and the form (app/learn/new.tsx), so "Add the first thing…" is drawn. Home
+ * sends `lands=learn`, matching the web app.
  */
-export const LEARN_OPENS: LearnHomeOpens = { addFirst: true };
+export const LEARN_OPENS: LearnHomeOpens = { toCheck: true, addFirst: true };
 
 /** A tool's card this build draws: worked out on the phone from the tool's document, so the node sends nothing for it. */
 export const isToolHomeCard = (type: HomeCardId): boolean => type.startsWith('tool-') && HOME_DRAWN.has(type);
@@ -1367,7 +1367,13 @@ export function mergeNeeds(
     // A vote lands on Commons → Decide: never on a node without it (the node sends none there; this keeps it so).
     const lands = (i: HomeNeedsItem) => i.target.to !== 'decide' || !features || decideOnNode(features);
     const fromNode = (node ?? []).filter(i => !phoneHas(i.kind) && !sameStanding(i) && lands(i))
-        .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: i.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(i.count)) : voteLabelHere(i, now), target: i.target }));
+        .map((i): NeedsYouEntry => ({
+            kind: i.kind,
+            count: i.count,
+            accent: i.accent,
+            label: i.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(i.count)) : i.kind === 'learn' ? knowledgeToCheckLine(i.count) : voteLabelHere(i, now),
+            target: i.target,
+        }));
     const fromPhone = (local?.entries ?? []).map(e => {
         // One deal the node names too: its words carry the listing's title.
         // A standing deal's live line keeps the phone's own words (translated, the day count from this clock).

@@ -49,6 +49,8 @@ const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIc
     admin: 'shield-account-outline',
     knock: 'door-open',
     ask: 'account-plus-outline',
+    // An open book: Local knowledge waiting to be checked (slice K4).
+    learn: 'book-open-page-variant-outline',
     deal: 'handshake-outline',
     // A bill waiting on its payer (core bills.ts): its rows come from the node only to an app that opens a bill (B2).
     bill: 'receipt-text-outline',

@@ -4,7 +4,7 @@
  * (utils/__tests__/needs-you.test.ts); the component only loads the data and draws the result.
  */
 
-import { capitalFirst, dealsNeedingMe, fitNeedsYou, formatDate, standingNeedsLines, type StandingAsk, type StandingPeriodUnit, type StandingPhase, inviteAskNeedsLine, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
+import { capitalFirst, dealsNeedingMe, fitNeedsYou, formatDate, standingNeedsLines, type StandingAsk, type StandingPeriodUnit, type StandingPhase, inviteAskNeedsLine, isOwnInviteChange, knowledgeToCheckLine, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
 import { isOwnRemoval, poolVoteBlocker } from './decision-card';
@@ -56,7 +56,12 @@ export type NeedsYouTarget =
      * One bill waiting on the member (DESIGN-getting-paid-fable §4.4): Your deals → Bills with its sheet (components/Bills.tsx).
      * The node sends it only to an app that asks with `lands=bills` (utils/home-store.ts homePath).
      */
-    | { to: 'bill'; id: string };
+    | { to: 'bill'; id: string }
+    /**
+     * Local knowledge suggestions waiting for an owner or admin to check (app/learn/check.tsx). The node sends it only
+     * to an app that asks with `lands=learn` (utils/home-store.ts homePath) or `/api/node-admin/queue?learn=1`.
+     */
+    | { to: 'learn-check' };
 
 /** A chat group's vote lands on the group: its chat screen, told it is a group, with its info sheet open (`info=1`). */
 export function groupVoteHref(groupId: string): { pathname: string; params: Record<string, string> } {
@@ -94,6 +99,7 @@ export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>
         case 'invites': return { pathname: '/(tabs)/projects', params: { section: 'groups' } };
         case 'people': return { pathname: '/(tabs)/people', params: { view: 'invites' } };
         case 'bill': return { pathname: '/(tabs)/market', params: { dealsTab: 'bills', bill: target.id } };
+        case 'learn-check': return { pathname: '/learn/check' };
     }
 }
 
@@ -220,6 +226,7 @@ export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'lab
         case 'unclean_shutdown': return t('the node restarted after an unclean shutdown');
         case 'knocks': return tn(n, '{n} person asked to join', '{n} people asked to join');
         case 'invite_asks': return inviteAskNeedsLine(n);
+        case 'knowledge_drafts': return knowledgeToCheckLine(n);
         // A kind a newer node added: its own label, with the count.
         default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
     }
@@ -278,7 +285,11 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
     const knocks = queued.find(x => x.kind === 'knocks');
     // A member's ask that an admin invite someone: answered in the same place, so the same.
     const asks = queued.find(x => x.kind === 'invite_asks');
-    const adminItems = queued.filter(x => x.kind !== 'knocks' && x.kind !== 'invite_asks');
+    // Members' suggestions of Local knowledge to check: owners and admins only, answered in Learn → To check.
+    const knowledgeDrafts = (i.admin?.role === 'owner' || i.admin?.role === 'admin')
+        ? queued.find(x => x.kind === 'knowledge_drafts')
+        : undefined;
+    const adminItems = queued.filter(x => x.kind !== 'knocks' && x.kind !== 'invite_asks' && x.kind !== 'knowledge_drafts');
     if (queue && adminItems.length) {
         out.push({
             kind: 'admin', count: adminItems.reduce((n, x) => n + x.count, 0), accent: true,
@@ -292,6 +303,9 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
     }
     if (asks) {
         out.push({ kind: 'ask', count: asks.count, accent: true, label: capitalFirst(adminItemInWords(asks)), target: { to: 'people' } });
+    }
+    if (knowledgeDrafts) {
+        out.push({ kind: 'learn', count: knowledgeDrafts.count, accent: true, label: knowledgeToCheckLine(knowledgeDrafts.count), target: { to: 'learn-check' } });
     }
 
     const deals = dealsWaiting(i.transactions || [], i.me, i.now);

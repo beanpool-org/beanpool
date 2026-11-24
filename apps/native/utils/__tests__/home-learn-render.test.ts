@@ -137,7 +137,7 @@ import { CommunityBody } from '../../components/home/HomeCardBodies';
 import { LearnBody } from '../../components/home/LearnBody';
 import { lightColors } from '../../constants/colors';
 import {
-    HOME_DRAWN, LEARN_OPENS, cardOrder, cardsToAsk, cardsToDraw, isArrivingCard, keepCard, moveCard, moveCardTo, removeCard,
+    HOME_DRAWN, LEARN_OPENS, cardOrder, cardsToAsk, cardsToDraw, isArrivingCard, keepCard, mergeNeeds, moveCard, moveCardTo, removeCard,
     type HomeAnswer, type HomeLayout,
 } from '../home-cards';
 
@@ -393,5 +393,13 @@ describe('the card that arrives on an arranged Home', () => {
         const drawn = among.filter((c) => c.id !== 'learn');
         expect(moveCard(home, 'groups', 'down', drawn, NOW + 1)).toBeNull();
         expect(moveCardTo(home, 'market', 3, drawn, NOW + 1)).toBeNull();
+    });
+});
+
+describe("Home's Needs you line for the node's Local knowledge to check", () => {
+    it('9 waiting is the line "Local knowledge to check: 9", opening Learn → To check; none waiting is no line', () => {
+        const item = { kind: 'learn', count: 9, accent: true, label: 'Local knowledge to check: 9', target: { to: 'learn-check' } } as const;
+        expect(mergeNeeds([item as never], null, NOW)).toEqual([{ kind: 'learn', count: 9, accent: true, label: 'Local knowledge to check: 9', target: { to: 'learn-check' } }]);
+        expect(mergeNeeds([], null, NOW)).toEqual([]);
     });
 });

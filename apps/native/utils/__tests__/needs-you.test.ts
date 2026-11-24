@@ -244,6 +244,33 @@ describe('What needs you: fitting the slot (48dp each) and the row order', () =>
     });
 });
 
+describe('What needs you: Local knowledge to check (owners and admins only)', () => {
+    type Item = { kind: string; count: number; label: string; section: 'home'; settingsPath: string };
+    const drafts = (n: number): Item => ({ kind: 'knowledge_drafts', count: n, label: 'Local knowledge to check', section: 'home', settingsPath: '/settings#section=home' });
+    const queue = (...items: Item[]) => ({ total: items.reduce((n, i) => n + i.count, 0), items });
+    const as = (role: unknown, q: ReturnType<typeof queue> | null) => buildNeedsYou(quiet({ admin: { role, queue: q } }));
+
+    it('a node answering 9 drafts to check shows "Local knowledge to check: 9" for an owner and an admin, opening Learn → To check', () => {
+        for (const role of ['owner', 'admin']) {
+            const lines = as(role, queue(drafts(9)));
+            expect(lines).toHaveLength(1);
+            expect(lines[0]).toMatchObject({ kind: 'learn', count: 9, accent: true, label: 'Local knowledge to check: 9', target: { to: 'learn-check' } });
+            expect(needsTargetHref(lines[0].target as never)).toEqual({ pathname: '/learn/check' });
+        }
+    });
+
+    it('a moderator, a member and an unread role show none, and a queue of 0 shows none', () => {
+        for (const role of ['moderator', 'member', null, undefined]) expect(as(role, queue(drafts(9)))).toEqual([]);
+        expect(as('owner', queue(drafts(0)))).toEqual([]);
+        expect(as('owner', null)).toEqual([]);
+    });
+
+    it('stays its own line beside the shield: the admin count leaves the drafts out, and the line sits after a member\'s ask', () => {
+        const mixed = as('owner', queue(drafts(9), { kind: 'reports', count: 2, label: 'reports', section: 'home', settingsPath: '/settings#section=home' }));
+        expect(mixed.map(e => [e.kind, e.count])).toEqual([['admin', 2], ['learn', 9]]);
+    });
+});
+
 describe('What needs you: 🛡️ admin work (owners and admins only)', () => {
     type Item = { kind: string; count: number; label: string; section: 'home' | 'moderation' | 'disputes' | 'decisions'; settingsPath: string };
     const item = (kind: string, count: number, section: Item['section'], label = kind): Item =>

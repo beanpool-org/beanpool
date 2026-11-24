@@ -161,4 +161,75 @@ describe.each(['light', 'dark'] as const)('Learn page Where: and photos on the w
         expect(alert.textContent).toContain('Photo failed to load');
         expect(within(alert).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     });
+
+    it('does not reset a loaded ImageLightbox back to loading when a later background thumbnail fails', async () => {
+        await openPage(makePost([PHOTO_A, PHOTO_B]));
+        const buttons = within(screen.getByTestId('learn-post-photos')).getAllByRole('button');
+        fireEvent.click(buttons[0]);
+        const dialog = screen.getByRole('dialog');
+        const enlarged = dialog.querySelector('img')!;
+        fireEvent.load(enlarged);
+        expect(within(dialog).queryByRole('status')).toBeNull();
+        expect(enlarged.className).toContain('opacity-100');
+
+        // Background lazy thumbnail B fails: page hides B, but the open lightbox stays loaded on A.
+        fireEvent.error(buttons[1].querySelector('img')!);
+        expect(within(screen.getByTestId('learn-post-photos')).getAllByRole('button')).toHaveLength(1);
+        expect(within(dialog).queryByRole('status')).toBeNull();
+        expect(dialog.querySelector('img')?.className).toContain('opacity-100');
+        expect(dialog.querySelector('img')?.getAttribute('src')).toBe(PHOTO_A);
+    });
+
+    it('keeps navigation intact and preserves surviving thumbnail DOM nodes and focus when background thumbnails fail', async () => {
+        await openPage(makePost([PHOTO_A, PHOTO_B, PHOTO_C]));
+        const buttonsBefore = within(screen.getByTestId('learn-post-photos')).getAllByRole('button');
+        const btnB = buttonsBefore[1];
+        const btnC = buttonsBefore[2];
+        fireEvent.click(btnB);
+        const dialog = screen.getByRole('dialog');
+        // Advance from B to C.
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Next photo' }));
+        expect(dialog.querySelector('img')?.getAttribute('src')).toBe(PHOTO_C);
+
+        // Thumbnail A fails behind the open lightbox: lightbox stays on C, and B/C buttons are NOT remounted.
+        fireEvent.error(buttonsBefore[0].querySelector('img')!);
+        expect(screen.getByRole('dialog').querySelector('img')?.getAttribute('src')).toBe(PHOTO_C);
+        const buttonsAfter = within(screen.getByTestId('learn-post-photos')).getAllByRole('button');
+        expect(buttonsAfter).toHaveLength(2);
+        expect(buttonsAfter[0]).toBe(btnB);
+        expect(buttonsAfter[1]).toBe(btnC);
+
+        // Closing the lightbox restores focus to the still-connected trigger button B.
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close photo viewer' }));
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(document.activeElement).toBe(btnB);
+    });
+
+    it('keeps lightbox open if the tapped thumbnail fails while viewing another slide, and falls back focus on close', async () => {
+        await openPage(makePost([PHOTO_A, PHOTO_B]));
+        const buttons = within(screen.getByTestId('learn-post-photos')).getAllByRole('button');
+        fireEvent.click(buttons[0]);
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Next photo' }));
+        expect(dialog.querySelector('img')?.getAttribute('src')).toBe(PHOTO_B);
+
+        // Originally tapped thumbnail A fails behind the lightbox: lightbox must not abruptly unmount.
+        fireEvent.error(buttons[0].querySelector('img')!);
+        expect(screen.getByRole('dialog').querySelector('img')?.getAttribute('src')).toBe(PHOTO_B);
+
+        // Closing falls back focus to the remaining live thumbnail button (buttons[1]).
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close photo viewer' }));
+        await wait(30);
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(document.activeElement).toBe(buttons[1]);
+    });
+
+    it('opens the clicked occurrence when a page contains duplicate photo URLs', async () => {
+        await openPage(makePost([PHOTO_A, PHOTO_A]));
+        const buttons = within(screen.getByTestId('learn-post-photos')).getAllByRole('button');
+        expect(buttons).toHaveLength(2);
+        fireEvent.click(buttons[1]);
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.textContent).toContain('2 / 2');
+    });
 });

@@ -132,8 +132,11 @@ export function fixPartText(part: KnowledgeFixPart, w: Pick<KnowledgePageWords, 
 }
 
 /** GET /api/knowledge/drafts?limit=50&offset=0: throws on network/HTTP failure. */
-export async function readLearnToCheck(signal?: AbortSignal): Promise<LearnCheckListData> {
-    const res = await signedGet('/api/knowledge/drafts?limit=50&offset=0', signal ? { signal } : undefined);
+export async function readLearnToCheck(signal?: AbortSignal, url?: string | null): Promise<LearnCheckListData> {
+    const opts = signal || url !== undefined
+        ? { ...(signal ? { signal } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
+        : undefined;
+    const res = await signedGet('/api/knowledge/drafts?limit=50&offset=0', opts);
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         const err = new Error(typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`) as Error & { status?: number; code?: string };

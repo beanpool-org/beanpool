@@ -74,8 +74,9 @@ export default function LearnCheckListScreen() {
     useFocusEffect(useCallback(() => {
         let live = true;
         const stop = new AbortController();
-        Promise.all([readLearnToCheck(stop.signal), anchorUrl().catch(() => null)])
-            .then(([data, url]) => {
+        anchorUrl()
+            .then(async (url) => {
+                const data = await readLearnToCheck(stop.signal, url);
                 if (!live) return;
                 setNodeUrl(url);
                 setList(data);
@@ -104,7 +105,7 @@ export default function LearnCheckListScreen() {
                 </Pressable>
                 <Text style={s.title} accessibilityRole="header" numberOfLines={1}>{t(LEARN_CHECK_WORDS.title)}</Text>
             </View>
-            <ScrollView contentContainerStyle={s.content}>
+            <ScrollView contentContainerStyle={[s.content, { paddingBottom: 48 + insets.bottom }]}>
                 {said ? (
                     <Text style={s.said} testID="learn-check-said" accessibilityLiveRegion="polite">{said}</Text>
                 ) : null}

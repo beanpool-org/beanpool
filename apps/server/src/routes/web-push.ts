@@ -42,11 +42,96 @@ import {
 import { FEATURE_OFF, featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { ensureVapidKey, readVapidKey, type VapidKey } from '../services/web-push.js';
 import { RecoverySealKeyMissing } from '../services/recovery-seal-key.js';
+import { logger } from '../logger.js';
 import type { RouteDeps } from './types.js';
 
-function answer(ctx: any, status: number, error: string, code: string): void {
+function answer(ctx: any, status: number, error: string, code: string, extra?: Record<string, unknown>): void {
     ctx.status = status;
-    ctx.body = { error, code };
+    ctx.body = extra ? { error, code, ...extra } : { error, code };
+}
+
+export const WEB_PUSH_REFUSAL_LOG_BUDGET = 20;
+const WEB_PUSH_REFUSAL_WINDOW_MS = 60_000;
+
+interface RefusalLogBucket {
+    windowStart: number;
+    written: number;
+    suppressed: number;
+    timer: ReturnType<typeof setTimeout> | null;
+    suppressedByCode: Map<string, number>;
+    emit: (message: string, now: number) => void;
+}
+
+function makeRefusalBucket(emit: (message: string, now: number) => void): RefusalLogBucket {
+    return { windowStart: 0, written: 0, suppressed: 0, timer: null, suppressedByCode: new Map(), emit };
+}
+
+function flushBucket(bucket: RefusalLogBucket, now = Date.now()): void {
+    if (bucket.timer) clearTimeout(bucket.timer);
+    bucket.timer = null;
+    if (bucket.suppressed > 0) {
+        const breakdown = [...bucket.suppressedByCode.entries()].map(([k, n]) => `${k}=${n}`).join(', ');
+        bucket.emit(`[WebPush] POST /api/web-push refused ${bucket.suppressed} more times in that minute (${breakdown})`, now);
+    }
+    bucket.suppressed = 0;
+    bucket.suppressedByCode.clear();
+}
+
+function logIntoBucket(bucket: RefusalLogBucket, code: string, now: number): void {
+    if (now - bucket.windowStart >= WEB_PUSH_REFUSAL_WINDOW_MS) {
+        flushBucket(bucket, now);
+        bucket.windowStart = now;
+        bucket.written = 0;
+    }
+    if (bucket.written < WEB_PUSH_REFUSAL_LOG_BUDGET) {
+        bucket.written++;
+        bucket.emit(`[WebPush] POST /api/web-push refused (${code})`, now);
+        return;
+    }
+    bucket.suppressed++;
+    bucket.suppressedByCode.set(code, (bucket.suppressedByCode.get(code) ?? 0) + 1);
+    if (!bucket.timer) {
+        bucket.timer = setTimeout(() => flushBucket(bucket), Math.max(0, bucket.windowStart + WEB_PUSH_REFUSAL_WINDOW_MS - now));
+        bucket.timer.unref?.();
+    }
+}
+
+const postRefusalBucket = makeRefusalBucket((msg) => {
+    logger.info('SYS', msg);
+});
+
+const preAuthRefusalBucket = makeRefusalBucket((msg, now) => {
+    console.log(`[${new Date(now).toISOString()}] [INFO] [SYS] ${msg}`);
+});
+
+/** Log a refusal of POST /api/web-push at INFO (system_logs + stdout) with its reason code only, budgeted per minute. */
+export function logWebPushPostRefusal(code: string, now = Date.now()): void {
+    logIntoBucket(postRefusalBucket, code, now);
+}
+
+/**
+ * Log a pre-auth, standby, or zero-standing refusal of POST /api/web-push to stdout (`docker logs`) only,
+ * budgeted per minute and without touching SQLite (`system_logs`), so unauthenticated, standby, zero-standing,
+ * rate-limited, revoked, and sample-id rejections never mutate database tables or consume the verified refusal budget.
+ */
+export function logWebPushPreAuthRefusal(code: string, now = Date.now()): void {
+    logIntoBucket(preAuthRefusalBucket, code, now);
+}
+
+/** For tests: end the current refusal-log minute (flushing any summary lines) and reset both per-minute counters. */
+export function endWebPushRefusalLogMinute(): void {
+    for (const bucket of [postRefusalBucket, preAuthRefusalBucket]) {
+        flushBucket(bucket);
+        bucket.windowStart = 0;
+        bucket.written = 0;
+    }
+}
+
+function refusePost(ctx: any, status: number, error: string, code: string, persistLog: boolean, extra?: Record<string, unknown>): void {
+    if (ctx.state) ctx.state.webPushRefusalLogged = true;
+    if (persistLog) logWebPushPostRefusal(code);
+    else logWebPushPreAuthRefusal(code);
+    answer(ctx, status, error, code, extra);
 }
 
 /** This node's own address as the browser reached it, for the push's `sub`; a Host that is no host name gives none. */
@@ -81,43 +166,51 @@ export function createWebPushRoutes(_deps: RouteDeps): Router {
 
     router.post('/api/web-push', (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
-        if (!actor) return answer(ctx, 401, 'A signed request is required.', 'unsigned');
-        if (getNodeRole() !== 'primary') return answer(ctx, 503, "This community's standby takes no subscriptions.", 'standby');
+        if (!actor) return refusePost(ctx, 401, 'A signed request is required.', 'unsigned', false);
+        if (getNodeRole() !== 'primary') return refusePost(ctx, 503, "This community's standby takes no subscriptions.", 'standby', false);
+        const member = passesReadGate(actor);
         const body = (ctx as any).requestBody ?? {};
         const sub = parseBrowserSubscription(body.subscription);
-        if (!sub) return answer(ctx, 400, "'subscription' must be a browser's push subscription: its endpoint at a push service, and its keys.", 'bad_subscription');
-        const member = passesReadGate(actor);
+        if (!sub) {
+            const switches = member ? null : getProfileSwitches();
+            const hasStanding = member || (!!switches?.invites && !!switches?.knocks && askerStanding(actor) === 'open');
+            return refusePost(ctx, 400, "'subscription' must be a browser's push subscription: its endpoint at a push service, and its keys.", 'bad_subscription', hasStanding);
+        }
         let standing: ReturnType<typeof askerStanding> | 'member' = 'member';
         if (!member) {
             // An applicant's browser goes with the requests to join, as the profile gate would answer it.
             const switches = getProfileSwitches();
             const off = (['invites', 'knocks'] as const).find((k) => !switches[k]);
             if (off) {
-                ctx.status = 404;
-                ctx.body = { error: featureOffMessage(off), code: FEATURE_OFF, feature: off };
-                return;
+                return refusePost(ctx, 404, featureOffMessage(off), FEATURE_OFF, false, { feature: off });
             }
             standing = askerStanding(actor);
         }
         if (standing === 'none') {
-            return answer(ctx, 403, 'Only a member, or someone waiting for an answer to their request to join, can be told here.', 'no_open_request');
+            return refusePost(ctx, 403, 'Only a member, or someone waiting for an answer to their request to join, can be told here.', 'no_open_request', false);
         }
+        const hasStanding = standing === 'member' || standing === 'open';
         const contact = contactOf(ctx);
-        if (!contact) return answer(ctx, 400, 'This request did not name this community by a host name.', 'bad_host');
+        if (!contact) return refusePost(ctx, 400, 'This request did not name this community by a host name.', 'bad_host', hasStanding);
         const key = nodeKey(ctx, true);
-        if (!key) return;
+        if (!key) {
+            if (ctx.state) ctx.state.webPushRefusalLogged = true;
+            if (hasStanding) logWebPushPostRefusal('no_key');
+            else logWebPushPreAuthRefusal('no_key');
+            return;
+        }
         let subId: string;
         try {
             const lang = typeof body.lang === 'string' ? normaliseLang(body.lang) : null;
             if (standing === 'member') {
                 const kept = putMemberSubscription(actor, sub, contact, lang);
-                if (kept === 'key_rate_limited') return answer(ctx, 429, 'Too many new browsers for this account today. Try again tomorrow.', 'key_rate_limited');
+                if (kept === 'key_rate_limited') return refusePost(ctx, 429, 'Too many new browsers for this account today. Try again tomorrow.', 'key_rate_limited', true);
                 subId = kept;
             } else {
                 subId = standing === 'open' ? putAskerSubscription(actor, sub, contact, lang) : webPushSubId(sub.endpoint);
             }
         } catch (e) {
-            if (e instanceof RecoverySealKeyMissing) return answer(ctx, 503, "This community can't keep browser subscriptions right now.", 'no_seal_key');
+            if (e instanceof RecoverySealKeyMissing) return refusePost(ctx, 503, "This community can't keep browser subscriptions right now.", 'no_seal_key', hasStanding);
             throw e;
         }
         ctx.status = 201;

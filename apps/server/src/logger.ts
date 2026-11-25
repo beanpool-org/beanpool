@@ -112,21 +112,30 @@ export const LOG_KEEP_DAYS = 30;
 export const LOG_KEEP_ROWS = 2500;
 export const AGENT_LOG_KEEP_ROWS = 6000;
 export const AGENT_REFUSED_LOG_KEEP_ROWS = 500;
+export const WEB_PUSH_REFUSED_LOG_KEEP_ROWS = 200;
 const LOG_KEEP_MS = LOG_KEEP_DAYS * 24 * 60 * 60_000;
 
 /**
- * Delete the log lines past LOG_KEEP_ROWS (AGENT lines: past AGENT_LOG_KEEP_ROWS, and their "Assistant refused" lines
- * past AGENT_REFUSED_LOG_KEEP_ROWS, each counted apart) or older than LOG_KEEP_DAYS at `now`. A line whose time can't be
+ * Delete the log lines past LOG_KEEP_ROWS (AGENT lines: past AGENT_LOG_KEEP_ROWS, their "Assistant refused" lines
+ * past AGENT_REFUSED_LOG_KEEP_ROWS, and "[WebPush] POST /api/web-push refused..." lines past
+ * WEB_PUSH_REFUSED_LOG_KEEP_ROWS, each counted apart) or older than LOG_KEEP_DAYS at `now`. A line whose time can't be
  * read is kept until the count takes it. Never throws. Returns how many went.
  */
 export function pruneSystemLogs(now = Date.now()): number {
     try {
         const cutoff = new Date(now - LOG_KEEP_MS).toISOString();
         const byAge = db.prepare('DELETE FROM system_logs WHERE julianday(timestamp) < julianday(?)').run(cutoff).changes;
+        const webPushRefused = "category IS 'SYS' AND COALESCE(message, '') LIKE '[WebPush] POST /api/web-push refused%'";
+        const general = `category IS NOT 'AGENT' AND NOT (${webPushRefused})`;
         const byCount = db.prepare(`
             DELETE FROM system_logs
-            WHERE category IS NOT 'AGENT'
-              AND id < (SELECT id FROM system_logs WHERE category IS NOT 'AGENT' ORDER BY id DESC LIMIT 1 OFFSET ${LOG_KEEP_ROWS - 1})
+            WHERE ${general}
+              AND id < (SELECT id FROM system_logs WHERE ${general} ORDER BY id DESC LIMIT 1 OFFSET ${LOG_KEEP_ROWS - 1})
+        `).run().changes;
+        const webPushByCount = db.prepare(`
+            DELETE FROM system_logs
+            WHERE ${webPushRefused}
+              AND id < (SELECT id FROM system_logs WHERE ${webPushRefused} ORDER BY id DESC LIMIT 1 OFFSET ${WEB_PUSH_REFUSED_LOG_KEEP_ROWS - 1})
         `).run().changes;
         const refused = "category = 'AGENT' AND message LIKE 'Assistant refused%'";
         const admitted = "category = 'AGENT' AND message NOT LIKE 'Assistant refused%'";
@@ -140,7 +149,7 @@ export function pruneSystemLogs(now = Date.now()): number {
             WHERE ${refused}
               AND id < (SELECT id FROM system_logs WHERE ${refused} ORDER BY id DESC LIMIT 1 OFFSET ${AGENT_REFUSED_LOG_KEEP_ROWS - 1})
         `).run().changes;
-        return byAge + byCount + agentByCount + refusedByCount;
+        return byAge + byCount + webPushByCount + agentByCount + refusedByCount;
     } catch (err: any) {
         console.error('Failed to prune administrative log:', err.message);
         return 0;

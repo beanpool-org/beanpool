@@ -12,8 +12,8 @@
 import { useState } from 'react';
 import { PEEK_WORDS, notifyJoinWords, t, word } from '@beanpool/core';
 import {
-    TELL_ME_WORDS, cannotLines, grantedLine, pushEnv, pushPlace, turnOffFromSettings, turnOnWebPush, webPushOrigin, webPushState,
-    type PushEnv, type WebPushState,
+    TELL_ME_WORDS, cannotLines, grantedLine, isWebPushFailure, pushEnv, pushPlace, turnOffFromSettings, turnOnWebPush, webPushFailureMessage, webPushOrigin, webPushState,
+    type PushEnv, type WebPushFailure, type WebPushState,
 } from '../lib/web-push';
 import { getNodeApiUrl } from '../lib/api';
 import { useLanguage } from '../lib/useLanguage';
@@ -39,7 +39,7 @@ export function WebPushRow({ identity, env }: { identity: BeanPoolIdentity; env?
     const envNow = () => env ?? pushEnv();
     const [state, setState] = useState<WebPushState>(() => webPushState(origin, identity.publicKey, envNow()));
     const [busy, setBusy] = useState(false);
-    const [failed, setFailed] = useState(false);
+    const [failure, setFailure] = useState<WebPushFailure | null>(null);
 
     const reason = notifyJoinWords({ kind: 'community' });
     const status = state === 'on' ? t(WEB_PUSH_ROW_WORDS.on) : state === 'blocked' ? t(WEB_PUSH_ROW_WORDS.blocked) : state === 'off' ? t(WEB_PUSH_ROW_WORDS.off) : null;
@@ -54,11 +54,12 @@ export function WebPushRow({ identity, env }: { identity: BeanPoolIdentity; env?
     const turnOn = async () => {
         if (!origin) return;
         setBusy(true);
-        setFailed(false);
-        const r = await turnOnWebPush(origin, identity, lang);
+        setFailure(null);
+        const r = await turnOnWebPush(origin, identity, lang, envNow());
         setBusy(false);
-        if (!r.ok && r.reason === 'failed') setFailed(true);
-        setState(webPushState(origin, identity.publicKey, envNow()));
+        if (isWebPushFailure(r)) setFailure(r);
+        if (!r.ok && r.reason === 'blocked') setState('blocked');
+        else setState(webPushState(origin, identity.publicKey, envNow()));
     };
     const turnOff = async () => {
         if (!origin) return;
@@ -100,7 +101,7 @@ export function WebPushRow({ identity, env }: { identity: BeanPoolIdentity; env?
                 </a>
             )}
             {why && <p dir="auto" className="m-0 mt-2 text-xs text-nature-600 dark:text-nature-300 break-words" data-testid="web-push-why">{why}</p>}
-            {failed && <p role="alert" className="m-0 mt-2 text-xs text-red-700 dark:text-red-300">{t(WEB_PUSH_ROW_WORDS.failed)}</p>}
+            {failure && <p role="alert" dir="auto" data-testid="web-push-failed" className="m-0 mt-2 text-xs text-bp-ink-danger break-words">{webPushFailureMessage(failure)}</p>}
         </div>
     );
 }

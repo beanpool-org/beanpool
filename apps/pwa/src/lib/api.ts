@@ -1844,6 +1844,10 @@ export interface MarketplacePost {
     /** #108: a real cash outlay is involved (fuel / consumables used up doing the job). No amount by
      *  design — the app never touches the money, so terms are agreed in the chat. */
     cashAlsoNeeded?: boolean;
+    /** #143 step 4: how far the listing travels ('local' | 'peers' | 'everywhere'). */
+    reach?: PostReach;
+    /** Peer ids named when `reach === 'peers'` (returned to the listing's author). */
+    reachPeers?: string[];
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -2497,6 +2501,9 @@ export async function updateMarketplacePost(
         lat?: number;
         lng?: number;
         repeatable?: boolean;
+        cashAlsoNeeded?: boolean;
+        reach?: PostReach;
+        reachPeers?: string[];
         photos?: string[];
         tags?: string[];
         /** Named only when the member changed them: absent leaves them, [] clears them. */

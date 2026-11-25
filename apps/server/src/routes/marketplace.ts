@@ -50,7 +50,7 @@ import { ownerAdminLimit } from '../engine/owner-admin-limit.js';
 import { noteNewReport } from '../services/alerts.js';
 import { logger } from '../logger.js';
 import { DEAL_OPEN_CODE, LEND_ASK_FIRST_CODE, LISTING_COPY_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
-import { dealQuantityFromBody } from '../engine/post-fields.js';
+import { dealQuantityFromBody, parsePostFlag } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE, ENTERPRISE_CLOSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
 import { routePhotosRefusal, photoRefusalText } from '../engine/avatar.js';
@@ -907,9 +907,9 @@ router.post('/api/marketplace/posts', async (ctx) => {
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
             photos,
-            repeatable === true || repeatable === 'true',
+            repeatable !== undefined ? parsePostFlag(repeatable, 'repeatable') : false,
             id,
-            cashAlsoNeeded === true || cashAlsoNeeded === 'true',
+            cashAlsoNeeded !== undefined ? parsePostFlag(cashAlsoNeeded, 'cashAlsoNeeded') : false,
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".

@@ -26,6 +26,7 @@ import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from '../components/useKeepCaretVisible';
 import { PerItemFields } from '../components/PerItemFields';
+import { CashAlsoNeededField, ListingLocationRow, ListingReachField } from '../components/ListingFormFields';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MapAreaRing } from '../components/MapAreaRing';
 import * as Location from 'expo-location';
@@ -1000,28 +1001,13 @@ export default function NewListingScreen() {
                             <Text style={styles.photoCount}>{upperCase(photoRequired ? t('{n}/5 photos', { n: postPhotos.length }) : t('{n}/5 photos (optional)', { n: postPhotos.length }))}</Text>
 
                             {/* Location */}
-                            <Text style={styles.sectionLabel}>{upperCase(t('Location'))} <Text style={styles.requiredStar}>*</Text></Text>
-                            <View style={styles.locationRow}>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    style={[styles.locationChip, postLat != null && !pinDropMode && styles.locationChipActive, fieldBorder('location')]}
-                                    onPress={useMyLocation}
-                                >
-                                    <Text style={styles.locationChipIcon}>📍</Text>
-                                    <Text style={styles.locationChipLabel}>{t('My location')}</Text>
-                                </Pressable>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    style={[styles.locationChip, fieldBorder('location')]}
-                                    onPress={enterPinDrop}
-                                >
-                                    <Text style={styles.locationChipIcon}>📌</Text>
-                                    <Text style={styles.locationChipLabel}>{t('Drop a pin')}</Text>
-                                </Pressable>
-                                {postLat != null && postLng != null && (
-                                    <Text style={styles.locationConfirmInline}>{t('✓ Set')}</Text>
-                                )}
-                            </View>
+                            <ListingLocationRow
+                                hasLocation={postLat != null && postLng != null}
+                                pinDropActive={pinDropMode}
+                                invalid={validationErrors.has('location')}
+                                onUseMyLocation={useMyLocation}
+                                onDropPin={enterPinDrop}
+                            />
 
                             {/* Where there are no Beans, a note instead of the price section below. */}
                             {!showsBeans && (
@@ -1107,90 +1093,24 @@ export default function NewListingScreen() {
                             </Pressable>
                             )}
 
-                            {/* #108 Cash-also-needed toggle. The nudge appears on tick, where the
-                                decision is being made. No amount field: the app can escrow beans, not
-                                cash, so a figure would imply it settles money it never touches.
-                                On a Need the poster is the one who pays, so the same flag reads the
-                                other way round there (Marty, 14 Nov 2026). */}
-                            <Pressable accessibilityRole="button" accessibilityState={{ selected: postCashAlsoNeeded }} style={styles.repeatableRow} onPress={() => setPostCashAlsoNeeded(!postCashAlsoNeeded)}>
-                                <View style={[styles.checkbox, postCashAlsoNeeded && styles.checkboxCash]}>
-                                    {postCashAlsoNeeded && <Text style={[styles.checkboxTick, { color: colors.text.onGold }]}>✓</Text>}
-                                </View>
-                                <Text style={styles.repeatableText}>{postType === 'need' ? t("💸 I'll pay cash too — for fuel or materials") : t('💸 Cash also needed — for fuel or materials')}</Text>
-                            </Pressable>
-                            {postCashAlsoNeeded && (
-                                <Text style={styles.cashNudge}>
-                                    {postType === 'need'
-                                        ? t('Cash covers fuel or materials the helper buys — at cost, not their time or tools.')
-                                        : t('Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.')}
-                                </Text>
-                            )}
+                            {/* #108 Cash-also-needed toggle (shared with edit form). */}
+                            <CashAlsoNeededField
+                                checked={postCashAlsoNeeded}
+                                onChange={setPostCashAlsoNeeded}
+                                type={postType}
+                            />
 
                             <ShowOnGlobalTick enabled={nodeProfile?.profile === 'local' && postLat !== null && postLng !== null} checked={alsoOnGlobal} onChange={setAlsoOnGlobal} listing need={postType === 'need'} />
                             {alsoOnGlobal && <TakeQuestionsTick checked={takesQuestions} onChange={setTakesQuestions} />}
 
-                            {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
-                                trading partners: a reach chooser on a node with no peers is a decision about nothing.
-                                Default stays "Stays here", because a member who has never heard of federation has not
-                                agreed to their listing appearing somewhere else. */}
-                            {reachablePeerList.length > 0 && (
-                                <View style={styles.reachSection}>
-                                    <Text style={styles.reachLabel}>{t('Where does this travel?')}</Text>
-                                    <View style={styles.reachButtonRow}>
-                                        {([
-                                            { value: 'local' as const, label: t('🏠 Stays here') },
-                                            { value: 'peers' as const, label: t('🤝 Chosen') },
-                                            { value: 'everywhere' as const, label: t('🌏 Everywhere') },
-                                        ]).map(opt => (
-                                            <Pressable
-                                                key={opt.value}
-                                                accessibilityRole="button"
-                                                accessibilityState={{ selected: postReach === opt.value }}
-                                                style={[
-                                                    styles.reachButton,
-                                                    postReach === opt.value && styles.reachButtonActive,
-                                                ]}
-                                                onPress={() => setPostReach(opt.value)}
-                                            >
-                                                <Text style={[
-                                                    styles.reachButtonText,
-                                                    postReach === opt.value && styles.reachButtonTextActive,
-                                                ]}>{opt.label}</Text>
-                                            </Pressable>
-                                        ))}
-                                    </View>
-                                    {postReach === 'peers' && (
-                                        <View style={styles.reachPeerRow}>
-                                            {reachablePeerList.map((p, index) => {
-                                                const on = postReachPeers.includes(p.peerId);
-                                                const peerLabel = p.callsign || (p.peerId ? t('Peer {id}', { id: p.peerId.slice(-8) }) : t('Peer'));
-                                                return (
-                                                    <Pressable
-                                                        key={p.peerId || index}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={t('Community {name}', { name: peerLabel })}
-                                                        accessibilityState={{ selected: on }}
-                                                        style={[
-                                                            styles.reachPeerChip,
-                                                            on && styles.reachPeerChipActive,
-                                                        ]}
-                                                        onPress={() => setPostReachPeers(prev =>
-                                                            on ? prev.filter(x => x !== p.peerId) : [...prev, p.peerId])}
-                                                    >
-                                                        <Text style={[
-                                                            styles.reachPeerChipText,
-                                                            on && styles.reachPeerChipTextActive,
-                                                        ]}>{on ? '✓ ' : ''}{peerLabel}</Text>
-                                                    </Pressable>
-                                                );
-                                            })}
-                                            {postReachPeers.length === 0 && (
-                                                <Text style={styles.reachPeerHint}>{t('Tap a community to include it')}</Text>
-                                            )}
-                                        </View>
-                                    )}
-                                </View>
-                            )}
+                            {/* #143 step 4 — how far this listing travels (shared with edit form). */}
+                            <ListingReachField
+                                reach={postReach}
+                                onReachChange={setPostReach}
+                                reachPeers={postReachPeers}
+                                onReachPeersChange={setPostReachPeers}
+                                peerList={reachablePeerList}
+                            />
                         </ScrollView>
 
                         {/* Sticky Submit */}

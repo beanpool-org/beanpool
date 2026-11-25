@@ -158,6 +158,29 @@ async function main() {
         'the string "true" SETS the flag',
     );
 
+    // Invalid flag values on edit (and create) are refused with 400 and leave the stored row untouched.
+    for (const bad of ['yes', 123, null, {}, []]) {
+        const badEdit = await signedFetch('POST', '/api/marketplace/posts/update', author,
+            { id: cashId, authorPublicKey: author.pubKeyHex, cashAlsoNeeded: bad });
+        assert(badEdit.status === 400, `invalid cashAlsoNeeded=${JSON.stringify(bad)} on edit is refused 400 (got ${badEdit.status})`);
+    }
+    assert(
+        ((await signedFetch('GET', `/api/marketplace/posts?id=${cashId}`, author)).body as any[])[0]?.cashAlsoNeeded === true,
+        'refused invalid cashAlsoNeeded edits left the stored flag intact',
+    );
+    // Same rule for repeatable on edit: string "false" clears, invalid value is refused.
+    const repOn = await signedFetch('POST', '/api/marketplace/posts/update', author,
+        { id: cashId, authorPublicKey: author.pubKeyHex, repeatable: true });
+    assert(repOn.status === 200 && ((await signedFetch('GET', `/api/marketplace/posts?id=${cashId}`, author)).body as any[])[0]?.repeatable === true,
+        'repeatable: true is stored on edit');
+    const repStrOff = await signedFetch('POST', '/api/marketplace/posts/update', author,
+        { id: cashId, authorPublicKey: author.pubKeyHex, repeatable: 'false' });
+    assert(repStrOff.status === 200 && ((await signedFetch('GET', `/api/marketplace/posts?id=${cashId}`, author)).body as any[])[0]?.repeatable === false,
+        'repeatable: "false" CLEARS the flag on edit');
+    const repBad = await signedFetch('POST', '/api/marketplace/posts/update', author,
+        { id: cashId, authorPublicKey: author.pubKeyHex, repeatable: 'maybe' });
+    assert(repBad.status === 400, `invalid repeatable="maybe" on edit is refused 400 (got ${repBad.status})`);
+
     // ── 4. Cash cannot travel: a peer node never sees a cash-flagged listing ────
     // Remote browsing hits this same endpoint, so the peer Origin is the signal.
     addConnector('byron.beanpool.org', 'peer', 'Byron', PEER_ORIGIN);

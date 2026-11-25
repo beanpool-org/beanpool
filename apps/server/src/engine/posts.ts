@@ -1650,7 +1650,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.category !== undefined) { fields.push('category = ?'); values.push(updates.category); }
     if (updates.price_c !== undefined) { fields.push('price_c = ?'); values.push(updates.price_c); }
     if (updates.priceType !== undefined) { fields.push('price_type = ?'); values.push(updates.priceType); }
-    if (updates.repeatable !== undefined) { fields.push('repeatable = ?'); values.push(updates.repeatable ? 1 : 0); }
+    if (updates.repeatable !== undefined) { fields.push('repeatable = ?'); values.push((updates.repeatable === true || (updates.repeatable as any) === 'true') ? 1 : 0); }
     // The string "false" is truthy, so a stringified payload could never CLEAR the flag.
     // Normalise the same way the create route does.
     if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push((updates.cashAlsoNeeded === true || (updates.cashAlsoNeeded as any) === 'true') ? 1 : 0); }

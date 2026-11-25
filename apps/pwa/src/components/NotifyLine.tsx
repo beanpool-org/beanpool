@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { notifyLineWords, t, type NotifyLineKind, type NotifyPhone } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { useLanguage } from '../lib/useLanguage';
-import { notifyPhoneHere, offerNamedLineHere, turnOnFromAsk } from '../lib/web-push';
+import { notifyPhoneHere, offerNamedLineHere, turnOnAsk, webPushFailureMessage, type WebPushFailure } from '../lib/web-push';
 import { WEB_PUSH_ROW_WORDS } from './WebPushRow';
 
 export interface NotifyLineOffer {
@@ -29,7 +29,7 @@ export interface NotifyLineOffer {
     align?: 'start' | 'end';
 }
 
-type Shown = NotifyLineOffer & { state: 'offer' | 'busy' | 'done' | 'failed' };
+type Shown = NotifyLineOffer & { state: 'offer' | 'busy' | 'done' | 'failed'; failure?: WebPushFailure };
 
 /** A named line's words: the offer, what it says once notifications are on, and its button. */
 export type NotifyLineText = { line: string; done: string; button: string };
@@ -125,26 +125,33 @@ export function useNotifyLine(publicKey: string | null | undefined, showing = tr
         const id = who.current;
         if (!id) return;
         setShown((s) => (s ? { ...s, state: 'busy' } : s));
-        // The browser's prompt is the first thing this tap waits on (turnOnFromAsk): its answer kept as the phone's is.
-        void turnOnFromAsk(id, lang, 'line').then((r) => {
-            // turnOnFromAsk's contract: a 'failed' (the browser allowed, the node didn't take it) is said, and Tell me stays, as
+        // The browser's prompt is the first thing this tap waits on (turnOnAsk): its answer kept as the phone's is.
+        void turnOnAsk(id, lang, 'line').then((r) => {
+            // turnOnAsk's contract: a failure after permission is said by which side refused, and Tell me stays, as
             // the once card and the reminder box do; the kind was spent at the offer, so going quiet would lose it for good.
-            if (mounted.current) setShown((s) => (s && r === 'ok' ? { ...s, state: 'done' } : s && r === 'failed' ? { ...s, state: 'failed' } : null));
+            if (mounted.current) {
+                setShown((s) => (
+                    s && r.result === 'ok' ? { ...s, state: 'done', failure: undefined }
+                        : s && r.result === 'failed' ? { ...s, state: 'failed', failure: r.failure }
+                            : null
+                ));
+            }
             noteBrowserChanged();
         });
     }, [lang]);
 
     const line = showing ? shown : null;
     const draw = (words?: NotifyLineText | null) => (line && words !== null
-        ? <NotifyLine kind={line.kind} name={line.name} state={line.state} onTellMe={tellMe} align={line.align} words={words} />
+        ? <NotifyLine kind={line.kind} name={line.name} state={line.state} failure={line.failure} onTellMe={tellMe} align={line.align} words={words} />
         : null);
     return { line, offer, view: draw(), draw };
 }
 
-export function NotifyLine({ kind, name, state, onTellMe, align = 'start', words: given }: {
+export function NotifyLine({ kind, name, state, failure, onTellMe, align = 'start', words: given }: {
     kind: NotifyLineKind;
     name?: string | null;
     state: Shown['state'];
+    failure?: WebPushFailure | null;
     onTellMe: () => void;
     align?: 'start' | 'end';
     words?: NotifyLineText;
@@ -162,7 +169,9 @@ export function NotifyLine({ kind, name, state, onTellMe, align = 'start', words
     return (
         <div data-testid="notify-line" className={`flex flex-wrap items-center gap-x-1 my-0.5 px-1 max-w-full min-w-0 ${side}`}>
             {state === 'failed' && (
-                <p role="alert" data-testid="notify-line-failed" dir="auto" className="m-0 basis-full min-w-0 text-[0.8125rem] text-bp-ink-danger break-words">{t(WEB_PUSH_ROW_WORDS.failed)}</p>
+                <p role="alert" data-testid="notify-line-failed" dir="auto" className="m-0 basis-full min-w-0 text-[0.8125rem] text-bp-ink-danger break-words">
+                    {failure ? webPushFailureMessage(failure) : t(WEB_PUSH_ROW_WORDS.failed)}
+                </p>
             )}
             <span dir="auto" className="min-w-0 text-[0.8125rem] text-text-secondary break-words">{words.line}</span>
             <button type="button" data-testid="notify-line-tell-me" onClick={onTellMe} disabled={busy} aria-busy={busy}

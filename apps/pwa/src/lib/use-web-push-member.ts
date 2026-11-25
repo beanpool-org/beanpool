@@ -14,8 +14,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    checkClickedNotice, keepWebPushAtOpen, laterFromAsk, markNotifyAskHere, noticeInHash, notifyOnceDueHere, readWebPushPin, turnOnFromAsk, webPushOrigin,
-    type PushEnv,
+    checkClickedNotice, keepWebPushAtOpen, laterFromAsk, markNotifyAskHere, noticeInHash, notifyOnceDueHere, readWebPushPin, turnOnAsk, webPushOrigin,
+    type PushEnv, type WebPushFailure,
 } from './web-push';
 import { getNodeApiUrl, getPushNoticeDetails } from './api';
 import type { BeanPoolIdentity } from './identity';
@@ -106,7 +106,7 @@ export function useNotifyOnce(identity: BeanPoolIdentity | null, publicKey: stri
     const landed = useMemo(() => !!publicKey && notifyOnceDueHere(publicKey, env), [publicKey]);
     const [answered, setAnswered] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    const [failed, setFailed] = useState(false);
+    const [failed, setFailed] = useState<WebPushFailure | null>(null);
     const open = landed && answered !== publicKey;
 
     useEffect(() => {
@@ -116,10 +116,10 @@ export function useNotifyOnce(identity: BeanPoolIdentity | null, publicKey: stri
     const turnOn = () => {
         if (!identity || !publicKey || busy) return;
         setBusy(true);
-        setFailed(false);
-        void turnOnFromAsk(identity, lang, 'once', env).then((r) => {
+        setFailed(null);
+        void turnOnAsk(identity, lang, 'once', env).then((r) => {
             setBusy(false);
-            if (r === 'failed') setFailed(true);
+            if (r.result === 'failed') setFailed(r.failure);
             else setAnswered(publicKey);
         });
     };

@@ -16,7 +16,7 @@ import type { KnowledgeDraftMine } from '@beanpool/core';
 import { useIdentity } from '../../app/IdentityContext';
 import { cachedNodeRoleHeard, forgetNodeRole } from '../../utils/node-admin';
 import { anchorUrl } from '../../utils/node-post';
-import { signedGet } from '../../utils/db';
+import { LIST_READ_BACKSTOP_MS, signedGet } from '../../utils/db';
 
 export interface LearnWriter {
     /** An owner or admin here. False until heard, and when it can't be. */
@@ -31,7 +31,7 @@ export interface LearnWriter {
 export async function readMyDrafts(signal?: AbortSignal, url?: string | null): Promise<{ waiting: KnowledgeDraftMine[]; answered: KnowledgeDraftMine[] } | null> {
     try {
         const opts = signal || url !== undefined
-            ? { ...(signal ? { signal } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
+            ? { ...(signal ? { signal, deadlineMs: LIST_READ_BACKSTOP_MS } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
             : undefined;
         const res = await signedGet('/api/knowledge/drafts/mine', opts);
         if (!res.ok) return null;
@@ -47,7 +47,7 @@ export async function readMyDrafts(signal?: AbortSignal, url?: string | null): P
 export async function readToCheckCount(signal?: AbortSignal, url?: string | null): Promise<number> {
     try {
         const opts = signal || url !== undefined
-            ? { ...(signal ? { signal } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
+            ? { ...(signal ? { signal, deadlineMs: LIST_READ_BACKSTOP_MS } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
             : undefined;
         const res = await signedGet('/api/node-admin/queue?learn=1', opts);
         if (!res.ok) return 0;

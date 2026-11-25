@@ -66,7 +66,10 @@ export default function LearnCheckOneScreen() {
     const params = useLocalSearchParams<{ id?: string | string[] }>();
     const id = first(params.id);
     const mountedRef = useRef(true);
-    useEffect(() => () => { mountedRef.current = false; }, []);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const [draft, setDraft] = useState<KnowledgeDraftWhole | null | 'failed' | undefined>(undefined);
     const [tries, setTries] = useState(0);
@@ -200,10 +203,20 @@ export default function LearnCheckOneScreen() {
 
     const leave = () => {
         if (mode === 'edit') {
+            if (busy) return;
             if (edited) {
                 Alert.alert(t(LEARN_CHECK_WORDS.title), t(LEARN_CHECK_WORDS.leaveEditAsk), [
                     { text: t(LEARN_CHECK_WORDS.leaveEditStay), style: 'cancel' },
-                    { text: t(LEARN_CHECK_WORDS.leaveEditDiscard), style: 'destructive', onPress: () => { setMode('read'); setEdited(false); setRefusal(null); } },
+                    {
+                        text: t(LEARN_CHECK_WORDS.leaveEditDiscard),
+                        style: 'destructive',
+                        onPress: () => {
+                            if (!mountedRef.current) return;
+                            setMode('read');
+                            setEdited(false);
+                            setRefusal(null);
+                        },
+                    },
                 ]);
                 return;
             }
@@ -229,9 +242,18 @@ export default function LearnCheckOneScreen() {
         return () => sub.remove();
     }, [navigation, mode]);
 
+    const editBusy = mode === 'edit' && busy;
     const header = (
         <View style={s.header}>
-            <Pressable testID="learn-check-one-back" accessibilityRole="button" accessibilityLabel={t(LEARN_LINES.back)} onPress={leave} style={s.back}>
+            <Pressable
+                testID="learn-check-one-back"
+                accessibilityRole="button"
+                accessibilityLabel={t(LEARN_LINES.back)}
+                accessibilityState={{ disabled: editBusy }}
+                disabled={editBusy}
+                onPress={leave}
+                style={[s.back, editBusy && s.primaryDisabled]}
+            >
                 <Text style={s.backArrow}>‹</Text>
                 <Text style={s.backText}>{t(LEARN_LINES.back)}</Text>
             </Pressable>

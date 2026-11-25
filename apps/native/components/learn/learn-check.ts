@@ -9,7 +9,7 @@ import {
     type KnowledgeDraftToCheck, type KnowledgeDraftWhole, type KnowledgeFixPart,
     type KnowledgePageWords, type KnowledgeRow,
 } from '@beanpool/core';
-import { signedGet, signedRequestWithMethod } from '../../utils/db';
+import { LIST_READ_BACKSTOP_MS, signedGet, signedRequestWithMethod } from '../../utils/db';
 import { LANGUAGE_NAMES } from '../../utils/language-choice';
 import { hostOf } from './KnowledgeDetail';
 import { topicOf } from './learn-lines';
@@ -134,7 +134,7 @@ export function fixPartText(part: KnowledgeFixPart, w: Pick<KnowledgePageWords, 
 /** GET /api/knowledge/drafts?limit=50&offset=0: throws on network/HTTP failure. */
 export async function readLearnToCheck(signal?: AbortSignal, url?: string | null): Promise<LearnCheckListData> {
     const opts = signal || url !== undefined
-        ? { ...(signal ? { signal } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
+        ? { ...(signal ? { signal, deadlineMs: LIST_READ_BACKSTOP_MS } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
         : undefined;
     const res = await signedGet('/api/knowledge/drafts?limit=50&offset=0', opts);
     if (!res.ok) {
@@ -159,7 +159,10 @@ export async function readLearnToCheck(signal?: AbortSignal, url?: string | null
 
 /** GET /api/knowledge/drafts/:id: returns null on 404 (already answered), throws on other failures. */
 export async function readLearnDraft(id: string, signal?: AbortSignal): Promise<KnowledgeDraftWhole | null> {
-    const res = await signedGet(`/api/knowledge/drafts/${encodeURIComponent(id)}`, signal ? { signal } : undefined);
+    const res = await signedGet(
+        `/api/knowledge/drafts/${encodeURIComponent(id)}`,
+        signal ? { signal, deadlineMs: LIST_READ_BACKSTOP_MS } : undefined,
+    );
     if (res.status === 404) return null;
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));

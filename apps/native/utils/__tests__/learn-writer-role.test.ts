@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ anchor: 'https://riverside.example' as string | Error | null }));
 vi.mock('expo-router', () => ({ useFocusEffect: vi.fn() }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: null }) }));
-vi.mock('../db', () => ({ signedGet: vi.fn() }));
+vi.mock('../db', () => ({ LIST_READ_BACKSTOP_MS: 60_000, signedGet: vi.fn() }));
 vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => { if (h.anchor instanceof Error) throw h.anchor; return h.anchor; }) }));
 vi.mock('../node-admin', () => ({ cachedNodeRoleHeard: vi.fn(), forgetNodeRole: vi.fn() }));
 
@@ -58,6 +58,7 @@ describe('readToCheckCount and readMyDrafts', () => {
         expect(count).toBe(3);
         expect(signedGet).toHaveBeenCalledWith('/api/node-admin/queue?learn=1', {
             signal: stop.signal,
+            deadlineMs: 60_000,
             anchorUrl: 'https://riverside.example',
         });
     });
@@ -73,7 +74,7 @@ describe('readToCheckCount and readMyDrafts', () => {
         expect(await readToCheckCount()).toBe(0);
     });
 
-    it('readMyDrafts forwards signal and anchorUrl to signedGet', async () => {
+    it('readMyDrafts forwards signal, deadlineMs and anchorUrl to signedGet', async () => {
         const stop = new AbortController();
         vi.mocked(signedGet).mockResolvedValueOnce({
             ok: true,
@@ -83,6 +84,7 @@ describe('readToCheckCount and readMyDrafts', () => {
         expect(await readMyDrafts(stop.signal, 'https://riverside.example')).toEqual({ waiting: [], answered: [] });
         expect(signedGet).toHaveBeenCalledWith('/api/knowledge/drafts/mine', {
             signal: stop.signal,
+            deadlineMs: 60_000,
             anchorUrl: 'https://riverside.example',
         });
     });

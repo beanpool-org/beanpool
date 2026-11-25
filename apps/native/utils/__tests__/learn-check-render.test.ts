@@ -8,7 +8,7 @@
  * Tested in both light and dark themes at 320 dp × 1.3 font.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement, type ReactNode } from 'react';
+import { StrictMode, act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { KnowledgeDraftWhole } from '@beanpool/core';
 
@@ -126,6 +126,7 @@ vi.mock('../../components/learn/KnowledgeDetail', () => ({
     openableSource: (url: string) => /^https?:\/\//i.test(url.trim()),
 }));
 vi.mock('../db', () => ({
+    LIST_READ_BACKSTOP_MS: 60_000,
     signedGet: (...args: unknown[]) => h.signedGet(...args),
     signedRequestWithMethod: (...args: unknown[]) => h.signedRequestWithMethod(...args),
 }));
@@ -137,7 +138,7 @@ vi.mock('expo-modules-core', () => ({
 }));
 
 import LearnCheckOneScreen from '../../app/learn/check/[id]';
-import { LEARN_CHECK_ANSWERED } from '../../components/learn/learn-check';
+import { LEARN_CHECK_ANSWERED, readLearnToCheck } from '../../components/learn/learn-check';
 
 const PHOTO_A = 'data:image/png;base64,AAAA';
 const PHOTO_B = 'data:image/png;base64,BBBB';
@@ -477,5 +478,64 @@ describe.each(['light', 'dark'] as const)('LearnCheckOneScreen (%s, 320 dp × 1.
         await act(async () => { resolveApprove?.({ post: { id: 'p-4' } }); });
         await settle();
         expect(h.leaveScreen).not.toHaveBeenCalled();
+    });
+
+    it('keeps mountedRef live under StrictMode, blocks back while edit-approve is busy, and passes deadlineMs on reads', async () => {
+        let rejectEdit: ((err: Error) => void) | undefined;
+        h.signedGet
+            .mockResolvedValueOnce(okDraft(makeDraft({ photos: [], photoCredits: [] })))
+            .mockResolvedValueOnce(okDraft(makeDraft({ photos: [], photoCredits: [] })));
+        h.signedRequestWithMethod.mockImplementationOnce(() => new Promise((_r, rej) => { rejectEdit = rej; }));
+
+        // Mount under StrictMode so React runs mount -> cleanup -> remount; mountedRef must reset to true.
+        await renderScreen(createElement(StrictMode, null, createElement(LearnCheckOneScreen)));
+        expect(q('learn-check-one')).toBeTruthy();
+
+        // readLearnDraft passes LIST_READ_BACKSTOP_MS alongside signal.
+        expect(h.signedGet).toHaveBeenCalledWith(
+            '/api/knowledge/drafts/draft-1',
+            expect.objectContaining({ signal: expect.any(AbortSignal), deadlineMs: 60_000 }),
+        );
+
+        // readLearnToCheck also passes LIST_READ_BACKSTOP_MS alongside signal and anchorUrl.
+        const stop = new AbortController();
+        h.signedGet.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ drafts: [], total: 0, unchecked: { total: 0, rows: [] } }),
+        });
+        await readLearnToCheck(stop.signal, 'https://riverside.example');
+        expect(h.signedGet).toHaveBeenLastCalledWith('/api/knowledge/drafts?limit=50&offset=0', {
+            signal: stop.signal,
+            deadlineMs: 60_000,
+            anchorUrl: 'https://riverside.example',
+        });
+
+        // Enter edit mode, edit the title, and start edit-approve.
+        await click(q('learn-check-edit'));
+        await setInput(q('learn-edit-title'), 'Updated recycling tip');
+        await act(async () => { q('learn-check-edit-approve')!.click(); });
+
+        // Header Back is disabled and hardware Back is ignored while edit-approve is in flight.
+        expect((q('learn-check-one-back') as HTMLButtonElement).disabled).toBe(true);
+        await act(async () => {
+            for (const fn of h.backListeners) fn();
+        });
+        expect(h.alert).not.toHaveBeenCalled();
+        expect(q('learn-check-edit-form')).toBeTruthy();
+
+        // When edit-approve rejects under StrictMode, mountedRef is true so refusal shows and busy clears.
+        const nodeWords = 'The page changed since this fix was sent.';
+        await act(async () => { rejectEdit?.(Object.assign(new Error(nodeWords), { status: 409, code: 'page_changed' })); });
+        await settle();
+        expect(q('learn-check-edit-form')).toBeTruthy();
+        expect((q('learn-edit-title') as HTMLInputElement).value).toBe('Updated recycling tip');
+        expect(host.textContent).toContain(nodeWords);
+        expect((q('learn-check-one-back') as HTMLButtonElement).disabled).toBe(false);
+
+        // A subsequent successful approve under StrictMode still navigates away via finishWith().
+        h.signedRequestWithMethod.mockResolvedValueOnce({ post: { id: 'p-5' } });
+        await click(q('learn-check-edit-approve'));
+        expect(h.leaveScreen).toHaveBeenCalledWith(router, 'learn/check/[id]');
     });
 });

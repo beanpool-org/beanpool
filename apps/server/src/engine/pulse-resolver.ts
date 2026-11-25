@@ -1186,6 +1186,31 @@ export function extractYouTubeVideoId(input: string | null | undefined): string 
 // 4. RSS 2.0 & Atom Feed Parsers
 // ============================================================================
 
+/**
+ * Strip XML comments in O(N) time without regex backtracking.
+ * Avoids quadratic ReDoS on attacker-controlled feeds with repeated unclosed `<!--` sequences.
+ */
+function stripXmlComments(xml: string): string {
+    if (!xml.includes('<!--')) return xml;
+    const parts: string[] = [];
+    let cursor = 0;
+    while (cursor < xml.length) {
+        const start = xml.indexOf('<!--', cursor);
+        if (start === -1) {
+            parts.push(xml.slice(cursor));
+            break;
+        }
+        const end = xml.indexOf('-->', start + 4);
+        if (end === -1) {
+            parts.push(xml.slice(cursor));
+            break;
+        }
+        parts.push(xml.slice(cursor, start));
+        cursor = end + 3;
+    }
+    return parts.join('');
+}
+
 export function parseRss2Feed(xml: string, options?: { fallbackPublishedAt?: string; baseUrl?: string }): ParsedPulseFeed {
     const fallbackIso = options?.fallbackPublishedAt || new Date().toISOString();
     const baseUrl = options?.baseUrl;
@@ -1195,9 +1220,7 @@ export function parseRss2Feed(xml: string, options?: { fallbackPublishedAt?: str
     }
 
     try {
-        const sanitizedXml = xml
-            .replace(/\uFEFF/g, '')
-            .replace(/<!--[\s\S]*?-->/g, '');
+        const sanitizedXml = stripXmlComments(xml.replace(/\uFEFF/g, ''));
 
         const channelMatch = sanitizedXml.match(/<channel\b[^>]*>([\s\S]*?)<\/channel>/i);
         const channelHeader = channelMatch
@@ -1352,9 +1375,7 @@ export function parseAtomFeed(xml: string, feedUrl?: string): ParsedPulseFeed {
     }
 
     try {
-        const cleanXml = xml
-            .replace(/\uFEFF/g, '')
-            .replace(/<!--[\s\S]*?-->/g, '');
+        const cleanXml = stripXmlComments(xml.replace(/\uFEFF/g, ''));
 
         const feedTagMatch = /<feed\b([^>]*?)>/i.exec(cleanXml);
         let feedBase = feedUrl || null;
@@ -1805,14 +1826,20 @@ const YOUTUBE_OEMBED_ORIGIN = 'https://www.youtube.com';
  */
 export function isCompleteFeedXml(xml: string): boolean {
     if (!xml || typeof xml !== 'string') return false;
-    const cleaned = xml.replace(/\uFEFF/g, '').replace(/<!--[\s\S]*?-->/g, '').trim();
+    const cleaned = stripXmlComments(xml.replace(/\uFEFF/g, '')).trim();
     if (!cleaned) return false;
     const head = cleaned.slice(0, 2000).toLowerCase();
     if (/<(?:[a-zA-Z0-9_-]+:)?feed\b/i.test(head) || head.includes('xmlns="http://www.w3.org/2005/atom"')) {
         return /<\/(?:[a-zA-Z0-9_-]+:)?feed\s*>/i.test(cleaned);
     }
-    if (/<rss\b/i.test(head) || /<rdf:rdf\b/i.test(head) || /<channel\b/i.test(head)) {
-        return /<\/(?:rss|rdf:rdf|channel)\s*>/i.test(cleaned);
+    if (/<rss\b/i.test(head)) {
+        return /<\/rss\s*>/i.test(cleaned);
+    }
+    if (/<rdf:rdf\b/i.test(head)) {
+        return /<\/rdf:rdf\s*>/i.test(cleaned);
+    }
+    if (/<channel\b/i.test(head)) {
+        return /<\/channel\s*>/i.test(cleaned);
     }
     return false;
 }

@@ -59,7 +59,7 @@ function makeResponse(status: number, body: string, url: string, contentType = '
         url,
         buffer: async () => Buffer.from(body, 'utf-8'),
         text: async () => body,
-        json: async <T = any>() => JSON.parse(body) as T,
+        json: async <T = unknown>() => JSON.parse(body) as T,
     };
 }
 
@@ -304,9 +304,10 @@ async function main(): Promise<void> {
             `${tc.name} (got ${JSON.stringify(gotIds)})`
         );
         for (const id of tc.mustStillExistLive) {
-            const row = db.prepare('SELECT deleted_at, url, title FROM pulse_items WHERE id = ?').get(id) as any;
+            const row = db.prepare('SELECT deleted_at, url, title FROM pulse_items WHERE id = ?').get(id) as
+                { deleted_at: string | null; url: string | null; title: string | null } | undefined;
             assert(
-                row && row.deleted_at === null && row.url !== null && row.title !== null,
+                Boolean(row && row.deleted_at === null && row.url !== null && row.title !== null),
                 `row ${id} was not deleted or scrubbed (${tc.name})`
             );
         }
@@ -410,7 +411,13 @@ async function main(): Promise<void> {
 
     const rowState = (extId: string) => db.prepare(
         `SELECT id, deleted_at, url, title, thumbnail_url FROM pulse_items WHERE channel_id = ? AND external_id = ?`
-    ).get(ytChan.id, extId) as any;
+    ).get(ytChan.id, extId) as {
+        id: string;
+        deleted_at: string | null;
+        url: string | null;
+        title: string | null;
+        thumbnail_url: string | null;
+    };
 
     // 2a. RSS fetch failures (network error, 5xx, 429, truncated XML): NEVER tombstone, NEVER probe oEmbed
     const rssFailureCases: Array<{
@@ -587,7 +594,7 @@ async function main(): Promise<void> {
     assert(probedAgedIds.length === 3, `Probed the 3 items outside the 15-video RSS window (got ${probedAgedIds.length})`);
     const agedLive = db.prepare(
         `SELECT external_id, deleted_at, url FROM pulse_items WHERE channel_id = ? AND external_id IN ('agedOut0001','agedOut0002','agedOut0003')`
-    ).all(agedChan.id) as any[];
+    ).all(agedChan.id) as Array<{ external_id: string; deleted_at: string | null; url: string | null }>;
     assert(
         agedLive.length === 3 && agedLive.every((r) => r.deleted_at === null && r.url !== null),
         'All 3 videos aged out of the 15-item RSS window with oEmbed 200 are kept intact'

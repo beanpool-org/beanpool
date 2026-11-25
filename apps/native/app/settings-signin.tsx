@@ -81,6 +81,16 @@ export default function SettingsSigninScreen() {
         const appNode = await getAnchorUrl();
         await communityRecordsReady();
         const scan = readSigninScan(data, appNode);
+        if (scan.kind === 'device-link') {
+            // The web app's "Link with Mobile App" code: Link a device's own screen, where the member scans it again.
+            const m = scanProblemMessage(scan);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+            Alert.alert(keyLineWords(m.title), keyLineWords(m.message), [
+                { text: t('Not now'), style: 'cancel', onPress: resumeScanning },
+                { text: t('Open Link a device'), onPress: () => router.replace('/pair-device') },
+            ], { cancelable: false });
+            return;
+        }
         if (scan.kind !== 'ok') {
             const m = scanProblemMessage(scan);
             problem(keyLineWords(m.title), keyLineWords(m.message));

@@ -24,7 +24,7 @@ import { signAssistantApproval, signPairing } from './member-statements';
 import type { AssistantTicks } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { plainOriginOf } from './node-url';
-import { heldAddress, type ProveAtScan } from './pair-device-target';
+import { heldAddress, isDeviceLinkCode, type ProveAtScan } from './pair-device-target';
 import { communityRecordOf, type CommunityRecord } from './community-index';
 
 export type ScanResult =
@@ -32,6 +32,8 @@ export type ScanResult =
     | { kind: 'ok'; qr: SettingsSigninQr; prove?: ProveAtScan }
     | { kind: 'wrong-node'; scannedHost: string; appHost: string }
     | { kind: 'not-signin' }
+    /** The web app's "Link with Mobile App" code (`beanpool://pair?…`): Settings → Link a device's, not this screen's. */
+    | { kind: 'device-link' }
     | { kind: 'malformed' }
     | { kind: 'no-node' };
 
@@ -47,7 +49,7 @@ function host(url: string): string {
  */
 export function readSigninScan(text: unknown, appNodeUrl: string | null, recordOf: (address: string) => CommunityRecord | null = communityRecordOf): ScanResult {
     const parsed = parseSettingsSigninQr(text);
-    if (!parsed.ok) return { kind: parsed.reason };
+    if (!parsed.ok) return parsed.reason === 'not-signin' && isDeviceLinkCode(text) ? { kind: 'device-link' } : { kind: parsed.reason };
     if (!appNodeUrl) return { kind: 'no-node' };
     const own = plainOriginOf(appNodeUrl);
     if (!isSameNode(parsed.nodeUrl, appNodeUrl)) {
@@ -71,6 +73,9 @@ export function scanProblemMessage(r: Exclude<ScanResult, { kind: 'ok' }>): { ti
             return { title: 'Not connected', message: 'Connect to your community first.' };
         case 'malformed':
             return { title: "Can't read that code", message: 'It looks like a sign-in code but part of it is missing. Get a new code on the computer and scan again.' };
+        case 'device-link':
+            // Nothing is carried across: Link a device reads the code itself, with its own checks and warnings.
+            return { title: 'A code to link a device', message: 'That code copies your own account to a browser. Open Settings → Link a device and scan it there.' };
         case 'not-signin':
         default:
             return { title: 'Not a sign-in code', message: "That isn't a BeanPool Settings sign-in code. On the computer, open your community's Settings and choose “Sign in with your phone”." };

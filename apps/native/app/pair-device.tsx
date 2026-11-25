@@ -388,6 +388,16 @@ export default function PairDeviceScreen() {
         // Read by a strict grammar (utils/pair-device-target.ts): any other spelling is refused here, nothing sent.
         const read = readPairingCode(data, source);
         if (read.kind !== 'pairing') {
+            // A node's Settings sign-in code: Manage this community from a computer's screen, where it is scanned again.
+            if (read.kind === 'settings-signin') {
+                isScanningLocked.current = true;
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+                Alert.alert(t('A code to sign a computer in'), t('That code signs a computer in to your community\'s Settings. For owners, admins and moderators: open Settings → Manage this community from a computer (Moderate, for a moderator) and scan it there.'), [
+                    { text: t('Not now'), style: 'cancel', onPress: resumeScanning },
+                    { text: t('Open Manage from a computer'), onPress: () => router.replace('/settings-signin') },
+                ], { cancelable: false });
+                return;
+            }
             // A pairing code it refuses is said so, in one sentence, and the camera waits for OK. Any other QR: ignored.
             if (read.kind === 'unreadable') {
                 isScanningLocked.current = true;

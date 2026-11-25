@@ -23,7 +23,7 @@ import { createRoot, type Root } from 'react-dom/client';
 // Some screens don't import React (Metro's automatic JSX runtime); this runner compiles JSX the classic way.
 (globalThis as any).React = ReactAll;
 
-const alerts = vi.hoisted(() => ({ said: [] as string[] }));
+const alerts = vi.hoisted(() => ({ said: [] as string[], pressable: [] as Array<{ text?: string; onPress?: () => void }> }));
 vi.mock('react-native', async () => (await import('./key-words-harness')).nativeMock(alerts));
 const nav = vi.hoisted(() => ({ params: {} as Record<string, string | undefined>, back: 0, replaced: [] as unknown[] }));
 vi.mock('expo-router', async () => {
@@ -162,10 +162,10 @@ vi.mock('../takeover-unlock', async (importOriginal) => ({
     approveUnlock: async () => unlock.outcome,
 }));
 // Linking a device: the code read, where it may go, and the phone's lock.
-const pair = vi.hoisted(() => ({ target: null as any, unlocked: 'no-device-lock' as string }));
+const pair = vi.hoisted(() => ({ target: null as any, unlocked: 'no-device-lock' as string, read: null as any }));
 vi.mock('../pair-device-target', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../pair-device-target')>()),
-    readPairingCode: () => ({ kind: 'pairing', qr: { nodeUrl: 'https://mullum.example', sessionId: 's1', desktopPubHex: 'cd'.repeat(32) } }),
+    readPairingCode: () => pair.read ?? ({ kind: 'pairing', qr: { nodeUrl: 'https://mullum.example', sessionId: 's1', desktopPubHex: 'cd'.repeat(32) } }),
     transferTarget: () => pair.target,
 }));
 vi.mock('../node-admin', async (importOriginal) => ({
@@ -211,6 +211,9 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     alerts.said.length = 0;
+    alerts.pressable = [];
+    pair.read = null;
+    nav.replaced.length = 0;
     nav.params = {};
     nav.back = 0;
     camera.granted = true;
@@ -355,6 +358,22 @@ describe('signing a computer in, in the pseudo-locale', () => {
         expect(clean()).toEqual([]);
     });
 
+    it("the web app's Link with Mobile App code: says it is Link a device's, and opens it (Marty, 24 Nov)", async () => {
+        nav.params = { community: 'Riverbend' };
+        signin.scan = { kind: 'device-link' };
+        await renderIn('xx', SettingsSigninScreen);
+        await scan();
+        expect(alerts.said.slice(0, 2)).toEqual([
+            pseudoLocalise('A code to link a device'),
+            pseudoLocalise('That code copies your own account to a browser. Open Settings → Link a device and scan it there.'),
+        ]);
+        expect(clean()).toEqual([]);
+        const open = alerts.pressable.find((b) => b.text === pseudoLocalise('Open Link a device'));
+        expect(open, 'the alert opens Link a device').toBeTruthy();
+        await act(async () => { open!.onPress!(); });
+        expect(nav.replaced).toEqual(['/pair-device']);
+    });
+
     it('the question, the computer\'s lines, the time left; then the digits; then a refusal', async () => {
         nav.params = { community: 'Riverbend' };
         signin.scan = { kind: 'ok', qr };
@@ -471,6 +490,24 @@ describe('linking a device, in the pseudo-locale', () => {
         await click(buttonWith('Confirm & Link Device'), 'Confirm');
         expect(host.textContent).toContain(pseudoLocalise("Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone's Settings, under Security, then try again."));
         expect(clean()).toEqual([]);
+    });
+
+    it("a node's Settings sign-in code: says it is Manage this community from a computer's, sends nothing, and opens it (Marty, 24 Nov)", async () => {
+        // Before: any QR that isn't a pairing code was ignored, so the camera just sat on it.
+        pair.read = { kind: 'settings-signin' };
+        pair.target = { kind: 'ok', nodeUrl: 'https://mullum.example' };
+        await renderIn('xx', PairDeviceScreen);
+        await scan('beanpool-settings-signin:v1?…');
+        expect(alerts.said.slice(0, 2)).toEqual([
+            pseudoLocalise('A code to sign a computer in'),
+            pseudoLocalise("That code signs a computer in to your community's Settings. For owners, admins and moderators: open Settings → Manage this community from a computer (Moderate, for a moderator) and scan it there."),
+        ]);
+        expect(clean()).toEqual([]);
+        expect(host.textContent, 'no sheet: nothing is read for sending').not.toContain(pseudoLocalise('Public Key'));
+        const open = alerts.pressable.find((b) => b.text === pseudoLocalise('Open Manage from a computer'));
+        expect(open, 'the alert opens Manage this community from a computer').toBeTruthy();
+        await act(async () => { open!.onPress!(); });
+        expect(nav.replaced).toEqual(['/settings-signin']);
     });
 
     it('no camera yet', async () => {

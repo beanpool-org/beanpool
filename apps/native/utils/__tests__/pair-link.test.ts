@@ -17,6 +17,7 @@ import * as path from 'node:path';
 vi.mock('react-native', () => ({ Platform: { OS: 'android' }, DeviceEventEmitter: { emit: vi.fn() } }));
 vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined), maybeCompleteAuthSession: vi.fn() }));
 
+import { buildSettingsSigninQr } from '@beanpool/core';
 import { isPairLink, pairLinkFromRoute, pairLinkFromSystemPath, pairRouteFromSystemPath } from '../pair-link';
 import { afterJoinRedirect, parsePairingQr, readPairingCode, refusalJoin, transferTarget } from '../pair-device-target';
 import { redirectSystemPath as routeSystemPath } from '../../app/+native-intent';
@@ -172,6 +173,16 @@ describe('on the screen, a link gets the same checks as a scan', () => {
         expect(readPairingCode('https://example.com', 'camera')).toEqual({ kind: 'ignore' });
         expect(readPairingCode('https://example.com', 'link')).toEqual({ kind: 'unreadable' });
         expect(readPairingCode(undefined, 'link')).toEqual({ kind: 'unreadable' });
+    });
+
+    it("a node's Settings sign-in code in the camera, readable or not, is Manage this community from a computer's; never from a link", () => {
+        const signin = buildSettingsSigninQr({ nodeUrl: 'https://riverside.example', pairingId: 'ab'.repeat(32), shortCode: 'K7F3QX' });
+        for (const code of [signin, `  ${signin}  `, 'beanpool-settings-signin:v1?node=x', 'BEANPOOL-SETTINGS-SIGNIN:v1?p=1']) {
+            expect(readPairingCode(code, 'camera'), code).toEqual({ kind: 'settings-signin' });
+            // A link is only ever `beanpool://pair` (utils/pair-link.ts): anything else from one is refused aloud, as before.
+            expect(readPairingCode(code, 'link'), code).toEqual({ kind: 'unreadable' });
+        }
+        expect(readPairingCode('beanpool-settings-signin:v2?node=x', 'camera')).toEqual({ kind: 'ignore' });
     });
 });
 

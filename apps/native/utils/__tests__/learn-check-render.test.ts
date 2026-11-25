@@ -24,7 +24,7 @@ const h = vi.hoisted(() => ({
     signedRequestWithMethod: vi.fn(),
     forgetHomeForHeader: vi.fn(),
     leaveScreen: vi.fn(),
-    openURL: vi.fn(async () => {}),
+    openURL: vi.fn(async (_url: string) => {}),
     alert: vi.fn(),
 }));
 
@@ -104,7 +104,7 @@ vi.mock('react-native', async () => {
             addListener: () => ({ remove: () => {} }),
             emit: (event: string, ...args: unknown[]) => { h.emitted.push({ event, args }); },
         },
-        Linking: { openURL: (...args: unknown[]) => h.openURL(...args) },
+        Linking: { openURL: (url: string) => h.openURL(url) },
         Alert: { alert: (...args: unknown[]) => h.alert(...args) },
         Keyboard: { dismiss: vi.fn() },
     };
@@ -394,15 +394,19 @@ describe.each(['light', 'dark'] as const)('LearnCheckOneScreen (%s, 320 dp × 1.
             photoCredits: [
                 null,
                 {
+                    file: 'File:Fake.jpg',
                     maker: 'Evil',
                     licence: 'CC BY 4.0',
+                    licenceUrl: 'https://creativecommons.org/licenses/by/4.0/',
                     url: 'https://phishing.example/wiki/File:Fake.jpg',
                     readAt: '2026-11-24T00:00:00.000Z',
                     restrictions: [],
                 },
                 {
+                    file: 'File:Real.jpg',
                     maker: 'Good',
                     licence: 'CC BY-SA 4.0',
+                    licenceUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
                     url: 'https://commons.wikimedia.org/wiki/File:Real.jpg',
                     readAt: '2026-11-24T00:00:00.000Z',
                     restrictions: [],

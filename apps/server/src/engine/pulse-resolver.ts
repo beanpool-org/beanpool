@@ -28,6 +28,7 @@ import { sweepTakedowns } from './agent-takedowns.js';
 import { sweepForumTakedowns } from './forum-takedowns.js';
 import { avatarUrlOf, type PulseKnowledgeCard } from '@beanpool/core';
 import { pulseHarvestAllowance } from './writer-bounds.js';
+import { BEANPOOL_LEARN_CHANNEL_ID, getBeanPoolPubkey } from './pulse-seed.js';
 
 // ============================================================================
 // 1. Errors & Types
@@ -1185,6 +1186,31 @@ export function extractYouTubeVideoId(input: string | null | undefined): string 
 // 4. RSS 2.0 & Atom Feed Parsers
 // ============================================================================
 
+/**
+ * Strip XML comments in O(N) time without regex backtracking.
+ * Avoids quadratic ReDoS on attacker-controlled feeds with repeated unclosed `<!--` sequences.
+ */
+function stripXmlComments(xml: string): string {
+    if (!xml.includes('<!--')) return xml;
+    const parts: string[] = [];
+    let cursor = 0;
+    while (cursor < xml.length) {
+        const start = xml.indexOf('<!--', cursor);
+        if (start === -1) {
+            parts.push(xml.slice(cursor));
+            break;
+        }
+        const end = xml.indexOf('-->', start + 4);
+        if (end === -1) {
+            parts.push(xml.slice(cursor));
+            break;
+        }
+        parts.push(xml.slice(cursor, start));
+        cursor = end + 3;
+    }
+    return parts.join('');
+}
+
 export function parseRss2Feed(xml: string, options?: { fallbackPublishedAt?: string; baseUrl?: string }): ParsedPulseFeed {
     const fallbackIso = options?.fallbackPublishedAt || new Date().toISOString();
     const baseUrl = options?.baseUrl;
@@ -1194,9 +1220,7 @@ export function parseRss2Feed(xml: string, options?: { fallbackPublishedAt?: str
     }
 
     try {
-        const sanitizedXml = xml
-            .replace(/\uFEFF/g, '')
-            .replace(/<!--[\s\S]*?-->/g, '');
+        const sanitizedXml = stripXmlComments(xml.replace(/\uFEFF/g, ''));
 
         const channelMatch = sanitizedXml.match(/<channel\b[^>]*>([\s\S]*?)<\/channel>/i);
         const channelHeader = channelMatch
@@ -1351,9 +1375,7 @@ export function parseAtomFeed(xml: string, feedUrl?: string): ParsedPulseFeed {
     }
 
     try {
-        const cleanXml = xml
-            .replace(/\uFEFF/g, '')
-            .replace(/<!--[\s\S]*?-->/g, '');
+        const cleanXml = stripXmlComments(xml.replace(/\uFEFF/g, ''));
 
         const feedTagMatch = /<feed\b([^>]*?)>/i.exec(cleanXml);
         let feedBase = feedUrl || null;
@@ -1795,16 +1817,141 @@ export async function buildSoundCloudFeedUrl(urlOrHandle: string): Promise<strin
     return null;
 }
 
+const YOUTUBE_OEMBED_ORIGIN = 'https://www.youtube.com';
+const MAX_OEMBED_PROBES_PER_VISIT = 3;
+const OEMBED_LIVE_TTL_MS = 12 * 60 * 60 * 1000;
+const OEMBED_ABORT_COOLDOWN_MS = 15 * 60 * 1000;
+const MAX_OEMBED_LIVE_CACHE_SIZE = 5000;
+
+const oembedLiveCache = new Map<string, number>();
+let oembedAbortCooldownUntil = 0;
+
+function isRecentlyConfirmedLive(videoId: string, nowMs = Date.now()): boolean {
+    const expiresAt = oembedLiveCache.get(videoId);
+    if (expiresAt === undefined) return false;
+    if (expiresAt <= nowMs) {
+        oembedLiveCache.delete(videoId);
+        return false;
+    }
+    return true;
+}
+
+function recordConfirmedLive(videoId: string, nowMs = Date.now()): void {
+    if (oembedLiveCache.has(videoId)) {
+        oembedLiveCache.delete(videoId);
+    } else if (oembedLiveCache.size >= MAX_OEMBED_LIVE_CACHE_SIZE) {
+        const oldestKey = oembedLiveCache.keys().next().value;
+        if (oldestKey !== undefined) oembedLiveCache.delete(oldestKey);
+    }
+    oembedLiveCache.set(videoId, nowMs + OEMBED_LIVE_TTL_MS);
+}
+
+/** Tests only: clear the in-memory YouTube oEmbed live cache and abort cooldown. */
+export function resetYouTubeOEmbedStateForTests(): void {
+    oembedLiveCache.clear();
+    oembedAbortCooldownUntil = 0;
+}
+
+/**
+ * Whether a fetched XML body looks like a complete RSS or Atom document rather than a truncated
+ * stream or an HTML error page served with HTTP 200. Gone-at-source checks only run against a
+ * complete listing.
+ */
+export function isCompleteFeedXml(xml: string): boolean {
+    if (!xml || typeof xml !== 'string') return false;
+    const cleaned = stripXmlComments(xml.replace(/\uFEFF/g, '')).trim();
+    if (!cleaned) return false;
+    const head = cleaned.slice(0, 2000).toLowerCase();
+    if (/<(?:[a-zA-Z0-9_-]+:)?feed\b/i.test(head) || head.includes('xmlns="http://www.w3.org/2005/atom"')) {
+        return /<\/(?:[a-zA-Z0-9_-]+:)?feed\s*>/i.test(cleaned);
+    }
+    if (/<rss\b/i.test(head)) {
+        return /<\/rss\s*>/i.test(cleaned);
+    }
+    if (/<rdf:rdf\b/i.test(head)) {
+        return /<\/rdf:rdf\s*>/i.test(cleaned);
+    }
+    if (/<channel\b/i.test(head)) {
+        return /<\/channel\s*>/i.test(cleaned);
+    }
+    return false;
+}
+
+/**
+ * YouTube video ID to verify against www.youtube.com/oembed, or null when the item is not a
+ * YouTube video (non-YouTube RSS/Atom items are never tombstoned without proof).
+ */
+function youTubeVideoIdForOEmbed(platform: string, externalId: string | null, url: string | null): string | null {
+    if (platform === 'youtube') {
+        const id = extractYouTubeVideoId(externalId) ?? extractYouTubeVideoId(url);
+        return id && YOUTUBE_ID_PATTERN.test(id) ? id : null;
+    }
+    if (url) {
+        try {
+            const host = new URL(url).hostname.toLowerCase();
+            if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') {
+                const id = extractYouTubeVideoId(url);
+                return id && YOUTUBE_ID_PATTERN.test(id) ? id : null;
+            }
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
+
+type OEmbedCheckOutcome = 'gone' | 'live' | 'abort' | 'unknown';
+
+/**
+ * Probe YouTube oEmbed on www.youtube.com (no redirects, routed through fetchFn so production
+ * runs the full ssrfSafeFetch guard) to prove whether a video missing from channel RSS is gone.
+ *
+ * Only HTTP 404 unambiguously proves the video is deleted/gone.
+ * HTTP 401 is also returned for live, public videos with embedding disabled (as well as some
+ * age/region-restricted videos), which BeanPool opens directly on YouTube, so 401 is treated
+ * as 'unknown' and never tombstoned.
+ * HTTP 200 keeps the item (including videos that merely aged out of the 15-item RSS window).
+ * HTTP 429, 403, 5xx, and network errors return 'abort' so probing stops immediately and backs off.
+ */
+async function checkYouTubeOEmbed(
+    videoId: string,
+    fetchFn: (url: string, options?: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>,
+): Promise<OEmbedCheckOutcome> {
+    if (!YOUTUBE_ID_PATTERN.test(videoId)) return 'unknown';
+    const watchUrl = `${YOUTUBE_OEMBED_ORIGIN}/watch?v=${videoId}`;
+    const oembedUrl = `${YOUTUBE_OEMBED_ORIGIN}/oembed?url=${encodeURIComponent(watchUrl)}&format=json`;
+    try {
+        const res = await fetchFn(oembedUrl, {
+            timeoutMs: 5000,
+            maxBytes: 64 * 1024,
+            maxRedirects: 0,
+        });
+        const status = res.status;
+        if (typeof res.text === 'function') {
+            await res.text().catch(() => '');
+        }
+        if (status === 404) return 'gone';
+        if (status === 200) return 'live';
+        if (status === 429 || status === 403 || status >= 500) return 'abort';
+        return 'unknown';
+    } catch {
+        return 'abort';
+    }
+}
+
 export interface ResolveChannelOptions {
     /** Tests only: fetches the channel's site and feed in place of ssrfSafeFetch (which refuses localhost). */
     fetchFn?: (url: string, options?: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>;
+    /** Tests only: enable the in-memory oEmbed live cache & abort cooldown even when fetchFn is injected. */
+    useOEmbedCache?: boolean;
 }
 
 /**
  * One visit to a channel: fetch its feed and list its newest items. `count` is the items listed or refreshed;
- * `leftForLater` the new ones its owner's day allowance had no room for (WRITER_LIMITS.pulseHarvestedItemsPerDay).
+ * `leftForLater` the new ones its owner's day allowance had no room for (WRITER_LIMITS.pulseHarvestedItemsPerDay);
+ * `tombstoned` the autolisted items proven gone at the source.
  */
-export async function resolveChannel(channelId: string, options: ResolveChannelOptions = {}): Promise<{ count: number; error?: string; leftForLater?: number }> {
+export async function resolveChannel(channelId: string, options: ResolveChannelOptions = {}): Promise<{ count: number; error?: string; leftForLater?: number; tombstoned?: number }> {
     const fetchFn = options.fetchFn ?? ssrfSafeFetch;
     const channel = db.prepare(
         `SELECT id, owner_pubkey, platform, url, handle, category, supports_autolist,
@@ -2068,8 +2215,85 @@ export async function resolveChannel(channelId: string, options: ResolveChannelO
             ).run(now, channel.id);
         })();
 
+        // Gone-at-source verification: for YouTube autolist channels, an autolisted item that
+        // disappeared from a complete successful fetch AND whose YouTube oEmbed answers 404 is
+        // tombstoned via scrubPulseItems (deleted_at set, content NULLed, cached thumbnail evicted).
+        // Never runs on failed/partial fetches, never tombstones on 401 (disabled embedding) or
+        // 200 (aged out of the 15-item RSS window), caches both confirmed-live (200) and unknown
+        // (401) video IDs so non-embeddable videos back off instead of starving older 404s behind
+        // MAX_OEMBED_PROBES_PER_VISIT, aborts with a cooldown on 403/429/5xx/network errors, and
+        // runs in its own try/catch so post-commit errors cannot overwrite healthy fetch state.
+        let tombstoned = 0;
+        const useOEmbedCache = options.useOEmbedCache ?? !options.fetchFn;
+        if (channel.platform === 'youtube' && isCompleteFeedXml(xml)) {
+            try {
+                if (!useOEmbedCache || Date.now() >= oembedAbortCooldownUntil) {
+                    const presentIds = new Set<string>();
+                    for (const item of parsed.items) {
+                        if (item.externalId) presentIds.add(item.externalId);
+                        const vid = youTubeVideoIdForOEmbed(channel.platform, item.externalId, item.url);
+                        if (vid) presentIds.add(vid);
+                    }
+
+                    const liveAutolist = db.prepare(
+                        `SELECT id, platform, external_id, url
+                           FROM pulse_items
+                          WHERE channel_id = ? AND deleted_at IS NULL AND source = 'autolist' AND curated = 0
+                          ORDER BY COALESCE(published_at, '') DESC, id DESC`
+                    ).all(channel.id) as Array<{
+                        id: string;
+                        platform: string;
+                        external_id: string | null;
+                        url: string | null;
+                    }>;
+
+                    const missingWithVideoId: Array<{ id: string; videoId: string }> = [];
+                    for (const row of liveAutolist) {
+                        if (row.external_id && presentIds.has(row.external_id)) continue;
+                        const videoId = youTubeVideoIdForOEmbed(row.platform, row.external_id, row.url);
+                        if (!videoId || presentIds.has(videoId)) continue;
+                        missingWithVideoId.push({ id: row.id, videoId });
+                    }
+
+                    const goneIds: string[] = [];
+                    let probed = 0;
+                    for (const entry of missingWithVideoId.slice(0, PULSE_KEEP_PER_CHANNEL)) {
+                        if (probed >= MAX_OEMBED_PROBES_PER_VISIT) break;
+                        if (useOEmbedCache && isRecentlyConfirmedLive(entry.videoId)) continue;
+                        probed++;
+                        const outcome = await checkYouTubeOEmbed(entry.videoId, fetchFn);
+                        if (outcome === 'gone') {
+                            goneIds.push(entry.id);
+                        } else if (outcome === 'live' || outcome === 'unknown') {
+                            if (useOEmbedCache) recordConfirmedLive(entry.videoId);
+                        } else if (outcome === 'abort') {
+                            if (useOEmbedCache) oembedAbortCooldownUntil = Date.now() + OEMBED_ABORT_COOLDOWN_MS;
+                            break;
+                        }
+                    }
+
+                    if (goneIds.length > 0) {
+                        const scrubNow = new Date().toISOString();
+                        tombstoned = db.transaction(() => {
+                            let scrubbed = 0;
+                            for (const id of goneIds) {
+                                scrubbed += scrubPulseItems({ id }, scrubNow);
+                            }
+                            return scrubbed;
+                        })();
+                    }
+                }
+            } catch {
+                // Best-effort post-commit verification must not overwrite healthy channel state
+            }
+        }
+
         // Not logged: an owner past the allowance would write a line at every visit.
-        return leftForLater > 0 ? { count: insertedOrUpdated, leftForLater } : { count: insertedOrUpdated };
+        return {
+            count: insertedOrUpdated,
+            ...(leftForLater > 0 ? { leftForLater } : {}),
+            ...(tombstoned > 0 ? { tombstoned } : {}),
+        };
     } catch (err: any) {
         const nextFails = (channel.fail_count || 0) + 1;
         const isStale = nextFails >= 3 ? 1 : (channel.is_stale || 0);
@@ -2316,24 +2540,20 @@ export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras): Pulse
 export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): PulseFeedPage<PulseFeedCard | PulseKnowledgeCard> {
     const limit = Math.min(50, Math.max(1, typeof options.limit === 'number' ? options.limit : 20));
     const conditions: string[] = [
-        'c.deleted_at IS NULL',
-        'c.syndicate_to_node = 1',
         'i.deleted_at IS NULL',
         'i.muted = 0',
+        'c.deleted_at IS NULL',
+        'c.syndicate_to_node = 1',
         "m.status = 'active'",
     ];
     const params: unknown[] = [];
 
-    if (options.category && typeof options.category === 'string') {
+    const hasCategory = Boolean(options.category && typeof options.category === 'string');
+    if (hasCategory) {
         conditions.push('i.category = ?');
         params.push(options.category);
     }
 
-    // Keyset pagination on (published_at, id), not published_at alone. A feed
-    // routinely publishes a batch of items with one identical timestamp, and
-    // `published_at < cursor` drops every one of them that did not fit on the
-    // page. COALESCE keeps NULL-dated items reachable too: `NULL < cursor` is
-    // NULL, so under the old clause they could never appear past page 1.
     const cursor = options.cursor && typeof options.cursor === 'string' ? decodePulseCursor(options.cursor) : null;
     if (cursor) {
         const { sortKey, id } = cursor;
@@ -2346,17 +2566,86 @@ export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): 
         }
     }
 
+    // One card per video across channels: when two live visible items share the same
+    // (platform, external_id) on different channels (e.g. a BeanPool channel and a member's own
+    // YouTube channel), keep one at read time without deleting either row.
+    //
+    // Excluded for 'website' and 'rss': `<guid>`/`<id>` values on self-hosted feeds are neither
+    // globally unique across blogs nor authoritative, so cross-channel dedupe there would both
+    // collapse unrelated posts and let an attacker's feed hijack a manually submitted website URL.
+    //
+    // Implemented as a CROSS JOIN-ordered NOT EXISTS anti-join backed by idx_pulse_items_platform_ext
+    // so SQLite keeps the outer keyset cursor, ORDER BY, and LIMIT directly on idx_pulse_items_feed /
+    // idx_pulse_items_category_feed with zero temp B-tree sorts.
+    //
+    // Tie-breaker order (strict total order on non-NULL values; smaller tuple wins):
+    //   1. Official BeanPool channel / curated items / admin-added BeanPool channels
+    //   2. Server-fetched ('curated'/'autolist') from an OAuth-verified channel, then other
+    //      server-fetched ('curated'/'autolist'), then client-submitted ('manual'/'oauth')
+    //   3. Earliest created_at, then published_at, then id
+    let beanpoolPubkey: string | null = null;
+    try {
+        beanpoolPubkey = getBeanPoolPubkey();
+    } catch {
+        beanpoolPubkey = null;
+    }
+
+    const categorySubqueryClause = hasCategory ? 'AND i2.category = i.category' : '';
     const rows = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, c.oauth_verified_at,
                 m.callsign, m.avatar_ref
            FROM pulse_items i
-           JOIN creator_channels c ON c.id = i.channel_id
-           JOIN members m ON m.public_key = i.owner_pubkey
+           CROSS JOIN creator_channels c ON c.id = i.channel_id
+           CROSS JOIN members m ON m.public_key = i.owner_pubkey
           WHERE ${conditions.join(' AND ')}
+            AND (
+                i.platform IN ('website', 'rss')
+                OR i.external_id IS NULL OR i.external_id = ''
+                OR NOT EXISTS (
+                    SELECT 1
+                      FROM pulse_items i2
+                      CROSS JOIN creator_channels c2 ON c2.id = i2.channel_id
+                      CROSS JOIN members m2 ON m2.public_key = i2.owner_pubkey
+                     WHERE i2.platform = i.platform
+                       AND i2.external_id = i.external_id
+                       AND i2.external_id IS NOT NULL AND i2.external_id != ''
+                       AND i2.deleted_at IS NULL AND i2.muted = 0
+                       AND i2.id != i.id
+                       AND c2.deleted_at IS NULL AND c2.syndicate_to_node = 1
+                       AND m2.status = 'active'
+                       ${categorySubqueryClause}
+                       AND (
+                           CASE WHEN i2.channel_id = ? OR i2.curated = 1 OR (? IS NOT NULL AND i2.owner_pubkey = ?) THEN 0 ELSE 1 END,
+                           CASE
+                               WHEN i2.source IN ('curated', 'autolist') AND c2.oauth_verified_at IS NOT NULL THEN 0
+                               WHEN i2.source IN ('curated', 'autolist') THEN 1
+                               ELSE 2
+                           END,
+                           COALESCE(i2.created_at, ''),
+                           COALESCE(i2.published_at, ''),
+                           i2.id
+                       ) < (
+                           CASE WHEN i.channel_id = ? OR i.curated = 1 OR (? IS NOT NULL AND i.owner_pubkey = ?) THEN 0 ELSE 1 END,
+                           CASE
+                               WHEN i.source IN ('curated', 'autolist') AND c.oauth_verified_at IS NOT NULL THEN 0
+                               WHEN i.source IN ('curated', 'autolist') THEN 1
+                               ELSE 2
+                           END,
+                           COALESCE(i.created_at, ''),
+                           COALESCE(i.published_at, ''),
+                           i.id
+                       )
+                )
+            )
           ORDER BY ${FEED_SORT_KEY} DESC, i.id DESC
           LIMIT ?`
-    ).all(...params, limit + 1) as any[];
+    ).all(
+        ...params,
+        BEANPOOL_LEARN_CHANNEL_ID, beanpoolPubkey, beanpoolPubkey,
+        BEANPOOL_LEARN_CHANNEL_ID, beanpoolPubkey, beanpoolPubkey,
+        limit + 1
+    ) as any[];
 
     const extra = (options.extra ?? []).filter(c => !cursor || afterCursor(c.publishedAt, c.id, cursor));
     if (extra.length > 0) {

@@ -45,6 +45,7 @@ export const SUITES = [
     'test-schema-upgrade-markers-watermarks',
     'test-creator-channels',
     'test-pulse-resolver',
+    'test-pulse-tidy',
     'test-ssrf-fetch-timeout',
     'test-pulse-submit',
     'test-pulse-oauth',

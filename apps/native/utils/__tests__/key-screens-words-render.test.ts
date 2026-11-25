@@ -495,7 +495,6 @@ describe('linking a device, in the pseudo-locale', () => {
     it("a node's Settings sign-in code: says it is Manage this community from a computer's, sends nothing, and opens it (Marty, 24 Nov)", async () => {
         // Before: any QR that isn't a pairing code was ignored, so the camera just sat on it.
         pair.read = { kind: 'settings-signin' };
-        pair.target = { kind: 'ok', nodeUrl: 'https://mullum.example' };
         await renderIn('xx', PairDeviceScreen);
         await scan('beanpool-settings-signin:v1?…');
         expect(alerts.said.slice(0, 2)).toEqual([

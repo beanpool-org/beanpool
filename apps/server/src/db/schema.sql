@@ -2876,6 +2876,12 @@ CREATE INDEX IF NOT EXISTS idx_pulse_items_category_feed
     WHERE deleted_at IS NULL AND muted = 0;
 CREATE INDEX IF NOT EXISTS idx_pulse_items_owner
     ON pulse_items(owner_pubkey) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_pulse_items_channel_live
+    ON pulse_items(channel_id, COALESCE(published_at, '') DESC, id DESC)
+    WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_pulse_items_platform_ext
+    ON pulse_items(platform, external_id)
+    WHERE external_id IS NOT NULL AND external_id != '' AND deleted_at IS NULL AND muted = 0;
 CREATE INDEX IF NOT EXISTS idx_pulse_items_updated ON pulse_items(updated_at);
 
 -- Per-item memory of a thumbnail fetch that cannot be fixed by trying again soon.

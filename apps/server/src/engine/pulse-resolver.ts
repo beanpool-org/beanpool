@@ -28,7 +28,7 @@ import { sweepTakedowns } from './agent-takedowns.js';
 import { sweepForumTakedowns } from './forum-takedowns.js';
 import { avatarUrlOf, type PulseKnowledgeCard } from '@beanpool/core';
 import { pulseHarvestAllowance } from './writer-bounds.js';
-import { BEANPOOL_LEARN_CHANNEL_ID } from './pulse-seed.js';
+import { BEANPOOL_LEARN_CHANNEL_ID, getBeanPoolPubkey } from './pulse-seed.js';
 
 // ============================================================================
 // 1. Errors & Types
@@ -2492,7 +2492,7 @@ export interface PulseFeedPage<T> {
  * The two feed indexes in schema.sql index this exact expression; change one and
  * you must change the other or the feed silently starts scanning.
  */
-const FEED_SORT_KEY = "COALESCE(published_at, '')";
+const FEED_SORT_KEY = "COALESCE(i.published_at, '')";
 
 /** Cursor is `<sort key>|<id>` — ISO timestamps carry no '|' and ids are hex. */
 export function encodePulseCursor(publishedAt: string | null, id: string): string {
@@ -2536,72 +2536,102 @@ export function getPulseFeed(options?: PulseFeedOptions): PulseFeedPage<PulseFee
 export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras): PulseFeedPage<PulseFeedCard | PulseKnowledgeCard>;
 export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): PulseFeedPage<PulseFeedCard | PulseKnowledgeCard> {
     const limit = Math.min(50, Math.max(1, typeof options.limit === 'number' ? options.limit : 20));
-    const baseConditions: string[] = [
-        'c.deleted_at IS NULL',
-        'c.syndicate_to_node = 1',
+    const conditions: string[] = [
         'i.deleted_at IS NULL',
         'i.muted = 0',
+        'c.deleted_at IS NULL',
+        'c.syndicate_to_node = 1',
         "m.status = 'active'",
     ];
-    const baseParams: unknown[] = [];
+    const params: unknown[] = [];
 
-    if (options.category && typeof options.category === 'string') {
-        baseConditions.push('i.category = ?');
-        baseParams.push(options.category);
+    const hasCategory = Boolean(options.category && typeof options.category === 'string');
+    if (hasCategory) {
+        conditions.push('i.category = ?');
+        params.push(options.category);
     }
 
-    // One card per video across channels: when two live visible items share the same
-    // (platform, external_id) on different channels (e.g. the seeded BeanPool channel and a
-    // member who also linked that YouTube channel), keep one at read time without deleting
-    // either row. Prefer the seeded BeanPool channel; otherwise the earliest row. Items with
-    // no external_id partition by their own id and are never collapsed.
-    //
-    // Keyset pagination on (published_at, id) runs on the deduplicated stream so duplicates
-    // cannot leak across page boundaries or short-change a page, and COALESCE keeps
-    // NULL-dated items reachable past page 1.
-    const outerConditions: string[] = ['dedupe_rank = 1'];
-    const outerParams: unknown[] = [];
     const cursor = options.cursor && typeof options.cursor === 'string' ? decodePulseCursor(options.cursor) : null;
     if (cursor) {
         const { sortKey, id } = cursor;
         if (id === null) {
-            outerConditions.push(`${FEED_SORT_KEY} < ?`);
-            outerParams.push(sortKey);
+            conditions.push(`${FEED_SORT_KEY} < ?`);
+            params.push(sortKey);
         } else {
-            outerConditions.push(`(${FEED_SORT_KEY} < ? OR (${FEED_SORT_KEY} = ? AND id < ?))`);
-            outerParams.push(sortKey, sortKey, id);
+            conditions.push(`(${FEED_SORT_KEY} < ? OR (${FEED_SORT_KEY} = ? AND i.id < ?))`);
+            params.push(sortKey, sortKey, id);
         }
     }
 
+    // One card per video across channels: when two live visible items share the same
+    // (platform, external_id) on different channels (e.g. a BeanPool channel and a member's own
+    // YouTube channel), keep one at read time without deleting either row.
+    //
+    // Implemented as a CROSS JOIN-ordered NOT EXISTS anti-join backed by idx_pulse_items_platform_ext
+    // so SQLite keeps the outer keyset cursor, ORDER BY, and LIMIT directly on idx_pulse_items_feed /
+    // idx_pulse_items_category_feed with zero temp B-tree sorts.
+    //
+    // Tie-breaker order (strict total order on non-NULL values; smaller tuple wins):
+    //   1. Official BeanPool channel / curated items / admin-added BeanPool channels
+    //   2. OAuth-verified channels over unverified channels
+    //   3. Feed-harvested ('curated'/'autolist') over 'oauth' over 'manual' submissions
+    //   4. Earliest created_at, then published_at, then id
+    let beanpoolPubkey: string | null = null;
+    try {
+        beanpoolPubkey = getBeanPoolPubkey();
+    } catch {
+        beanpoolPubkey = null;
+    }
+
+    const categorySubqueryClause = hasCategory ? 'AND i2.category = i.category' : '';
     const rows = db.prepare(
-        `WITH deduped AS (
-             SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
-                    i.published_at, i.category, i.source, c.oauth_verified_at,
-                    m.callsign, m.avatar_ref,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY i.platform,
-                            CASE WHEN i.external_id IS NOT NULL AND i.external_id != ''
-                                 THEN 'ext:' || i.external_id
-                                 ELSE 'id:' || i.id
-                            END
-                        ORDER BY CASE WHEN i.channel_id = ? THEN 0 ELSE 1 END ASC,
-                                 i.created_at ASC,
-                                 COALESCE(i.published_at, '') ASC,
-                                 i.id ASC
-                    ) AS dedupe_rank
-               FROM pulse_items i
-               JOIN creator_channels c ON c.id = i.channel_id
-               JOIN members m ON m.public_key = i.owner_pubkey
-              WHERE ${baseConditions.join(' AND ')}
-         )
-         SELECT id, owner_pubkey, platform, url, title, thumbnail_url,
-                published_at, category, source, oauth_verified_at,
-                callsign, avatar_ref
-           FROM deduped
-          WHERE ${outerConditions.join(' AND ')}
-          ORDER BY ${FEED_SORT_KEY} DESC, id DESC
+        `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
+                i.published_at, i.category, i.source, c.oauth_verified_at,
+                m.callsign, m.avatar_ref
+           FROM pulse_items i
+           CROSS JOIN creator_channels c ON c.id = i.channel_id
+           CROSS JOIN members m ON m.public_key = i.owner_pubkey
+          WHERE ${conditions.join(' AND ')}
+            AND (
+                i.external_id IS NULL OR i.external_id = ''
+                OR NOT EXISTS (
+                    SELECT 1
+                      FROM pulse_items i2
+                      CROSS JOIN creator_channels c2 ON c2.id = i2.channel_id
+                      CROSS JOIN members m2 ON m2.public_key = i2.owner_pubkey
+                     WHERE i2.platform = i.platform
+                       AND i2.external_id = i.external_id
+                       AND i2.external_id IS NOT NULL AND i2.external_id != ''
+                       AND i2.deleted_at IS NULL AND i2.muted = 0
+                       AND i2.id != i.id
+                       AND c2.deleted_at IS NULL AND c2.syndicate_to_node = 1
+                       AND m2.status = 'active'
+                       ${categorySubqueryClause}
+                       AND (
+                           CASE WHEN i2.channel_id = ? OR i2.curated = 1 OR (? IS NOT NULL AND i2.owner_pubkey = ?) THEN 0 ELSE 1 END,
+                           CASE WHEN c2.oauth_verified_at IS NOT NULL THEN 0 ELSE 1 END,
+                           CASE WHEN i2.source IN ('curated', 'autolist') THEN 0 WHEN i2.source = 'oauth' THEN 1 ELSE 2 END,
+                           COALESCE(i2.created_at, ''),
+                           COALESCE(i2.published_at, ''),
+                           i2.id
+                       ) < (
+                           CASE WHEN i.channel_id = ? OR i.curated = 1 OR (? IS NOT NULL AND i.owner_pubkey = ?) THEN 0 ELSE 1 END,
+                           CASE WHEN c.oauth_verified_at IS NOT NULL THEN 0 ELSE 1 END,
+                           CASE WHEN i.source IN ('curated', 'autolist') THEN 0 WHEN i.source = 'oauth' THEN 1 ELSE 2 END,
+                           COALESCE(i.created_at, ''),
+                           COALESCE(i.published_at, ''),
+                           i.id
+                       )
+                )
+            )
+          ORDER BY ${FEED_SORT_KEY} DESC, i.id DESC
           LIMIT ?`
-    ).all(BEANPOOL_LEARN_CHANNEL_ID, ...baseParams, ...outerParams, limit + 1) as any[];
+    ).all(
+        ...params,
+        BEANPOOL_LEARN_CHANNEL_ID, beanpoolPubkey, beanpoolPubkey,
+        BEANPOOL_LEARN_CHANNEL_ID, beanpoolPubkey, beanpoolPubkey,
+        limit + 1
+    ) as any[];
 
     const extra = (options.extra ?? []).filter(c => !cursor || afterCursor(c.publishedAt, c.id, cursor));
     if (extra.length > 0) {

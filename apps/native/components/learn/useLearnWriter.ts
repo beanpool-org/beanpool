@@ -28,9 +28,12 @@ export interface LearnWriter {
 }
 
 /** GET /api/knowledge/drafts/mine as My suggestions reads it, or null when it can't be had. */
-export async function readMyDrafts(signal?: AbortSignal): Promise<{ waiting: KnowledgeDraftMine[]; answered: KnowledgeDraftMine[] } | null> {
+export async function readMyDrafts(signal?: AbortSignal, url?: string | null): Promise<{ waiting: KnowledgeDraftMine[]; answered: KnowledgeDraftMine[] } | null> {
     try {
-        const res = await signedGet('/api/knowledge/drafts/mine', signal ? { signal } : undefined);
+        const opts = signal || url !== undefined
+            ? { ...(signal ? { signal } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
+            : undefined;
+        const res = await signedGet('/api/knowledge/drafts/mine', opts);
         if (!res.ok) return null;
         const body = await res.json();
         if (!Array.isArray(body?.waiting) || !Array.isArray(body?.answered)) return null;
@@ -40,13 +43,18 @@ export async function readMyDrafts(signal?: AbortSignal): Promise<{ waiting: Kno
     }
 }
 
-/** How many Local knowledge drafts are waiting for an owner or admin to check (GET /api/knowledge/drafts?limit=1&offset=0), or 0 when unavailable. */
-export async function readToCheckCount(signal?: AbortSignal): Promise<number> {
+/** How many Local knowledge drafts are waiting for an owner or admin to check (GET /api/node-admin/queue?learn=1), or 0 when unavailable. */
+export async function readToCheckCount(signal?: AbortSignal, url?: string | null): Promise<number> {
     try {
-        const res = await signedGet('/api/knowledge/drafts?limit=1&offset=0', signal ? { signal } : undefined);
+        const opts = signal || url !== undefined
+            ? { ...(signal ? { signal } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
+            : undefined;
+        const res = await signedGet('/api/node-admin/queue?learn=1', opts);
         if (!res.ok) return 0;
         const body = await res.json();
-        return typeof body?.total === 'number' && Number.isFinite(body.total) ? Math.max(0, body.total) : 0;
+        if (!Array.isArray(body?.items)) return 0;
+        const item = body.items.find((i: { kind?: unknown; count?: unknown }) => i?.kind === 'knowledge_drafts');
+        return typeof item?.count === 'number' && Number.isFinite(item.count) ? Math.max(0, item.count) : 0;
     } catch {
         return 0;
     }
@@ -69,15 +77,18 @@ export function useLearnWriter(live: boolean, countWaiting = true): LearnWriter 
     useFocusEffect(useCallback(() => {
         if (!live || !identity?.publicKey || !identity.privateKey) return undefined;
         let gone = false;
+        const stop = new AbortController();
         (async () => {
             const url = await anchorUrl().catch(() => null);
+            if (gone) return;
             const role = url ? (await cachedNodeRoleHeard(url, identity))?.role : null;
+            if (gone) return;
             const checks = role === 'owner' || role === 'admin';
-            const mine = checks || !countWaiting ? null : await readMyDrafts();
-            const toCheck = checks && countWaiting ? await readToCheckCount() : 0;
+            const mine = !url || checks || !countWaiting ? null : await readMyDrafts(stop.signal, url);
+            const toCheck = url && checks && countWaiting ? await readToCheckCount(stop.signal, url) : 0;
             if (!gone) setWriter({ checks, waiting: mine?.waiting.length ?? 0, toCheck });
         })().catch(() => {});
-        return () => { gone = true; };
+        return () => { gone = true; stop.abort(); };
     }, [live, identity, countWaiting]));
     return writer;
 }

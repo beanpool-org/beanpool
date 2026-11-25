@@ -12,8 +12,9 @@ vi.mock('../db', () => ({ signedGet: vi.fn() }));
 vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => { if (h.anchor instanceof Error) throw h.anchor; return h.anchor; }) }));
 vi.mock('../node-admin', () => ({ cachedNodeRoleHeard: vi.fn(), forgetNodeRole: vi.fn() }));
 
-import { forgetLearnRole } from '../../components/learn/useLearnWriter';
+import { forgetLearnRole, readMyDrafts, readToCheckCount } from '../../components/learn/useLearnWriter';
 import { forgetNodeRole } from '../node-admin';
+import { signedGet } from '../db';
 
 const key = 'ab'.repeat(32);
 
@@ -36,5 +37,53 @@ describe('forgetLearnRole', () => {
         h.anchor = new Error('no anchor');
         await expect(forgetLearnRole({ publicKey: key })).resolves.toBeUndefined();
         expect(forgetNodeRole).not.toHaveBeenCalled();
+    });
+});
+
+describe('readToCheckCount and readMyDrafts', () => {
+    it('readToCheckCount reads knowledge_drafts count from GET /api/node-admin/queue?learn=1 with signal and anchorUrl', async () => {
+        const stop = new AbortController();
+        vi.mocked(signedGet).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                total: 5,
+                items: [
+                    { kind: 'reports', count: 2 },
+                    { kind: 'knowledge_drafts', count: 3 },
+                ],
+            }),
+        } as unknown as Response);
+
+        const count = await readToCheckCount(stop.signal, 'https://riverside.example');
+        expect(count).toBe(3);
+        expect(signedGet).toHaveBeenCalledWith('/api/node-admin/queue?learn=1', {
+            signal: stop.signal,
+            anchorUrl: 'https://riverside.example',
+        });
+    });
+
+    it('readToCheckCount returns 0 when knowledge_drafts is absent or request fails', async () => {
+        vi.mocked(signedGet).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ total: 1, items: [{ kind: 'reports', count: 1 }] }),
+        } as unknown as Response);
+        expect(await readToCheckCount()).toBe(0);
+
+        vi.mocked(signedGet).mockRejectedValueOnce(new Error('offline'));
+        expect(await readToCheckCount()).toBe(0);
+    });
+
+    it('readMyDrafts forwards signal and anchorUrl to signedGet', async () => {
+        const stop = new AbortController();
+        vi.mocked(signedGet).mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ waiting: [], answered: [] }),
+        } as unknown as Response);
+
+        expect(await readMyDrafts(stop.signal, 'https://riverside.example')).toEqual({ waiting: [], answered: [] });
+        expect(signedGet).toHaveBeenCalledWith('/api/knowledge/drafts/mine', {
+            signal: stop.signal,
+            anchorUrl: 'https://riverside.example',
+        });
     });
 });

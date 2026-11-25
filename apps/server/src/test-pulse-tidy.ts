@@ -4,12 +4,15 @@
  *    shows one card, seeded BeanPool channel preferred, otherwise earliest; different ids or
  *    platforms show both; member's own duplicate row is never deleted; pagination stays clean).
  * 2. Resolver gone-at-source tests with an injected fetchFn:
- *    - video missing from YouTube RSS + oEmbed 404 / 401 -> tombstoned via scrubPulseItems
- *    - video missing from YouTube RSS + oEmbed 200 -> kept
+ *    - video missing from YouTube RSS + oEmbed 404 -> tombstoned via scrubPulseItems with fresh updated_at
+ *    - video missing from YouTube RSS + oEmbed 401 (embedding disabled / restricted) -> kept
+ *    - video missing from YouTube RSS + oEmbed 200 -> kept (and cached when useOEmbedCache is enabled)
  *    - RSS fetch failed (network error) / 5xx / 429 / partial XML -> kept
- *    - oEmbed 5xx / 429 / network error -> kept
+ *    - oEmbed 403 / 5xx / 429 / network error -> kept and aborts loop immediately
  *    - aged out of the 15-video RSS window with oEmbed 200 -> kept
  *    - oEmbed requests strictly target https://www.youtube.com/oembed with maxRedirects: 0
+ *    - non-YouTube rss/website channels never trigger YouTube oEmbed probes
+ *    - EXPLAIN QUERY PLAN verifies zero temp B-trees on feed & liveAutolist queries
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pulse-tidy.ts
  */
@@ -25,6 +28,7 @@ import {
     resolveChannel,
     setPulseItemMute,
     isCompleteFeedXml,
+    resetYouTubeOEmbedStateForTests,
     type SsrfSafeFetchOptions,
     type SsrfSafeResponse,
 } from './engine/pulse-resolver.js';
@@ -364,12 +368,240 @@ async function main(): Promise<void> {
         `Muting winner lets member's preserved duplicate surface (got ${JSON.stringify(afterMuteIds)})`
     );
 
+    // 1b. Security tie-breakers: curated/admin BeanPool > OAuth-verified > autolist > oauth > manual
+    const chAliceVerified = addChannel({
+        ownerPubkey: alice,
+        platform: 'youtube',
+        raw: 'https://www.youtube.com/channel/UC3333333333333333333333',
+        category: 'learn',
+    });
+    db.prepare(`UPDATE creator_channels SET oauth_verified_at = '2026-11-20T00:00:00.000Z' WHERE id = ?`).run(chAliceVerified.id);
+
+    const chAdminBeanPool = addChannel({
+        ownerPubkey: beanpoolChan.owner_pubkey,
+        platform: 'youtube',
+        raw: 'https://www.youtube.com/channel/UC4444444444444444444444',
+        category: 'learn',
+    });
+
+    const carol = makeMember('CarolMaker');
+    const chCarolYt = addChannel({
+        ownerPubkey: carol,
+        platform: 'youtube',
+        raw: 'https://www.youtube.com/channel/UC5555555555555555555555',
+        category: 'learn',
+    });
+
+    const securityTieBreakerCases: DedupeCase[] = [
+        {
+            name: 'OAuth-verified channel beats earlier unverified channel',
+            rows: [
+                {
+                    id: 'item_unverified_early',
+                    channelId: chBobYt.id,
+                    ownerPubkey: bob,
+                    platform: 'youtube',
+                    externalId: 'vidSecVer01',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T08:00:00.000Z',
+                    source: 'autolist',
+                },
+                {
+                    id: 'item_verified_later',
+                    channelId: chAliceVerified.id,
+                    ownerPubkey: alice,
+                    platform: 'youtube',
+                    externalId: 'vidSecVer01',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T10:00:00.000Z',
+                    source: 'autolist',
+                },
+            ],
+            expectedFeedIds: ['item_verified_later'],
+            mustStillExistLive: ['item_unverified_early', 'item_verified_later'],
+        },
+        {
+            name: 'autolist feed item beats earlier manual front-run and unverified oauth ingest',
+            rows: [
+                {
+                    id: 'item_manual_squat',
+                    channelId: chBobYt.id,
+                    ownerPubkey: bob,
+                    platform: 'youtube',
+                    externalId: 'vidSecSrc01',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T07:00:00.000Z',
+                    source: 'manual',
+                },
+                {
+                    id: 'item_oauth_squat',
+                    channelId: chCarolYt.id,
+                    ownerPubkey: carol,
+                    platform: 'youtube',
+                    externalId: 'vidSecSrc01',
+                    publishedAt: '2020-01-01T00:00:00.000Z',
+                    createdAt: '2026-11-25T07:30:00.000Z',
+                    source: 'oauth',
+                },
+                {
+                    id: 'item_real_autolist',
+                    channelId: chAliceYt.id,
+                    ownerPubkey: alice,
+                    platform: 'youtube',
+                    externalId: 'vidSecSrc01',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T09:00:00.000Z',
+                    source: 'autolist',
+                },
+            ],
+            expectedFeedIds: ['item_real_autolist'],
+            mustStillExistLive: ['item_manual_squat', 'item_oauth_squat', 'item_real_autolist'],
+        },
+        {
+            name: 'admin-added BeanPool channel beats earlier OAuth-verified member channel',
+            rows: [
+                {
+                    id: 'item_member_verified',
+                    channelId: chAliceVerified.id,
+                    ownerPubkey: alice,
+                    platform: 'youtube',
+                    externalId: 'vidSecAdm01',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T08:00:00.000Z',
+                    source: 'autolist',
+                },
+                {
+                    id: 'item_bp_admin_chan',
+                    channelId: chAdminBeanPool.id,
+                    ownerPubkey: beanpoolChan.owner_pubkey,
+                    platform: 'youtube',
+                    externalId: 'vidSecAdm01',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T09:00:00.000Z',
+                    source: 'autolist',
+                },
+            ],
+            expectedFeedIds: ['item_bp_admin_chan'],
+            mustStillExistLive: ['item_member_verified', 'item_bp_admin_chan'],
+        },
+    ];
+
+    for (const tc of securityTieBreakerCases) {
+        clearItems();
+        for (const r of tc.rows) {
+            insertItem(r);
+        }
+        const feed = getPulseFeed({ limit: 20 });
+        const gotIds = feed.items.map((i) => i.id);
+        assert(
+            JSON.stringify(gotIds) === JSON.stringify(tc.expectedFeedIds),
+            `${tc.name} (got ${JSON.stringify(gotIds)})`
+        );
+        for (const id of tc.mustStillExistLive) {
+            const row = db.prepare('SELECT deleted_at, url, title FROM pulse_items WHERE id = ?').get(id) as
+                { deleted_at: string | null; url: string | null; title: string | null } | undefined;
+            assert(
+                Boolean(row && row.deleted_at === null && row.url !== null && row.title !== null),
+                `row ${id} preserved live (${tc.name})`
+            );
+        }
+    }
+
+    // 1c. EXPLAIN QUERY PLAN checks (zero TEMP B-TREE on feed & liveAutolist queries)
+    const feedPlan = (db.prepare(
+        `EXPLAIN QUERY PLAN
+         SELECT i.id
+           FROM pulse_items i
+           CROSS JOIN creator_channels c ON c.id = i.channel_id
+           CROSS JOIN members m ON m.public_key = i.owner_pubkey
+          WHERE i.deleted_at IS NULL AND i.muted = 0
+            AND c.deleted_at IS NULL AND c.syndicate_to_node = 1
+            AND m.status = 'active'
+            AND (
+                i.external_id IS NULL OR i.external_id = ''
+                OR NOT EXISTS (
+                    SELECT 1
+                      FROM pulse_items i2
+                      CROSS JOIN creator_channels c2 ON c2.id = i2.channel_id
+                      CROSS JOIN members m2 ON m2.public_key = i2.owner_pubkey
+                     WHERE i2.platform = i.platform
+                       AND i2.external_id = i.external_id
+                       AND i2.external_id IS NOT NULL AND i2.external_id != ''
+                       AND i2.deleted_at IS NULL AND i2.muted = 0
+                       AND i2.id != i.id
+                       AND c2.deleted_at IS NULL AND c2.syndicate_to_node = 1
+                       AND m2.status = 'active'
+                       AND (CASE WHEN i2.channel_id = ? THEN 0 ELSE 1 END, i2.id)
+                         < (CASE WHEN i.channel_id = ? THEN 0 ELSE 1 END, i.id)
+                )
+            )
+          ORDER BY COALESCE(i.published_at, '') DESC, i.id DESC
+          LIMIT 21`
+    ).all(BEANPOOL_LEARN_CHANNEL_ID, BEANPOOL_LEARN_CHANNEL_ID) as Array<{ detail: string }>).map(r => r.detail).join(' | ');
+    assert(
+        feedPlan.includes('idx_pulse_items_feed') && feedPlan.includes('idx_pulse_items_platform_ext') && !feedPlan.includes('TEMP B-TREE'),
+        `getPulseFeed uses idx_pulse_items_feed + idx_pulse_items_platform_ext with zero TEMP B-TREE (${feedPlan})`
+    );
+
+    const catFeedPlan = (db.prepare(
+        `EXPLAIN QUERY PLAN
+         SELECT i.id
+           FROM pulse_items i
+           CROSS JOIN creator_channels c ON c.id = i.channel_id
+           CROSS JOIN members m ON m.public_key = i.owner_pubkey
+          WHERE i.deleted_at IS NULL AND i.muted = 0 AND i.category = 'learn'
+            AND c.deleted_at IS NULL AND c.syndicate_to_node = 1
+            AND m.status = 'active'
+          ORDER BY COALESCE(i.published_at, '') DESC, i.id DESC
+          LIMIT 21`
+    ).all() as Array<{ detail: string }>).map(r => r.detail).join(' | ');
+    assert(
+        catFeedPlan.includes('idx_pulse_items_category_feed') && !catFeedPlan.includes('TEMP B-TREE'),
+        `getPulseFeed(category) uses idx_pulse_items_category_feed with zero TEMP B-TREE (${catFeedPlan})`
+    );
+
+    const channelLivePlan = (db.prepare(
+        `EXPLAIN QUERY PLAN
+         SELECT id, platform, external_id, url
+           FROM pulse_items
+          WHERE channel_id = ? AND deleted_at IS NULL AND source = 'autolist' AND curated = 0
+          ORDER BY COALESCE(published_at, '') DESC, id DESC`
+    ).all(chAliceYt.id) as Array<{ detail: string }>).map(r => r.detail).join(' | ');
+    assert(
+        channelLivePlan.includes('idx_pulse_items_channel_live') && !channelLivePlan.includes('TEMP B-TREE'),
+        `liveAutolist query uses idx_pulse_items_channel_live with zero TEMP B-TREE (${channelLivePlan})`
+    );
+
     // ── 2. Resolver gone-at-source tests with injected fetchFn ──────────────────────────
     console.log('\n--- 2. Gone-at-Source Resolver Tests ---');
 
     assert(isCompleteFeedXml(youtubeAtomFeed([])), 'isCompleteFeedXml accepts complete Atom feed');
     assert(!isCompleteFeedXml('<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Cut off'), 'isCompleteFeedXml rejects truncated Atom feed');
     assert(!isCompleteFeedXml('<!DOCTYPE html><html><body>502 Bad Gateway</body></html>'), 'isCompleteFeedXml rejects HTML error page');
+    assert(
+        !isCompleteFeedXml('<?xml version="1.0"?><rdf:RDF><channel><title>RSS 1.0</title></channel><item><title>Truncated'),
+        'isCompleteFeedXml rejects RSS 1.0 truncated after </channel> before </rdf:RDF>'
+    );
+    assert(
+        isCompleteFeedXml('<?xml version="1.0"?><rdf:RDF><channel><title>RSS 1.0</title></channel><item><title>Ok</title></item></rdf:RDF>'),
+        'isCompleteFeedXml accepts complete RSS 1.0 feed ending with </rdf:RDF>'
+    );
+    assert(
+        !isCompleteFeedXml('<?xml version="1.0"?><rss version="2.0"><channel><title>RSS 2.0</title></channel>'),
+        'isCompleteFeedXml rejects RSS 2.0 missing </rss>'
+    );
+    assert(
+        isCompleteFeedXml('<?xml version="1.0"?><rss version="2.0"><channel><title>RSS 2.0</title></channel></rss>'),
+        'isCompleteFeedXml accepts complete RSS 2.0 feed'
+    );
+    const redosStart = Date.now();
+    const redosPayload = '<feed xmlns="http://www.w3.org/2005/Atom">' + '<!--'.repeat(50000);
+    const redosComplete = isCompleteFeedXml(redosPayload);
+    const redosElapsedMs = Date.now() - redosStart;
+    assert(
+        !redosComplete && redosElapsedMs < 500,
+        `isCompleteFeedXml handles 50k unclosed XML comments in O(N) without ReDoS (${redosElapsedMs}ms)`
+    );
 
     clearItems();
     const ytChan = addChannel({
@@ -478,13 +710,18 @@ async function main(): Promise<void> {
 
     for (const oembedErr of [
         { label: 'oEmbed 500', handler: async (url: string) => makeResponse(500, 'Server Error', url, 'text/plain') },
+        { label: 'oEmbed 403', handler: async (url: string) => makeResponse(403, 'Forbidden', url, 'text/plain') },
         { label: 'oEmbed 429', handler: async (url: string) => makeResponse(429, 'Rate Limited', url, 'text/plain') },
         { label: 'oEmbed network error', handler: async () => { throw new Error('ETIMEDOUT'); } },
     ]) {
+        let abortProbeCount = 0;
         await resolveChannel(ytChan.id, {
             fetchFn: async (url) => {
                 if (url === feedEndpoint) return makeResponse(200, onlyKeptXml, url);
-                if (url.startsWith('https://www.youtube.com/oembed?')) return oembedErr.handler(url);
+                if (url.startsWith('https://www.youtube.com/oembed?')) {
+                    abortProbeCount++;
+                    return oembedErr.handler(url);
+                }
                 throw new Error(`Unexpected URL: ${url}`);
             },
         });
@@ -492,11 +729,15 @@ async function main(): Promise<void> {
             `SELECT COUNT(*) AS c FROM pulse_items WHERE channel_id = ? AND deleted_at IS NULL`
         ).get(ytChan.id) as { c: number }).c;
         assert(liveCount === 5, `Missing from RSS + ${oembedErr.label} keeps all items (live=${liveCount}/5)`);
+        assert(abortProbeCount === 1, `${oembedErr.label} aborts probe loop after first error (probes=${abortProbeCount})`);
     }
 
-    // 2c. Missing from RSS + oEmbed 404 / 401 -> tombstoned; missing + oEmbed 200 -> kept;
+    // 2c. Missing from RSS + oEmbed 404 -> tombstoned with fresh updated_at;
+    //     missing + oEmbed 401 (disabled embedding) or 200 -> kept;
     //     oEmbed requests go strictly to www.youtube.com with maxRedirects: 0.
     const oembedCalls: Array<{ url: string; maxRedirects: number | undefined }> = [];
+    const preTidyTime = new Date().toISOString();
+    let afterOEmbedDelayTime = '';
     const tidyRes = await resolveChannel(ytChan.id, {
         fetchFn: async (url, opts) => {
             if (url === feedEndpoint) return makeResponse(200, onlyKeptXml, url);
@@ -507,7 +748,11 @@ async function main(): Promise<void> {
             );
             oembedCalls.push({ url, maxRedirects: opts?.maxRedirects });
             const target = parsed.searchParams.get('url') ?? '';
-            if (target.includes('ufwPPP0oZZA')) return makeResponse(404, 'Not Found', url, 'text/plain');
+            if (target.includes('ufwPPP0oZZA')) {
+                await new Promise((r) => setTimeout(r, 25));
+                afterOEmbedDelayTime = new Date().toISOString();
+                return makeResponse(404, 'Not Found', url, 'text/plain');
+            }
             if (target.includes('privVid0001')) return makeResponse(401, 'Unauthorized', url, 'text/plain');
             if (target.includes('liveMiss001')) return makeResponse(200, JSON.stringify({ title: 'Still Live' }), url, 'application/json');
             throw new Error(`Unexpected oEmbed target: ${target}`);
@@ -515,20 +760,33 @@ async function main(): Promise<void> {
     });
 
     assert(!tidyRes.error, `Resolve succeeded without error (${tidyRes.error ?? 'ok'})`);
-    assert(tidyRes.tombstoned === 2, `Tombstoned 2 gone items (got ${tidyRes.tombstoned})`);
+    assert(tidyRes.tombstoned === 1, `Tombstoned 1 gone item (404 only; got ${tidyRes.tombstoned})`);
     assert(oembedCalls.every((c) => c.maxRedirects === 0), 'All oEmbed fetches pass maxRedirects: 0');
     assert(!oembedCalls.some((c) => c.url.includes('manualVid01')), 'Manual submission was not probed or tombstoned by RSS sweep');
     assert(!oembedCalls.some((c) => c.url.includes('keptInRss01')), 'Item present in RSS was not probed');
 
-    const gone404 = rowState('ufwPPP0oZZA');
+    const gone404Row = db.prepare(
+        `SELECT id, deleted_at, url, title, thumbnail_url, updated_at FROM pulse_items WHERE channel_id = ? AND external_id = ?`
+    ).get(ytChan.id, 'ufwPPP0oZZA') as {
+        id: string;
+        deleted_at: string | null;
+        url: string | null;
+        title: string | null;
+        thumbnail_url: string | null;
+        updated_at: string;
+    };
     assert(
-        gone404.deleted_at !== null && gone404.url === null && gone404.title === null && gone404.thumbnail_url === null,
+        gone404Row.deleted_at !== null && gone404Row.url === null && gone404Row.title === null && gone404Row.thumbnail_url === null,
         'Missing + oEmbed 404 item tombstoned with deleted_at set and url/title/thumbnail NULLed'
     );
-    const gone401 = rowState('privVid0001');
     assert(
-        gone401.deleted_at !== null && gone401.url === null && gone401.title === null && gone401.thumbnail_url === null,
-        'Missing + oEmbed 401 item tombstoned with deleted_at set and url/title/thumbnail NULLed'
+        gone404Row.updated_at > preTidyTime && gone404Row.updated_at >= afterOEmbedDelayTime,
+        `Tombstone updated_at (${gone404Row.updated_at}) is freshly stamped after network probes (pre=${preTidyTime}, post=${afterOEmbedDelayTime})`
+    );
+    const kept401 = rowState('privVid0001');
+    assert(
+        kept401.deleted_at === null && kept401.url !== null && kept401.title !== null && kept401.thumbnail_url !== null,
+        'Missing + oEmbed 401 (embedding disabled / restricted) item is kept intact and not falsely tombstoned'
     );
     const kept200 = rowState('liveMiss001');
     assert(
@@ -541,7 +799,8 @@ async function main(): Promise<void> {
     assert(keptManual.deleted_at === null && keptManual.url !== null, 'Manually submitted item kept intact');
 
     const feedAfterTombstone = getPulseFeed({ category: 'craft', limit: 20 }).items.map((i) => i.id);
-    assert(!feedAfterTombstone.includes(gone404.id) && !feedAfterTombstone.includes(gone401.id), 'Tombstoned items no longer appear in getPulseFeed');
+    assert(!feedAfterTombstone.includes(gone404Row.id), 'Tombstoned 404 item no longer appears in getPulseFeed');
+    assert(feedAfterTombstone.includes(kept401.id), 'oEmbed-401 kept item still appears in getPulseFeed');
     assert(feedAfterTombstone.includes(kept200.id), 'oEmbed-200 kept item still appears in getPulseFeed');
 
     // 2d. Aged out of the 15-video YouTube RSS window with oEmbed 200 -> kept
@@ -599,6 +858,125 @@ async function main(): Promise<void> {
         agedLive.length === 3 && agedLive.every((r) => r.deleted_at === null && r.url !== null),
         'All 3 videos aged out of the 15-item RSS window with oEmbed 200 are kept intact'
     );
+
+    // 2e. Live TTL cache, probe cap (3 per visit), and abort cooldown when cache is enabled
+    resetYouTubeOEmbedStateForTests();
+    for (let i = 3; i < 5; i++) {
+        insertItem({
+            id: `item_aged_${i}`,
+            channelId: agedChan.id,
+            ownerPubkey: bob,
+            platform: 'youtube',
+            externalId: `agedOut000${i + 1}`,
+            publishedAt: `2026-10-0${i + 1}T12:00:00.000Z`,
+            createdAt: `2026-10-0${i + 1}T12:00:00.000Z`,
+            category: 'craft',
+            source: 'autolist',
+        });
+    }
+    const visit1Probes: string[] = [];
+    await resolveChannel(agedChan.id, {
+        useOEmbedCache: true,
+        fetchFn: async (url) => {
+            if (url === agedFeedEndpoint) return makeResponse(200, youtubeAtomFeed(latest15), url);
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                visit1Probes.push(url);
+                return makeResponse(200, JSON.stringify({ title: 'Still Live' }), url, 'application/json');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    assert(visit1Probes.length === 3, `Probe cap limits visit 1 to 3 oEmbed checks out of 5 missing (got ${visit1Probes.length})`);
+
+    const visit2Probes: string[] = [];
+    await resolveChannel(agedChan.id, {
+        useOEmbedCache: true,
+        fetchFn: async (url) => {
+            if (url === agedFeedEndpoint) return makeResponse(200, youtubeAtomFeed(latest15), url);
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                visit2Probes.push(url);
+                return makeResponse(200, JSON.stringify({ title: 'Still Live' }), url, 'application/json');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    assert(visit2Probes.length === 2, `Live TTL cache skips the 3 cached videos and probes only the remaining 2 (got ${visit2Probes.length})`);
+
+    const visit3Probes: string[] = [];
+    await resolveChannel(agedChan.id, {
+        useOEmbedCache: true,
+        fetchFn: async (url) => {
+            if (url === agedFeedEndpoint) return makeResponse(200, youtubeAtomFeed(latest15), url);
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                visit3Probes.push(url);
+                return makeResponse(200, JSON.stringify({ title: 'Still Live' }), url, 'application/json');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    assert(visit3Probes.length === 0, `All 5 aged-out live videos cached -> 0 oEmbed probes on visit 3 (got ${visit3Probes.length})`);
+
+    // Abort cooldown stops probing on subsequent visits after 403/429/5xx
+    resetYouTubeOEmbedStateForTests();
+    let cooldownProbes = 0;
+    await resolveChannel(agedChan.id, {
+        useOEmbedCache: true,
+        fetchFn: async (url) => {
+            if (url === agedFeedEndpoint) return makeResponse(200, youtubeAtomFeed(latest15), url);
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                cooldownProbes++;
+                return makeResponse(429, 'Too Many Requests', url, 'text/plain');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    await resolveChannel(agedChan.id, {
+        useOEmbedCache: true,
+        fetchFn: async (url) => {
+            if (url === agedFeedEndpoint) return makeResponse(200, youtubeAtomFeed(latest15), url);
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                cooldownProbes++;
+                return makeResponse(200, '{}', url, 'application/json');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    assert(cooldownProbes === 1, `Abort cooldown prevents oEmbed probes on next visit after 429 (total probes=${cooldownProbes})`);
+    resetYouTubeOEmbedStateForTests();
+
+    // 2f. Non-YouTube rss/website channels must NOT trigger YouTube oEmbed probes (no amplification)
+    const rssChan = addChannel({
+        ownerPubkey: bob,
+        platform: 'rss',
+        raw: 'https://example.org/feed.xml',
+        category: 'craft',
+    });
+    insertItem({
+        id: 'item_rss_yt_link',
+        channelId: rssChan.id,
+        ownerPubkey: bob,
+        platform: 'rss',
+        externalId: 'rss-guid-1',
+        publishedAt: '2026-11-25T10:00:00.000Z',
+        createdAt: '2026-11-25T10:00:00.000Z',
+        category: 'craft',
+        source: 'autolist',
+    });
+    db.prepare(`UPDATE pulse_items SET url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' WHERE id = 'item_rss_yt_link'`).run();
+    let rssOembedCalls = 0;
+    const rssRes = await resolveChannel(rssChan.id, {
+        fetchFn: async (url) => {
+            if (url === 'https://example.org/feed.xml') {
+                return makeResponse(200, '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Empty</title></feed>', url);
+            }
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                rssOembedCalls++;
+                return makeResponse(404, 'Not Found', url, 'text/plain');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    assert(!rssRes.error && rssOembedCalls === 0, `Non-YouTube RSS channel never calls YouTube oEmbed (calls=${rssOembedCalls})`);
 
     console.log(`\nResults: ${passed}/${run} tests passed.`);
     process.exit(passed === run ? 0 : 1);

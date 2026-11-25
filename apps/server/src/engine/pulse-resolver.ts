@@ -1818,6 +1818,39 @@ export async function buildSoundCloudFeedUrl(urlOrHandle: string): Promise<strin
 }
 
 const YOUTUBE_OEMBED_ORIGIN = 'https://www.youtube.com';
+const MAX_OEMBED_PROBES_PER_VISIT = 3;
+const OEMBED_LIVE_TTL_MS = 12 * 60 * 60 * 1000;
+const OEMBED_ABORT_COOLDOWN_MS = 15 * 60 * 1000;
+const MAX_OEMBED_LIVE_CACHE_SIZE = 5000;
+
+const oembedLiveCache = new Map<string, number>();
+let oembedAbortCooldownUntil = 0;
+
+function isRecentlyConfirmedLive(videoId: string, nowMs = Date.now()): boolean {
+    const expiresAt = oembedLiveCache.get(videoId);
+    if (expiresAt === undefined) return false;
+    if (expiresAt <= nowMs) {
+        oembedLiveCache.delete(videoId);
+        return false;
+    }
+    return true;
+}
+
+function recordConfirmedLive(videoId: string, nowMs = Date.now()): void {
+    if (oembedLiveCache.has(videoId)) {
+        oembedLiveCache.delete(videoId);
+    } else if (oembedLiveCache.size >= MAX_OEMBED_LIVE_CACHE_SIZE) {
+        const oldestKey = oembedLiveCache.keys().next().value;
+        if (oldestKey !== undefined) oembedLiveCache.delete(oldestKey);
+    }
+    oembedLiveCache.set(videoId, nowMs + OEMBED_LIVE_TTL_MS);
+}
+
+/** Tests only: clear the in-memory YouTube oEmbed live cache and abort cooldown. */
+export function resetYouTubeOEmbedStateForTests(): void {
+    oembedLiveCache.clear();
+    oembedAbortCooldownUntil = 0;
+}
 
 /**
  * Whether a fetched XML body looks like a complete RSS or Atom document rather than a truncated
@@ -1873,9 +1906,12 @@ type OEmbedCheckOutcome = 'gone' | 'live' | 'abort' | 'unknown';
  * Probe YouTube oEmbed on www.youtube.com (no redirects, routed through fetchFn so production
  * runs the full ssrfSafeFetch guard) to prove whether a video missing from channel RSS is gone.
  *
- * Only HTTP 404 (deleted) or 401 (private/unavailable) proves the video is gone.
+ * Only HTTP 404 unambiguously proves the video is deleted/gone.
+ * HTTP 401 is also returned for live, public videos with embedding disabled (as well as some
+ * age/region-restricted videos), which BeanPool opens directly on YouTube, so 401 is treated
+ * as 'unknown' and never tombstoned.
  * HTTP 200 keeps the item (including videos that merely aged out of the 15-item RSS window).
- * HTTP 429, 5xx, network errors, timeouts, and any other status keep the item untouched.
+ * HTTP 429, 403, 5xx, and network errors return 'abort' so probing stops immediately and backs off.
  */
 async function checkYouTubeOEmbed(
     videoId: string,
@@ -1894,9 +1930,9 @@ async function checkYouTubeOEmbed(
         if (typeof res.text === 'function') {
             await res.text().catch(() => '');
         }
-        if (status === 404 || status === 401) return 'gone';
+        if (status === 404) return 'gone';
         if (status === 200) return 'live';
-        if (status === 429) return 'abort';
+        if (status === 429 || status === 403 || status >= 500) return 'abort';
         return 'unknown';
     } catch {
         return 'abort';
@@ -1906,6 +1942,8 @@ async function checkYouTubeOEmbed(
 export interface ResolveChannelOptions {
     /** Tests only: fetches the channel's site and feed in place of ssrfSafeFetch (which refuses localhost). */
     fetchFn?: (url: string, options?: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>;
+    /** Tests only: enable the in-memory oEmbed live cache & abort cooldown even when fetchFn is injected. */
+    useOEmbedCache?: boolean;
 }
 
 /**
@@ -2177,54 +2215,73 @@ export async function resolveChannel(channelId: string, options: ResolveChannelO
             ).run(now, channel.id);
         })();
 
-        // Gone-at-source verification: for full-listing autolist channels (YouTube RSS, RSS/Atom),
-        // an autolisted item that disappeared from a complete successful fetch AND whose YouTube
-        // oEmbed answers 404/401 is tombstoned via scrubPulseItems (deleted_at set, content NULLed,
-        // cached thumbnail evicted). Never runs on failed/partial fetches, and never tombstones
-        // items that merely fell out of the 15-item YouTube RSS window (oEmbed 200 keeps them).
+        // Gone-at-source verification: for YouTube autolist channels, an autolisted item that
+        // disappeared from a complete successful fetch AND whose YouTube oEmbed answers 404 is
+        // tombstoned via scrubPulseItems (deleted_at set, content NULLed, cached thumbnail evicted).
+        // Never runs on failed/partial fetches, never tombstones on 401 (disabled embedding) or
+        // 200 (aged out of the 15-item RSS window), caches confirmed-live video IDs to avoid
+        // repeated polling, aborts with a cooldown on 403/429/5xx/network errors, and runs in its
+        // own try/catch so post-commit errors cannot overwrite the channel's healthy fetch state.
         let tombstoned = 0;
-        const isFullListingChannel =
-            channel.platform === 'youtube' || channel.platform === 'rss' || channel.platform === 'website';
-        if (isFullListingChannel && isCompleteFeedXml(xml)) {
-            const presentIds = new Set<string>();
-            for (const item of parsed.items) {
-                if (item.externalId) presentIds.add(item.externalId);
-                if (channel.platform === 'youtube') {
-                    const vid = extractYouTubeVideoId(item.externalId) ?? extractYouTubeVideoId(item.url);
-                    if (vid) presentIds.add(vid);
-                }
-            }
+        const useOEmbedCache = options.useOEmbedCache ?? !options.fetchFn;
+        if (channel.platform === 'youtube' && isCompleteFeedXml(xml)) {
+            try {
+                if (!useOEmbedCache || Date.now() >= oembedAbortCooldownUntil) {
+                    const presentIds = new Set<string>();
+                    for (const item of parsed.items) {
+                        if (item.externalId) presentIds.add(item.externalId);
+                        const vid = youTubeVideoIdForOEmbed(channel.platform, item.externalId, item.url);
+                        if (vid) presentIds.add(vid);
+                    }
 
-            const liveAutolist = db.prepare(
-                `SELECT id, platform, external_id, url
-                   FROM pulse_items
-                  WHERE channel_id = ? AND deleted_at IS NULL AND source = 'autolist' AND curated = 0
-                  ORDER BY COALESCE(published_at, '') DESC, id DESC`
-            ).all(channel.id) as Array<{
-                id: string;
-                platform: string;
-                external_id: string | null;
-                url: string | null;
-            }>;
+                    const liveAutolist = db.prepare(
+                        `SELECT id, platform, external_id, url
+                           FROM pulse_items
+                          WHERE channel_id = ? AND deleted_at IS NULL AND source = 'autolist' AND curated = 0
+                          ORDER BY COALESCE(published_at, '') DESC, id DESC`
+                    ).all(channel.id) as Array<{
+                        id: string;
+                        platform: string;
+                        external_id: string | null;
+                        url: string | null;
+                    }>;
 
-            const missing = liveAutolist.filter((row) => {
-                if (row.external_id && presentIds.has(row.external_id)) return false;
-                if (row.platform === 'youtube') {
-                    const vid = extractYouTubeVideoId(row.external_id) ?? extractYouTubeVideoId(row.url);
-                    if (vid && presentIds.has(vid)) return false;
-                }
-                return true;
-            });
+                    const missingWithVideoId: Array<{ id: string; videoId: string }> = [];
+                    for (const row of liveAutolist) {
+                        if (row.external_id && presentIds.has(row.external_id)) continue;
+                        const videoId = youTubeVideoIdForOEmbed(row.platform, row.external_id, row.url);
+                        if (!videoId || presentIds.has(videoId)) continue;
+                        missingWithVideoId.push({ id: row.id, videoId });
+                    }
 
-            for (const row of missing.slice(0, PULSE_KEEP_PER_CHANNEL)) {
-                const videoId = youTubeVideoIdForOEmbed(row.platform, row.external_id, row.url);
-                if (!videoId) continue;
-                const outcome = await checkYouTubeOEmbed(videoId, fetchFn);
-                if (outcome === 'gone') {
-                    tombstoned += scrubPulseItems({ id: row.id }, now);
-                } else if (outcome === 'abort') {
-                    break;
+                    const goneIds: string[] = [];
+                    let probed = 0;
+                    for (const entry of missingWithVideoId.slice(0, PULSE_KEEP_PER_CHANNEL)) {
+                        if (probed >= MAX_OEMBED_PROBES_PER_VISIT) break;
+                        if (useOEmbedCache && isRecentlyConfirmedLive(entry.videoId)) continue;
+                        probed++;
+                        const outcome = await checkYouTubeOEmbed(entry.videoId, fetchFn);
+                        if (outcome === 'gone') {
+                            goneIds.push(entry.id);
+                        } else if (outcome === 'live') {
+                            if (useOEmbedCache) recordConfirmedLive(entry.videoId);
+                        } else if (outcome === 'abort') {
+                            if (useOEmbedCache) oembedAbortCooldownUntil = Date.now() + OEMBED_ABORT_COOLDOWN_MS;
+                            break;
+                        }
+                    }
+
+                    if (goneIds.length > 0) {
+                        const scrubNow = new Date().toISOString();
+                        db.transaction(() => {
+                            for (const id of goneIds) {
+                                tombstoned += scrubPulseItems({ id }, scrubNow);
+                            }
+                        })();
+                    }
                 }
+            } catch {
+                // Best-effort post-commit verification must not overwrite healthy channel state
             }
         }
 

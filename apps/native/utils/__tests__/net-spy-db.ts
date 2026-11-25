@@ -26,7 +26,7 @@ export function dbExportNames(): { functions: string[]; classes: string[]; strin
     const strings: Record<string, string> = {};
     for (const m of source.matchAll(/^export const (\w+)\s*=\s*'([^']*)'/gm)) strings[m[1]] = m[2];
     // A whole-number constant (COPY_SCHEMA, the copy's schema number) stands in as itself, written with or without
-    // separators (READ_DEADLINE_MS = 12_000).
+    // separators (LIST_READ_BACKSTOP_MS = 60_000).
     const numbers: Record<string, number> = {};
     for (const m of source.matchAll(/^export const (\w+)\s*=\s*(\d[\d_]*);/gm)) numbers[m[1]] = Number(m[2].replace(/_/g, ''));
     const otherConsts = [...source.matchAll(/^export (?:const|let|var) (\w+)/gm)].map(m => m[1]).filter(n => !(n in strings) && !(n in numbers));

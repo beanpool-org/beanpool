@@ -89,7 +89,10 @@ export function isUnreadablePairingQr(raw: unknown): boolean {
  * Settings sign-in scanner sends it to Link a device (utils/settings-signin.ts readSigninScan).
  */
 export function isDeviceLinkCode(raw: unknown): boolean {
-    return parsePairingQr(raw) !== null || isUnreadablePairingQr(raw);
+    if (parsePairingQr(raw) !== null) return true;
+    // Only the `pair` segment itself: `beanpool://pair-in?…` is the web's Bring to phone code (app/pair-in.tsx reads it
+    // from Welcome → Scan from a browser), which Link a device would refuse (#3384 review).
+    return isUnreadablePairingQr(raw) && /^beanpool:\/\/pair(?:[?/#]|$)/.test((raw as string).trim().toLowerCase());
 }
 
 /**

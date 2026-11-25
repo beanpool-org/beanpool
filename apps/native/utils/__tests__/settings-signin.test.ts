@@ -111,6 +111,10 @@ describe('reading the scanned code', () => {
             expect(readSigninScan(code, APP_NODE).kind, code).toBe('device-link');
             expect(readSigninScan(code, null).kind, `${code}, no node`).toBe('device-link');
         }
+        // The web's Bring to phone code shares the prefix but is not a device-link code (#3384 review).
+        for (const code of ['beanpool://pair-in?session=s&pub=p&node=n', 'BEANPOOL://PAIR-IN?session=1', 'beanpool://pairing?x=1']) {
+            expect(readSigninScan(code, APP_NODE).kind, code).not.toBe('device-link');
+        }
         const m = scanProblemMessage({ kind: 'device-link' });
         expect(m.title).toBe('A code to link a device');
         expect(m.message).toContain('Settings → Link a device');

@@ -28,6 +28,7 @@ import { sweepTakedowns } from './agent-takedowns.js';
 import { sweepForumTakedowns } from './forum-takedowns.js';
 import { avatarUrlOf, type PulseKnowledgeCard } from '@beanpool/core';
 import { pulseHarvestAllowance } from './writer-bounds.js';
+import { BEANPOOL_LEARN_CHANNEL_ID } from './pulse-seed.js';
 
 // ============================================================================
 // 1. Errors & Types
@@ -1795,6 +1796,86 @@ export async function buildSoundCloudFeedUrl(urlOrHandle: string): Promise<strin
     return null;
 }
 
+const YOUTUBE_OEMBED_ORIGIN = 'https://www.youtube.com';
+
+/**
+ * Whether a fetched XML body looks like a complete RSS or Atom document rather than a truncated
+ * stream or an HTML error page served with HTTP 200. Gone-at-source checks only run against a
+ * complete listing.
+ */
+export function isCompleteFeedXml(xml: string): boolean {
+    if (!xml || typeof xml !== 'string') return false;
+    const cleaned = xml.replace(/\uFEFF/g, '').replace(/<!--[\s\S]*?-->/g, '').trim();
+    if (!cleaned) return false;
+    const head = cleaned.slice(0, 2000).toLowerCase();
+    if (/<(?:[a-zA-Z0-9_-]+:)?feed\b/i.test(head) || head.includes('xmlns="http://www.w3.org/2005/atom"')) {
+        return /<\/(?:[a-zA-Z0-9_-]+:)?feed\s*>/i.test(cleaned);
+    }
+    if (/<rss\b/i.test(head) || /<rdf:rdf\b/i.test(head) || /<channel\b/i.test(head)) {
+        return /<\/(?:rss|rdf:rdf|channel)\s*>/i.test(cleaned);
+    }
+    return false;
+}
+
+/**
+ * YouTube video ID to verify against www.youtube.com/oembed, or null when the item is not a
+ * YouTube video (non-YouTube RSS/Atom items are never tombstoned without proof).
+ */
+function youTubeVideoIdForOEmbed(platform: string, externalId: string | null, url: string | null): string | null {
+    if (platform === 'youtube') {
+        const id = extractYouTubeVideoId(externalId) ?? extractYouTubeVideoId(url);
+        return id && YOUTUBE_ID_PATTERN.test(id) ? id : null;
+    }
+    if (url) {
+        try {
+            const host = new URL(url).hostname.toLowerCase();
+            if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') {
+                const id = extractYouTubeVideoId(url);
+                return id && YOUTUBE_ID_PATTERN.test(id) ? id : null;
+            }
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
+
+type OEmbedCheckOutcome = 'gone' | 'live' | 'abort' | 'unknown';
+
+/**
+ * Probe YouTube oEmbed on www.youtube.com (no redirects, routed through fetchFn so production
+ * runs the full ssrfSafeFetch guard) to prove whether a video missing from channel RSS is gone.
+ *
+ * Only HTTP 404 (deleted) or 401 (private/unavailable) proves the video is gone.
+ * HTTP 200 keeps the item (including videos that merely aged out of the 15-item RSS window).
+ * HTTP 429, 5xx, network errors, timeouts, and any other status keep the item untouched.
+ */
+async function checkYouTubeOEmbed(
+    videoId: string,
+    fetchFn: (url: string, options?: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>,
+): Promise<OEmbedCheckOutcome> {
+    if (!YOUTUBE_ID_PATTERN.test(videoId)) return 'unknown';
+    const watchUrl = `${YOUTUBE_OEMBED_ORIGIN}/watch?v=${videoId}`;
+    const oembedUrl = `${YOUTUBE_OEMBED_ORIGIN}/oembed?url=${encodeURIComponent(watchUrl)}&format=json`;
+    try {
+        const res = await fetchFn(oembedUrl, {
+            timeoutMs: 5000,
+            maxBytes: 64 * 1024,
+            maxRedirects: 0,
+        });
+        const status = res.status;
+        if (typeof res.text === 'function') {
+            await res.text().catch(() => '');
+        }
+        if (status === 404 || status === 401) return 'gone';
+        if (status === 200) return 'live';
+        if (status === 429) return 'abort';
+        return 'unknown';
+    } catch {
+        return 'abort';
+    }
+}
+
 export interface ResolveChannelOptions {
     /** Tests only: fetches the channel's site and feed in place of ssrfSafeFetch (which refuses localhost). */
     fetchFn?: (url: string, options?: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>;
@@ -1802,9 +1883,10 @@ export interface ResolveChannelOptions {
 
 /**
  * One visit to a channel: fetch its feed and list its newest items. `count` is the items listed or refreshed;
- * `leftForLater` the new ones its owner's day allowance had no room for (WRITER_LIMITS.pulseHarvestedItemsPerDay).
+ * `leftForLater` the new ones its owner's day allowance had no room for (WRITER_LIMITS.pulseHarvestedItemsPerDay);
+ * `tombstoned` the autolisted items proven gone at the source.
  */
-export async function resolveChannel(channelId: string, options: ResolveChannelOptions = {}): Promise<{ count: number; error?: string; leftForLater?: number }> {
+export async function resolveChannel(channelId: string, options: ResolveChannelOptions = {}): Promise<{ count: number; error?: string; leftForLater?: number; tombstoned?: number }> {
     const fetchFn = options.fetchFn ?? ssrfSafeFetch;
     const channel = db.prepare(
         `SELECT id, owner_pubkey, platform, url, handle, category, supports_autolist,
@@ -2068,8 +2150,63 @@ export async function resolveChannel(channelId: string, options: ResolveChannelO
             ).run(now, channel.id);
         })();
 
+        // Gone-at-source verification: for full-listing autolist channels (YouTube RSS, RSS/Atom),
+        // an autolisted item that disappeared from a complete successful fetch AND whose YouTube
+        // oEmbed answers 404/401 is tombstoned via scrubPulseItems (deleted_at set, content NULLed,
+        // cached thumbnail evicted). Never runs on failed/partial fetches, and never tombstones
+        // items that merely fell out of the 15-item YouTube RSS window (oEmbed 200 keeps them).
+        let tombstoned = 0;
+        const isFullListingChannel =
+            channel.platform === 'youtube' || channel.platform === 'rss' || channel.platform === 'website';
+        if (isFullListingChannel && isCompleteFeedXml(xml)) {
+            const presentIds = new Set<string>();
+            for (const item of parsed.items) {
+                if (item.externalId) presentIds.add(item.externalId);
+                if (channel.platform === 'youtube') {
+                    const vid = extractYouTubeVideoId(item.externalId) ?? extractYouTubeVideoId(item.url);
+                    if (vid) presentIds.add(vid);
+                }
+            }
+
+            const liveAutolist = db.prepare(
+                `SELECT id, platform, external_id, url
+                   FROM pulse_items
+                  WHERE channel_id = ? AND deleted_at IS NULL AND source = 'autolist' AND curated = 0
+                  ORDER BY COALESCE(published_at, '') DESC, id DESC`
+            ).all(channel.id) as Array<{
+                id: string;
+                platform: string;
+                external_id: string | null;
+                url: string | null;
+            }>;
+
+            const missing = liveAutolist.filter((row) => {
+                if (row.external_id && presentIds.has(row.external_id)) return false;
+                if (row.platform === 'youtube') {
+                    const vid = extractYouTubeVideoId(row.external_id) ?? extractYouTubeVideoId(row.url);
+                    if (vid && presentIds.has(vid)) return false;
+                }
+                return true;
+            });
+
+            for (const row of missing.slice(0, PULSE_KEEP_PER_CHANNEL)) {
+                const videoId = youTubeVideoIdForOEmbed(row.platform, row.external_id, row.url);
+                if (!videoId) continue;
+                const outcome = await checkYouTubeOEmbed(videoId, fetchFn);
+                if (outcome === 'gone') {
+                    tombstoned += scrubPulseItems({ id: row.id }, now);
+                } else if (outcome === 'abort') {
+                    break;
+                }
+            }
+        }
+
         // Not logged: an owner past the allowance would write a line at every visit.
-        return leftForLater > 0 ? { count: insertedOrUpdated, leftForLater } : { count: insertedOrUpdated };
+        return {
+            count: insertedOrUpdated,
+            ...(leftForLater > 0 ? { leftForLater } : {}),
+            ...(tombstoned > 0 ? { tombstoned } : {}),
+        };
     } catch (err: any) {
         const nextFails = (channel.fail_count || 0) + 1;
         const isStale = nextFails >= 3 ? 1 : (channel.is_stale || 0);
@@ -2271,7 +2408,7 @@ export interface PulseFeedPage<T> {
  * The two feed indexes in schema.sql index this exact expression; change one and
  * you must change the other or the feed silently starts scanning.
  */
-const FEED_SORT_KEY = "COALESCE(i.published_at, '')";
+const FEED_SORT_KEY = "COALESCE(published_at, '')";
 
 /** Cursor is `<sort key>|<id>` — ISO timestamps carry no '|' and ids are hex. */
 export function encodePulseCursor(publishedAt: string | null, id: string): string {
@@ -2315,48 +2452,72 @@ export function getPulseFeed(options?: PulseFeedOptions): PulseFeedPage<PulseFee
 export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras): PulseFeedPage<PulseFeedCard | PulseKnowledgeCard>;
 export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): PulseFeedPage<PulseFeedCard | PulseKnowledgeCard> {
     const limit = Math.min(50, Math.max(1, typeof options.limit === 'number' ? options.limit : 20));
-    const conditions: string[] = [
+    const baseConditions: string[] = [
         'c.deleted_at IS NULL',
         'c.syndicate_to_node = 1',
         'i.deleted_at IS NULL',
         'i.muted = 0',
         "m.status = 'active'",
     ];
-    const params: unknown[] = [];
+    const baseParams: unknown[] = [];
 
     if (options.category && typeof options.category === 'string') {
-        conditions.push('i.category = ?');
-        params.push(options.category);
+        baseConditions.push('i.category = ?');
+        baseParams.push(options.category);
     }
 
-    // Keyset pagination on (published_at, id), not published_at alone. A feed
-    // routinely publishes a batch of items with one identical timestamp, and
-    // `published_at < cursor` drops every one of them that did not fit on the
-    // page. COALESCE keeps NULL-dated items reachable too: `NULL < cursor` is
-    // NULL, so under the old clause they could never appear past page 1.
+    // One card per video across channels: when two live visible items share the same
+    // (platform, external_id) on different channels (e.g. the seeded BeanPool channel and a
+    // member who also linked that YouTube channel), keep one at read time without deleting
+    // either row. Prefer the seeded BeanPool channel; otherwise the earliest row. Items with
+    // no external_id partition by their own id and are never collapsed.
+    //
+    // Keyset pagination on (published_at, id) runs on the deduplicated stream so duplicates
+    // cannot leak across page boundaries or short-change a page, and COALESCE keeps
+    // NULL-dated items reachable past page 1.
+    const outerConditions: string[] = ['dedupe_rank = 1'];
+    const outerParams: unknown[] = [];
     const cursor = options.cursor && typeof options.cursor === 'string' ? decodePulseCursor(options.cursor) : null;
     if (cursor) {
         const { sortKey, id } = cursor;
         if (id === null) {
-            conditions.push(`${FEED_SORT_KEY} < ?`);
-            params.push(sortKey);
+            outerConditions.push(`${FEED_SORT_KEY} < ?`);
+            outerParams.push(sortKey);
         } else {
-            conditions.push(`(${FEED_SORT_KEY} < ? OR (${FEED_SORT_KEY} = ? AND i.id < ?))`);
-            params.push(sortKey, sortKey, id);
+            outerConditions.push(`(${FEED_SORT_KEY} < ? OR (${FEED_SORT_KEY} = ? AND id < ?))`);
+            outerParams.push(sortKey, sortKey, id);
         }
     }
 
     const rows = db.prepare(
-        `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
-                i.published_at, i.category, i.source, c.oauth_verified_at,
-                m.callsign, m.avatar_ref
-           FROM pulse_items i
-           JOIN creator_channels c ON c.id = i.channel_id
-           JOIN members m ON m.public_key = i.owner_pubkey
-          WHERE ${conditions.join(' AND ')}
-          ORDER BY ${FEED_SORT_KEY} DESC, i.id DESC
+        `WITH deduped AS (
+             SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
+                    i.published_at, i.category, i.source, c.oauth_verified_at,
+                    m.callsign, m.avatar_ref,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY i.platform,
+                            CASE WHEN i.external_id IS NOT NULL AND i.external_id != ''
+                                 THEN 'ext:' || i.external_id
+                                 ELSE 'id:' || i.id
+                            END
+                        ORDER BY CASE WHEN i.channel_id = ? THEN 0 ELSE 1 END ASC,
+                                 i.created_at ASC,
+                                 COALESCE(i.published_at, '') ASC,
+                                 i.id ASC
+                    ) AS dedupe_rank
+               FROM pulse_items i
+               JOIN creator_channels c ON c.id = i.channel_id
+               JOIN members m ON m.public_key = i.owner_pubkey
+              WHERE ${baseConditions.join(' AND ')}
+         )
+         SELECT id, owner_pubkey, platform, url, title, thumbnail_url,
+                published_at, category, source, oauth_verified_at,
+                callsign, avatar_ref
+           FROM deduped
+          WHERE ${outerConditions.join(' AND ')}
+          ORDER BY ${FEED_SORT_KEY} DESC, id DESC
           LIMIT ?`
-    ).all(...params, limit + 1) as any[];
+    ).all(BEANPOOL_LEARN_CHANNEL_ID, ...baseParams, ...outerParams, limit + 1) as any[];
 
     const extra = (options.extra ?? []).filter(c => !cursor || afterCursor(c.publishedAt, c.id, cursor));
     if (extra.length > 0) {

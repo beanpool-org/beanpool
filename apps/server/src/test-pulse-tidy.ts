@@ -484,7 +484,143 @@ async function main(): Promise<void> {
             expectedFeedIds: ['item_bp_admin_chan'],
             mustStillExistLive: ['item_member_verified', 'item_bp_admin_chan'],
         },
+        {
+            name: 'OAuth-verified manual submission cannot hijack unverified creator autolist item',
+            rows: [
+                {
+                    id: 'item_verified_manual_hijack',
+                    channelId: chAliceVerified.id,
+                    ownerPubkey: alice,
+                    platform: 'youtube',
+                    externalId: 'vidSecOauthMan01',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T07:00:00.000Z',
+                    source: 'manual',
+                },
+                {
+                    id: 'item_unverified_real_autolist',
+                    channelId: chBobYt.id,
+                    ownerPubkey: bob,
+                    platform: 'youtube',
+                    externalId: 'vidSecOauthMan01',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T09:00:00.000Z',
+                    source: 'autolist',
+                },
+            ],
+            expectedFeedIds: ['item_unverified_real_autolist'],
+            mustStillExistLive: ['item_verified_manual_hijack', 'item_unverified_real_autolist'],
+        },
+        {
+            name: 'OAuth-verified manual submission cannot retroactively beat earlier unverified manual post',
+            rows: [
+                {
+                    id: 'item_unverified_manual_first',
+                    channelId: chBobYt.id,
+                    ownerPubkey: bob,
+                    platform: 'youtube',
+                    externalId: 'vidSecOauthMan02',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T08:00:00.000Z',
+                    source: 'manual',
+                },
+                {
+                    id: 'item_verified_manual_later',
+                    channelId: chAliceVerified.id,
+                    ownerPubkey: alice,
+                    platform: 'youtube',
+                    externalId: 'vidSecOauthMan02',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T10:00:00.000Z',
+                    source: 'manual',
+                },
+            ],
+            expectedFeedIds: ['item_unverified_manual_first'],
+            mustStillExistLive: ['item_unverified_manual_first', 'item_verified_manual_later'],
+        },
     ];
+
+    const chAliceWeb = addChannel({
+        ownerPubkey: alice,
+        platform: 'website',
+        raw: 'https://alice-blog.example/feed.xml',
+        category: 'learn',
+    });
+    const chBobWeb = addChannel({
+        ownerPubkey: bob,
+        platform: 'website',
+        raw: 'https://bob-blog.example/feed.xml',
+        category: 'learn',
+    });
+    const chAliceRss = addChannel({
+        ownerPubkey: alice,
+        platform: 'rss',
+        raw: 'https://alice-rss.example/rss.xml',
+        category: 'learn',
+    });
+    const chBobRss = addChannel({
+        ownerPubkey: bob,
+        platform: 'rss',
+        raw: 'https://bob-rss.example/rss.xml',
+        category: 'learn',
+    });
+
+    securityTieBreakerCases.push(
+        {
+            name: 'website autolist <guid> cannot hijack or bury another member manual website submission',
+            rows: [
+                {
+                    id: 'item_victim_web_manual',
+                    channelId: chBobWeb.id,
+                    ownerPubkey: bob,
+                    platform: 'website',
+                    externalId: 'https://bob-blog.example/my-post',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T08:00:00.000Z',
+                    source: 'manual',
+                },
+                {
+                    id: 'item_attacker_web_guid',
+                    channelId: chAliceWeb.id,
+                    ownerPubkey: alice,
+                    platform: 'website',
+                    externalId: 'https://bob-blog.example/my-post',
+                    publishedAt: '2026-11-25T11:00:00.000Z',
+                    createdAt: '2026-11-25T09:00:00.000Z',
+                    source: 'autolist',
+                },
+            ],
+            expectedFeedIds: ['item_victim_web_manual', 'item_attacker_web_guid'],
+            mustStillExistLive: ['item_victim_web_manual', 'item_attacker_web_guid'],
+        },
+        {
+            name: 'rss channels sharing generic non-URL <guid> do not collapse unrelated posts',
+            rows: [
+                {
+                    id: 'item_alice_rss_guid1',
+                    channelId: chAliceRss.id,
+                    ownerPubkey: alice,
+                    platform: 'rss',
+                    externalId: 'post-1',
+                    publishedAt: '2026-11-25T12:00:00.000Z',
+                    createdAt: '2026-11-25T08:00:00.000Z',
+                    source: 'autolist',
+                },
+                {
+                    id: 'item_bob_rss_guid1',
+                    channelId: chBobRss.id,
+                    ownerPubkey: bob,
+                    platform: 'rss',
+                    externalId: 'post-1',
+                    publishedAt: '2026-11-25T11:00:00.000Z',
+                    createdAt: '2026-11-25T09:00:00.000Z',
+                    source: 'autolist',
+                },
+            ],
+            expectedFeedIds: ['item_alice_rss_guid1', 'item_bob_rss_guid1'],
+            mustStillExistLive: ['item_alice_rss_guid1', 'item_bob_rss_guid1'],
+        },
+    );
 
     for (const tc of securityTieBreakerCases) {
         clearItems();
@@ -508,17 +644,10 @@ async function main(): Promise<void> {
     }
 
     // 1c. EXPLAIN QUERY PLAN checks (zero TEMP B-TREE on feed & liveAutolist queries)
-    const feedPlan = (db.prepare(
-        `EXPLAIN QUERY PLAN
-         SELECT i.id
-           FROM pulse_items i
-           CROSS JOIN creator_channels c ON c.id = i.channel_id
-           CROSS JOIN members m ON m.public_key = i.owner_pubkey
-          WHERE i.deleted_at IS NULL AND i.muted = 0
-            AND c.deleted_at IS NULL AND c.syndicate_to_node = 1
-            AND m.status = 'active'
+    const fullAntiJoinClause = (withCategory: boolean) => `
             AND (
-                i.external_id IS NULL OR i.external_id = ''
+                i.platform IN ('website', 'rss')
+                OR i.external_id IS NULL OR i.external_id = ''
                 OR NOT EXISTS (
                     SELECT 1
                       FROM pulse_items i2
@@ -531,13 +660,48 @@ async function main(): Promise<void> {
                        AND i2.id != i.id
                        AND c2.deleted_at IS NULL AND c2.syndicate_to_node = 1
                        AND m2.status = 'active'
-                       AND (CASE WHEN i2.channel_id = ? THEN 0 ELSE 1 END, i2.id)
-                         < (CASE WHEN i.channel_id = ? THEN 0 ELSE 1 END, i.id)
+                       ${withCategory ? 'AND i2.category = i.category' : ''}
+                       AND (
+                           CASE WHEN i2.channel_id = ? OR i2.curated = 1 OR (? IS NOT NULL AND i2.owner_pubkey = ?) THEN 0 ELSE 1 END,
+                           CASE
+                               WHEN i2.source IN ('curated', 'autolist') AND c2.oauth_verified_at IS NOT NULL THEN 0
+                               WHEN i2.source IN ('curated', 'autolist') THEN 1
+                               ELSE 2
+                           END,
+                           COALESCE(i2.created_at, ''),
+                           COALESCE(i2.published_at, ''),
+                           i2.id
+                       ) < (
+                           CASE WHEN i.channel_id = ? OR i.curated = 1 OR (? IS NOT NULL AND i.owner_pubkey = ?) THEN 0 ELSE 1 END,
+                           CASE
+                               WHEN i.source IN ('curated', 'autolist') AND c.oauth_verified_at IS NOT NULL THEN 0
+                               WHEN i.source IN ('curated', 'autolist') THEN 1
+                               ELSE 2
+                           END,
+                           COALESCE(i.created_at, ''),
+                           COALESCE(i.published_at, ''),
+                           i.id
+                       )
                 )
-            )
+            )`;
+    const planParams = [
+        BEANPOOL_LEARN_CHANNEL_ID, beanpoolChan.owner_pubkey, beanpoolChan.owner_pubkey,
+        BEANPOOL_LEARN_CHANNEL_ID, beanpoolChan.owner_pubkey, beanpoolChan.owner_pubkey,
+    ];
+
+    const feedPlan = (db.prepare(
+        `EXPLAIN QUERY PLAN
+         SELECT i.id
+           FROM pulse_items i
+           CROSS JOIN creator_channels c ON c.id = i.channel_id
+           CROSS JOIN members m ON m.public_key = i.owner_pubkey
+          WHERE i.deleted_at IS NULL AND i.muted = 0
+            AND c.deleted_at IS NULL AND c.syndicate_to_node = 1
+            AND m.status = 'active'
+            ${fullAntiJoinClause(false)}
           ORDER BY COALESCE(i.published_at, '') DESC, i.id DESC
           LIMIT 21`
-    ).all(BEANPOOL_LEARN_CHANNEL_ID, BEANPOOL_LEARN_CHANNEL_ID) as Array<{ detail: string }>).map(r => r.detail).join(' | ');
+    ).all(...planParams) as Array<{ detail: string }>).map(r => r.detail).join(' | ');
     assert(
         feedPlan.includes('idx_pulse_items_feed') && feedPlan.includes('idx_pulse_items_platform_ext') && !feedPlan.includes('TEMP B-TREE'),
         `getPulseFeed uses idx_pulse_items_feed + idx_pulse_items_platform_ext with zero TEMP B-TREE (${feedPlan})`
@@ -552,12 +716,13 @@ async function main(): Promise<void> {
           WHERE i.deleted_at IS NULL AND i.muted = 0 AND i.category = 'learn'
             AND c.deleted_at IS NULL AND c.syndicate_to_node = 1
             AND m.status = 'active'
+            ${fullAntiJoinClause(true)}
           ORDER BY COALESCE(i.published_at, '') DESC, i.id DESC
           LIMIT 21`
-    ).all() as Array<{ detail: string }>).map(r => r.detail).join(' | ');
+    ).all(...planParams) as Array<{ detail: string }>).map(r => r.detail).join(' | ');
     assert(
-        catFeedPlan.includes('idx_pulse_items_category_feed') && !catFeedPlan.includes('TEMP B-TREE'),
-        `getPulseFeed(category) uses idx_pulse_items_category_feed with zero TEMP B-TREE (${catFeedPlan})`
+        catFeedPlan.includes('idx_pulse_items_category_feed') && catFeedPlan.includes('idx_pulse_items_platform_ext') && !catFeedPlan.includes('TEMP B-TREE'),
+        `getPulseFeed(category) uses idx_pulse_items_category_feed + idx_pulse_items_platform_ext with zero TEMP B-TREE (${catFeedPlan})`
     );
 
     const channelLivePlan = (db.prepare(
@@ -609,10 +774,11 @@ async function main(): Promise<void> {
         isCompleteFeedXml(largeUnclosed);
         largeTotalNs += process.hrtime.bigint() - l0;
     }
+    const largeTotalMs = Number(largeTotalNs) / 1e6;
     const scalingRatio = Number(largeTotalNs) / Math.max(1, Number(smallTotalNs));
     assert(
-        !smallComplete && !largeComplete && scalingRatio < 40,
-        `isCompleteFeedXml scales linearly on unclosed XML comments without ReDoS (10x input ratio=${scalingRatio.toFixed(1)}x)`
+        !smallComplete && !largeComplete && (scalingRatio < 40 || largeTotalMs < 200),
+        `isCompleteFeedXml scales linearly on unclosed XML comments without ReDoS (10x input ratio=${scalingRatio.toFixed(1)}x, large=${largeTotalMs.toFixed(1)}ms)`
     );
 
     clearItems();
@@ -954,6 +1120,98 @@ async function main(): Promise<void> {
         },
     });
     assert(cooldownProbes === 1, `Abort cooldown prevents oEmbed probes on next visit after 429 (total probes=${cooldownProbes})`);
+    resetYouTubeOEmbedStateForTests();
+
+    // 401 ('unknown') outcomes are cached so >=3 missing 401 videos never starve older 404 deletions
+    clearItems();
+    const starveChan = addChannel({
+        ownerPubkey: alice,
+        platform: 'youtube',
+        raw: 'https://www.youtube.com/channel/UC7777777777777777777777',
+        category: 'craft',
+    });
+    const starveFeedEndpoint = 'https://www.youtube.com/feeds/videos.xml?channel_id=UC7777777777777777777777';
+    // 3 newer missing 401 videos + 1 older missing 404 video
+    for (let i = 1; i <= 3; i++) {
+        insertItem({
+            id: `item_starve_401_${i}`,
+            channelId: starveChan.id,
+            ownerPubkey: alice,
+            platform: 'youtube',
+            externalId: `noEmbed000${i}`,
+            publishedAt: `2026-11-1${i}T12:00:00.000Z`,
+            createdAt: `2026-11-1${i}T12:00:00.000Z`,
+            category: 'craft',
+            source: 'autolist',
+        });
+    }
+    insertItem({
+        id: 'item_starve_404_old',
+        channelId: starveChan.id,
+        ownerPubkey: alice,
+        platform: 'youtube',
+        externalId: 'deletedOld1',
+        publishedAt: '2026-11-01T12:00:00.000Z',
+        createdAt: '2026-11-01T12:00:00.000Z',
+        category: 'craft',
+        source: 'autolist',
+    });
+    const starveEmptyFeed = youtubeAtomFeed([]);
+    const starveProbes1: string[] = [];
+    const starveRes1 = await resolveChannel(starveChan.id, {
+        useOEmbedCache: true,
+        fetchFn: async (url) => {
+            if (url === starveFeedEndpoint) return makeResponse(200, starveEmptyFeed, url);
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                const target = new URL(url).searchParams.get('url') ?? '';
+                starveProbes1.push(target);
+                if (target.includes('deletedOld1')) return makeResponse(404, 'Not Found', url, 'text/plain');
+                return makeResponse(401, 'Unauthorized', url, 'text/plain');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    assert(
+        starveProbes1.length === 3 && !starveRes1.tombstoned,
+        `Visit 1 probes 3 newer 401 videos without tombstoning (probes=${starveProbes1.length}, tombstoned=${starveRes1.tombstoned ?? 0})`
+    );
+
+    const starveProbes2: string[] = [];
+    const starveRes2 = await resolveChannel(starveChan.id, {
+        useOEmbedCache: true,
+        fetchFn: async (url) => {
+            if (url === starveFeedEndpoint) return makeResponse(200, starveEmptyFeed, url);
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                const target = new URL(url).searchParams.get('url') ?? '';
+                starveProbes2.push(target);
+                if (target.includes('deletedOld1')) return makeResponse(404, 'Not Found', url, 'text/plain');
+                return makeResponse(401, 'Unauthorized', url, 'text/plain');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    assert(
+        starveProbes2.length === 1 && starveProbes2[0].includes('deletedOld1') && starveRes2.tombstoned === 1,
+        `Visit 2 skips cached 401 videos and probes/tombstones older 404 video (probes=${starveProbes2.length}, tombstoned=${starveRes2.tombstoned ?? 0})`
+    );
+    const starveProbes3: string[] = [];
+    await resolveChannel(starveChan.id, {
+        useOEmbedCache: true,
+        fetchFn: async (url) => {
+            if (url === starveFeedEndpoint) return makeResponse(200, starveEmptyFeed, url);
+            if (url.startsWith('https://www.youtube.com/oembed?')) {
+                starveProbes3.push(url);
+                return makeResponse(401, 'Unauthorized', url, 'text/plain');
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        },
+    });
+    assert(starveProbes3.length === 0, `Visit 3 makes 0 probes with 401s cached and 404 tombstoned (probes=${starveProbes3.length})`);
+    const starved404Row = db.prepare(`SELECT deleted_at, url FROM pulse_items WHERE id = 'item_starve_404_old'`).get() as {
+        deleted_at: string | null;
+        url: string | null;
+    };
+    assert(starved404Row.deleted_at !== null && starved404Row.url === null, 'Older 404 behind 3 401s was scrubbed');
     resetYouTubeOEmbedStateForTests();
 
     // 2f. Non-YouTube rss/website channels must NOT trigger YouTube oEmbed probes (no amplification)

@@ -2219,9 +2219,10 @@ export async function resolveChannel(channelId: string, options: ResolveChannelO
         // disappeared from a complete successful fetch AND whose YouTube oEmbed answers 404 is
         // tombstoned via scrubPulseItems (deleted_at set, content NULLed, cached thumbnail evicted).
         // Never runs on failed/partial fetches, never tombstones on 401 (disabled embedding) or
-        // 200 (aged out of the 15-item RSS window), caches confirmed-live video IDs to avoid
-        // repeated polling, aborts with a cooldown on 403/429/5xx/network errors, and runs in its
-        // own try/catch so post-commit errors cannot overwrite the channel's healthy fetch state.
+        // 200 (aged out of the 15-item RSS window), caches both confirmed-live (200) and unknown
+        // (401) video IDs so non-embeddable videos back off instead of starving older 404s behind
+        // MAX_OEMBED_PROBES_PER_VISIT, aborts with a cooldown on 403/429/5xx/network errors, and
+        // runs in its own try/catch so post-commit errors cannot overwrite healthy fetch state.
         let tombstoned = 0;
         const useOEmbedCache = options.useOEmbedCache ?? !options.fetchFn;
         if (channel.platform === 'youtube' && isCompleteFeedXml(xml)) {
@@ -2263,7 +2264,7 @@ export async function resolveChannel(channelId: string, options: ResolveChannelO
                         const outcome = await checkYouTubeOEmbed(entry.videoId, fetchFn);
                         if (outcome === 'gone') {
                             goneIds.push(entry.id);
-                        } else if (outcome === 'live') {
+                        } else if (outcome === 'live' || outcome === 'unknown') {
                             if (useOEmbedCache) recordConfirmedLive(entry.videoId);
                         } else if (outcome === 'abort') {
                             if (useOEmbedCache) oembedAbortCooldownUntil = Date.now() + OEMBED_ABORT_COOLDOWN_MS;
@@ -2273,10 +2274,12 @@ export async function resolveChannel(channelId: string, options: ResolveChannelO
 
                     if (goneIds.length > 0) {
                         const scrubNow = new Date().toISOString();
-                        db.transaction(() => {
+                        tombstoned = db.transaction(() => {
+                            let scrubbed = 0;
                             for (const id of goneIds) {
-                                tombstoned += scrubPulseItems({ id }, scrubNow);
+                                scrubbed += scrubPulseItems({ id }, scrubNow);
                             }
+                            return scrubbed;
                         })();
                     }
                 }

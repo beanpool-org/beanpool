@@ -21,7 +21,7 @@
  *     assistant-draft:<grant>; nobody gets a notice.
  * 12. Who is told: the admin queue's kind for an app that opens To check (?learn=1) and the assistant's overview; Needs you's
  *     `learn` line for lands=learn only, never in the admin line; nothing for a moderator or a member.
- * 13. No automation token and no Settings session reaches any route.
+ * 13. No automation token and no Settings session reaches any route, and no /api/local/admin/knowledge* route exists (404).
  * 14. A standby: the copy holds the suggestions and their photos; it refuses every write and reads its copy; a tombstone's
  *     delete takes its row.
  * 15. The switch off: every route 404 feature_off.
@@ -431,6 +431,18 @@ async function main(): Promise<void> {
         const byToken = await call(null, method, path, { ...PAGE, reason: 'other' }, { Authorization: `Bearer ${token}`, 'X-Admin-Token': token });
         const bySession = await call(null, method, path, { ...PAGE, reason: 'other' }, OWNER());
         assert(byToken.status === 401 && bySession.status === 401, `13. ${method} ${path.replace(m11, ':id')}: a token 401, a Settings session 401 (${byToken.status}, ${bySession.status})`);
+    }
+    const adminKnowledgeRoutes = [
+        ['GET', '/api/local/admin/knowledge'],
+        ['GET', '/api/local/admin/knowledge/drafts'],
+        ['GET', `/api/local/admin/knowledge/drafts/${m11}`],
+        ['POST', `/api/local/admin/knowledge/drafts/${m11}/approve`],
+        ['POST', `/api/local/admin/knowledge/drafts/${m11}/no`],
+    ] as const;
+    for (const [method, path] of adminKnowledgeRoutes) {
+        const bySession = await call(null, method, path, { reason: 'other' }, OWNER());
+        const byToken = await call(null, method, path, { reason: 'other' }, { Authorization: `Bearer ${token}`, 'X-Admin-Token': token });
+        assert(bySession.status === 404 && byToken.status === 404, `13. no ${method} ${path.replace(m11, ':id')} route exists: 404 (${bySession.status}, ${byToken.status})`);
     }
     assert(draftRow(m11)?.state === 'waiting', '13. and nothing changed');
 

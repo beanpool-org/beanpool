@@ -134,6 +134,49 @@ describe('HomeScreen Component', () => {
         expect(screen.queryByRole('button', { name: /asked to join/ })).toBeNull();
     });
 
+    it('shows a plain Home line for waiting Local knowledge drafts (count only, no button, owners/admins only)', () => {
+        const key = 'a'.repeat(64);
+        const { rerender } = render(
+            <HomeScreen
+                {...defaultProps}
+                viewer={{ kind: 'key', memberPubkey: key, role: 'owner' }}
+                nodeData={{ members: [], reportCount: 0, escrowDisputesCount: 0, knowledgeDraftCount: 9 }}
+            />,
+        );
+        const line = screen.getByTestId('home-knowledge-drafts-line');
+        expect(line.tagName).toBe('P');
+        expect(line).toHaveTextContent('9 Local knowledge drafts to check. Answer them in the BeanPool app, on Learn.');
+        expect(screen.queryByRole('button', { name: /Local knowledge/ })).toBeNull();
+        expect(screen.queryByRole('link', { name: /Local knowledge/ })).toBeNull();
+
+        rerender(
+            <HomeScreen
+                {...defaultProps}
+                viewer={{ kind: 'key', memberPubkey: key, role: 'admin' }}
+                nodeData={{ members: [], reportCount: 0, escrowDisputesCount: 0, knowledgeDraftCount: 1 }}
+            />,
+        );
+        expect(screen.getByTestId('home-knowledge-drafts-line')).toHaveTextContent('1 Local knowledge draft to check. Answer it in the BeanPool app, on Learn.');
+
+        rerender(
+            <HomeScreen
+                {...defaultProps}
+                viewer={{ kind: 'key', memberPubkey: key, role: 'moderator' }}
+                nodeData={{ members: [], reportCount: 0, escrowDisputesCount: 0, knowledgeDraftCount: 9 }}
+            />,
+        );
+        expect(screen.queryByTestId('home-knowledge-drafts-line')).toBeNull();
+
+        rerender(
+            <HomeScreen
+                {...defaultProps}
+                viewer={{ kind: 'key', memberPubkey: key, role: 'owner' }}
+                nodeData={{ members: [], reportCount: 0, escrowDisputesCount: 0, knowledgeDraftCount: 0 }}
+            />,
+        );
+        expect(screen.queryByTestId('home-knowledge-drafts-line')).toBeNull();
+    });
+
     it('resets shutdownDismissed state when active node communityName or diagnostic status changes', async () => {
         const mockDiag1: any = {
             shutdownStatus: {

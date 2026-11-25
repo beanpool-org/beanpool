@@ -16,25 +16,47 @@ import type { KnowledgeDraftMine } from '@beanpool/core';
 import { useIdentity } from '../../app/IdentityContext';
 import { cachedNodeRoleHeard, forgetNodeRole } from '../../utils/node-admin';
 import { anchorUrl } from '../../utils/node-post';
-import { signedGet } from '../../utils/db';
+import { LIST_READ_BACKSTOP_MS, signedGet } from '../../utils/db';
 
 export interface LearnWriter {
     /** An owner or admin here. False until heard, and when it can't be. */
     checks: boolean;
     /** The member's own suggestions waiting; 0 until heard, and for an owner or admin. */
     waiting: number;
+    /** Suggestions waiting for an owner or admin to check; 0 until heard, and for a member. */
+    toCheck: number;
 }
 
 /** GET /api/knowledge/drafts/mine as My suggestions reads it, or null when it can't be had. */
-export async function readMyDrafts(signal?: AbortSignal): Promise<{ waiting: KnowledgeDraftMine[]; answered: KnowledgeDraftMine[] } | null> {
+export async function readMyDrafts(signal?: AbortSignal, url?: string | null): Promise<{ waiting: KnowledgeDraftMine[]; answered: KnowledgeDraftMine[] } | null> {
     try {
-        const res = await signedGet('/api/knowledge/drafts/mine', signal ? { signal } : undefined);
+        const opts = signal || url !== undefined
+            ? { ...(signal ? { signal, deadlineMs: LIST_READ_BACKSTOP_MS } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
+            : undefined;
+        const res = await signedGet('/api/knowledge/drafts/mine', opts);
         if (!res.ok) return null;
         const body = await res.json();
         if (!Array.isArray(body?.waiting) || !Array.isArray(body?.answered)) return null;
         return { waiting: body.waiting, answered: body.answered };
     } catch {
         return null;
+    }
+}
+
+/** How many Local knowledge drafts are waiting for an owner or admin to check (GET /api/node-admin/queue?learn=1), or 0 when unavailable. */
+export async function readToCheckCount(signal?: AbortSignal, url?: string | null): Promise<number> {
+    try {
+        const opts = signal || url !== undefined
+            ? { ...(signal ? { signal, deadlineMs: LIST_READ_BACKSTOP_MS } : {}), ...(url !== undefined ? { anchorUrl: url } : {}) }
+            : undefined;
+        const res = await signedGet('/api/node-admin/queue?learn=1', opts);
+        if (!res.ok) return 0;
+        const body = await res.json();
+        if (!Array.isArray(body?.items)) return 0;
+        const item = body.items.find((i: { kind?: unknown; count?: unknown }) => i?.kind === 'knowledge_drafts');
+        return typeof item?.count === 'number' && Number.isFinite(item.count) ? Math.max(0, item.count) : 0;
+    } catch {
+        return 0;
     }
 }
 
@@ -48,21 +70,25 @@ export async function forgetLearnRole(identity: { publicKey?: string } | null | 
     if (url) forgetNodeRole(url, identity.publicKey);
 }
 
-/** `countWaiting` false: the role alone (a page's tools, slice K5), with no read of My suggestions. */
+/** `countWaiting` false: the role alone (a page's tools, slice K5), with no read of My suggestions or To check. */
 export function useLearnWriter(live: boolean, countWaiting = true): LearnWriter {
     const { identity } = useIdentity();
-    const [writer, setWriter] = useState<LearnWriter>({ checks: false, waiting: 0 });
+    const [writer, setWriter] = useState<LearnWriter>({ checks: false, waiting: 0, toCheck: 0 });
     useFocusEffect(useCallback(() => {
         if (!live || !identity?.publicKey || !identity.privateKey) return undefined;
         let gone = false;
+        const stop = new AbortController();
         (async () => {
             const url = await anchorUrl().catch(() => null);
+            if (gone) return;
             const role = url ? (await cachedNodeRoleHeard(url, identity))?.role : null;
+            if (gone) return;
             const checks = role === 'owner' || role === 'admin';
-            const mine = checks || !countWaiting ? null : await readMyDrafts();
-            if (!gone) setWriter({ checks, waiting: mine?.waiting.length ?? 0 });
+            const mine = !url || checks || !countWaiting ? null : await readMyDrafts(stop.signal, url);
+            const toCheck = url && checks && countWaiting ? await readToCheckCount(stop.signal, url) : 0;
+            if (!gone) setWriter({ checks, waiting: mine?.waiting.length ?? 0, toCheck });
         })().catch(() => {});
-        return () => { gone = true; };
+        return () => { gone = true; stop.abort(); };
     }, [live, identity, countWaiting]));
     return writer;
 }

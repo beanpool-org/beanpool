@@ -22,7 +22,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { leaveScreen } from '../utils/leave-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    KNOWLEDGE_NAMES, isKnowledgeTopic, t, type KnowledgeRow,
+    KNOWLEDGE_NAMES, LEARN_HOME_WORDS, formatCount, isKnowledgeTopic, t, tn, type KnowledgeRow,
 } from '@beanpool/core';
 import { useStyles, useTheme } from './ThemeContext';
 import { ExampleHeader } from '../components/showcase/LocalCommunityMark';
@@ -102,6 +102,9 @@ export default function LearnScreen() {
         standing: { fontSize: 12.5, color: c.text.secondary, marginTop: 8 },
         waiting: { minHeight: 44, justifyContent: 'center' },
         waitingText: { fontSize: 14, fontWeight: '800', color: c.chip.learn.fg },
+        toCheck: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
+        toCheckMark: { fontSize: 13, fontWeight: '700', color: c.feedback.warning.fg },
+        toCheckText: { flexShrink: 1, fontSize: 14, fontWeight: '800', color: c.feedback.warning.fg },
         foot: {
             paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border.default, backgroundColor: c.surface.chrome,
         },
@@ -251,6 +254,15 @@ export default function LearnScreen() {
                 {!preview && !writer.checks && writer.waiting > 0 ? (
                     <Pressable accessibilityRole="button" onPress={() => router.push('/learn/mine')} style={styles.waiting} testID="learn-waiting">
                         <Text style={styles.waitingText}>{waitingLine(writer.waiting)}</Text>
+                    </Pressable>
+                ) : null}
+
+                {!preview && writer.checks && writer.toCheck > 0 ? (
+                    <Pressable accessibilityRole="button" onPress={() => router.push('/learn/check')} style={styles.toCheck} testID="learn-check-line">
+                        <Text style={styles.toCheckMark} importantForAccessibility="no">▲</Text>
+                        <Text style={styles.toCheckText}>
+                            {tn(writer.toCheck, LEARN_HOME_WORDS.toCheck.one, LEARN_HOME_WORDS.toCheck.other, { n: formatCount(writer.toCheck) })}
+                        </Text>
                     </Pressable>
                 ) : null}
 

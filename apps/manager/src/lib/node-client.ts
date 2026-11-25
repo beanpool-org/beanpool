@@ -316,6 +316,8 @@ export interface NodeDataPayload {
     escrowDisputesCount?: number;
     /** Requests to join waiting for an answer (front doors S1); absent from a server from before them. */
     knockCount?: number;
+    /** Local knowledge suggestions waiting for an owner or admin to check (engine/knowledge-drafts.ts). */
+    knowledgeDraftCount?: number;
     /** Each member's posts and messages counts; no member's trades (queue item 29). */
     memberStats?: Record<string, unknown>;
     /**
@@ -975,6 +977,10 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
 
     if (typeof data.knockCount === 'number') {
         result.knockCount = data.knockCount;
+    }
+
+    if (typeof data.knowledgeDraftCount === 'number') {
+        result.knowledgeDraftCount = data.knowledgeDraftCount;
     }
 
     return result;

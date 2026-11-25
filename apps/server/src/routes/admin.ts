@@ -123,6 +123,7 @@ import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
 import { actionableKnockCount } from '../engine/knocks.js';
+import { knowledgeDraftCount } from '../engine/knowledge-drafts.js';
 import { likeContains, withoutTradeParty, parsePageKey, memberBadge, type SyncPage } from '@beanpool/engine';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
 
@@ -997,6 +998,9 @@ router.post('/api/local/admin/data', async (ctx) => {
         // Requests to join waiting for an answer (front doors S1): a count, no names. Home's Action Required says where
         // they are answered (People → Invites in the app); the manager has no list of them.
         knockCount: actionableKnockCount(),
+        // Local knowledge suggestions waiting for an owner or admin to check (engine/knowledge-drafts.ts): a count, no names.
+        // Settings Home shows only the count and says where they are answered (in the BeanPool app, on Learn).
+        knowledgeDraftCount: knowledgeDraftCount(),
         // Of trades, only the community's totals (queue item 29, Marty 4 Oct).
         tradeTotals: getTradeTotals(),
         // The Commons pot, as members' apps show it (public in /api/community/info): Settings' Home card. Before this the

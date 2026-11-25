@@ -74,7 +74,7 @@ export default function NewKnowledgeScreen() {
     const [tries, setTries] = useState(0);
     const [note, setNote] = useState('');
     const live = useLearnMode() === 'live';
-    const writer = useLearnWriter(live);
+    const writer = useLearnWriter(live, false);
     const { identity } = useIdentity();
     // The node knows best, over the role remembered for ten minutes: a member it says is an owner or admin publishes instead
     // (`publish_instead`), and an owner or admin no longer suggests (`admins_only`).

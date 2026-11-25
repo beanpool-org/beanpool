@@ -29,9 +29,11 @@ export const FIRST_SCREEN_EXITS = {
     'chat/[id]': '/(tabs)/chats',
     // A group's invitation: the Chat tab, where the groups are.
     'group/[id]': '/(tabs)/chats',
-    // A Learn page (Local knowledge) and My suggestions, from their notice: Learn's list for the suggestions, Home for Learn.
+    // A Learn page (Local knowledge), My suggestions, and To check, from their notice: Learn's list for the suggestions, Home for Learn.
     'learn': '/(tabs)',
     'learn/mine': '/learn',
+    'learn/check': '/learn',
+    'learn/check/[id]': '/learn/check',
     // An enterprise's keepers' console, from its vote's notice.
     'treasury-manage': '/(tabs)',
     // Shared outside, from the notice that someone asked to join after a shared listing: the app's start, where the root guard

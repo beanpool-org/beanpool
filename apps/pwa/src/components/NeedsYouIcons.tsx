@@ -143,11 +143,10 @@ function BellSvg({ shadow = false, small = false }: { shadow?: boolean; small?: 
 
 /** `shadow`: on the header's photo, the phone's icon shadow (black at 75%, 1 px down, 4 px soft), so the icon reads on the vines. */
 /**
- * The kinds of line this app draws: core's, and Learn's To check (slice K4), which the node sends only to an app that asks with
- * `lands=learn` (routes/home-answer.ts NeedsKind) and orders after a member's ask. Kept here so the phone's own kinds don't change.
+ * The kinds of line this app draws: core's one priority list, including Learn's To check (slice K4).
  */
-export type WebNeedsKind = NeedsYouKind | 'learn';
-export const WEB_NEEDS_PRIORITY: readonly WebNeedsKind[] = NEEDS_YOU_PRIORITY.flatMap((k): WebNeedsKind[] => (k === 'ask' ? [k, 'learn'] : [k]));
+export type WebNeedsKind = NeedsYouKind;
+export const WEB_NEEDS_PRIORITY: readonly WebNeedsKind[] = NEEDS_YOU_PRIORITY;
 
 function NeedSvg({ kind, shadow = false }: { kind: WebNeedsKind; shadow?: boolean }) {
     const cls = `w-[20px] h-[20px] shrink-0${shadow ? ' drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]' : ''}`;

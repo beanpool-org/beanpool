@@ -328,4 +328,34 @@ describe('Settings Home after the phone link: real figures, or "couldn\'t load",
         // The Alerts card, where the alert is listed and marked seen.
         expect(await screen.findByTestId('server-alerts')).toBeInTheDocument();
     });
+
+    it('a node with 9 Local knowledge drafts to check shows a plain Home line telling the owner to answer them on Learn (no button, no admin knowledge fetch)', async () => {
+        const node: NodeStub = {
+            signedIn: false, hold: false, held: [],
+            data: () => ok({ ...communityData(), knowledgeDraftCount: 9 }),
+            diag: () => ok(diagnostics()),
+        };
+        const fetchMock = stubNode(node);
+        await openFromPhone();
+        const panel = await screen.findByTestId('home-action-required');
+        const line = await within(panel).findByTestId('home-knowledge-drafts-line');
+        expect(line).toHaveTextContent('9 Local knowledge drafts to check. Answer them in the BeanPool app, on Learn.');
+        expect(within(panel).queryByRole('button', { name: /Local knowledge/ })).toBeNull();
+        expect(within(panel).queryByRole('link', { name: /Local knowledge/ })).toBeNull();
+        expect(within(panel).queryByText(/All clear/)).toBeNull();
+        expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/local/admin/knowledge'))).toBe(false);
+    });
+
+    it('a node with no Local knowledge drafts to check shows no Local knowledge line', async () => {
+        const node: NodeStub = {
+            signedIn: false, hold: false, held: [],
+            data: () => ok({ ...communityData(), knowledgeDraftCount: 0 }),
+            diag: () => ok(diagnostics()),
+        };
+        stubNode(node);
+        await openFromPhone();
+        await waitFor(() => expect(card(/Members/)).toHaveTextContent('34'));
+        expect(screen.queryByTestId('home-knowledge-drafts-line')).toBeNull();
+        expect(screen.queryByText(/Local knowledge/)).toBeNull();
+    });
 });

@@ -3555,8 +3555,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                     // The fee as the node takes it: core feeOf, whole hundredths, truncated once.
                                     const net = parsed - feeOf(parsed);
                                     return newPostType === 'offer'
-                                        ? t('1.5% fee: You will receive {amount} B.', { amount: formatHundredths(net) })
-                                        : t('1.5% fee: Fulfiller receives {amount} B.', { amount: formatHundredths(net) });
+                                        ? t('1.5% fee: You will receive {amount} Beans.', { amount: formatHundredths(net) })
+                                        : t('1.5% fee: Fulfiller receives {amount} Beans.', { amount: formatHundredths(net) });
                                 }
                                 return t('1.5% transaction fee funds community projects & solvency.');
                             })()}{' '}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">{t('Learn more ⓘ')}</span>

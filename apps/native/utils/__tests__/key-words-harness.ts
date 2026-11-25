@@ -11,7 +11,8 @@
 import { createElement, useEffect } from 'react';
 
 /** What the screen said in alerts: titles, bodies and buttons, in order. */
-export interface Said { said: string[] }
+/** `pressable`: the last Alert's buttons, for a test that presses one (optional: a test that only reads the words leaves it out). */
+export interface Said { said: string[]; pressable?: Array<{ text?: string; onPress?: () => void }> }
 
 const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', checkbox: 'checkbox', alert: 'alert', progressbar: 'progressbar' };
 const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(8).filter((x) => x && typeof x === 'object'));
@@ -52,7 +53,8 @@ export function nativeMock(said: Said) {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
         Alert: {
-            alert: (title: string, body?: string, buttons?: Array<{ text?: string }>) => {
+            alert: (title: string, body?: string, buttons?: Array<{ text?: string; onPress?: () => void }>) => {
+                said.pressable = buttons ?? [];
                 if (title) said.said.push(title);
                 if (body) said.said.push(body);
                 for (const b of buttons ?? []) if (b.text) said.said.push(b.text);

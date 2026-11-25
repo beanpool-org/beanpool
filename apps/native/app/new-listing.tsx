@@ -1074,7 +1074,7 @@ export default function NewListingScreen() {
                                         const parsed = parseHundredths(postCredits);
                                         if (parsed.ok && parsed.value > 0) {
                                             const net = formatHundredths(parsed.value - feeOf(parsed.value));
-                                            return postType === 'offer' ? t('1.5% fee: You will receive {amount} B.', { amount: net }) : t('1.5% fee: Fulfiller receives {amount} B.', { amount: net });
+                                            return postType === 'offer' ? t('1.5% fee: You will receive {amount} Beans.', { amount: net }) : t('1.5% fee: Fulfiller receives {amount} Beans.', { amount: net });
                                         }
                                         return t('1.5% transaction fee funds community projects & solvency.');
                                     })()}{' '}<Text style={{ color: colors.feedback.warning.fg, fontWeight: 'bold' }}>{t('Learn more ⓘ')}</Text>

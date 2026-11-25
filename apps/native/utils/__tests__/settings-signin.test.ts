@@ -90,7 +90,7 @@ describe('reading the scanned code', () => {
     });
 
     it('garbage, other QR codes and damaged sign-in codes are refused', () => {
-        for (const junk of [undefined, null, 42, '', 'hello', 'https://mullum.beanpool.org/?invite=ABC', 'beanpool://pair?x=1', '{"sessionId":"x"}']) {
+        for (const junk of [undefined, null, 42, '', 'hello', 'https://mullum.beanpool.org/?invite=ABC', '{"sessionId":"x"}']) {
             expect(readSigninScan(junk, APP_NODE).kind).toBe('not-signin');
         }
         const damaged = [
@@ -102,6 +102,25 @@ describe('reading the scanned code', () => {
             'beanpool-settings-signin:v1?' + 'x'.repeat(500),
         ];
         for (const d of damaged) expect(readSigninScan(d, APP_NODE).kind).toBe('malformed');
+    });
+
+    it("the web app's Link with Mobile App code is Link a device's, readable or not: the scanner says so and names it (Marty, 24 Nov)", () => {
+        // Before: "Not a sign-in code", and nothing said where the code belongs.
+        const web = `beanpool://pair?session=${'ab'.repeat(16)}&pub=${'cd'.repeat(32)}&node=${encodeURIComponent('https://riverside.example')}`;
+        for (const code of [web, `  ${web}  `, 'beanpool://pair?x=1', 'BEANPOOL://PAIR?session=1']) {
+            expect(readSigninScan(code, APP_NODE).kind, code).toBe('device-link');
+            expect(readSigninScan(code, null).kind, `${code}, no node`).toBe('device-link');
+        }
+        // The web's Bring to phone code shares the prefix but is not a device-link code (#3384 review).
+        for (const code of ['beanpool://pair-in?session=s&pub=p&node=n', 'BEANPOOL://PAIR-IN?session=1', 'beanpool://pairing?x=1']) {
+            expect(readSigninScan(code, APP_NODE).kind, code).not.toBe('device-link');
+        }
+        const m = scanProblemMessage({ kind: 'device-link' });
+        expect(m.title).toBe('A code to link a device');
+        expect(m.message).toContain('Settings → Link a device');
+        // A sign-in code is still a sign-in code, and anything else still isn't one.
+        expect(readSigninScan(qrText(), APP_NODE).kind).toBe('ok');
+        expect(readSigninScan('https://riverside.example/pair?session=1', APP_NODE).kind).toBe('not-signin');
     });
 
     it('with no node set up, says so rather than approving anywhere', () => {

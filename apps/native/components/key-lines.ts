@@ -81,6 +81,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Connect to your community first.': word('Connect to your community first.'),
     'It looks like a sign-in code but part of it is missing. Get a new code on the computer and scan again.': word('It looks like a sign-in code but part of it is missing. Get a new code on the computer and scan again.'),
     'Not a sign-in code': word('Not a sign-in code'),
+    'A code to link a device': word('A code to link a device'),
+    'That code copies your own account to a browser. Open Settings → Link a device and scan it there.': word('That code copies your own account to a browser. Open Settings → Link a device and scan it there.'),
     "That isn't a BeanPool Settings sign-in code. On the computer, open your community's Settings and choose “Sign in with your phone”.": word("That isn't a BeanPool Settings sign-in code. On the computer, open your community's Settings and choose “Sign in with your phone”."),
     "The code on the computer doesn't match this QR. Get a new code on the computer and scan again.": word("The code on the computer doesn't match this QR. Get a new code on the computer and scan again."),
     'Could not reach the node.': word('Could not reach the node.'),

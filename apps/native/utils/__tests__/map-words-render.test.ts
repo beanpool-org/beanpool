@@ -389,7 +389,7 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
 
         // The price: a figure gives the fee line with the amount in it; the unit button steps through its words.
         await type(byLabel(xx('Price')), '10');
-        expect(host.textContent).toContain(xx('1.5% fee: You will receive {amount} B.').replace('{amount}', '9.85'));
+        expect(host.textContent).toContain(xx('1.5% fee: You will receive {amount} Beans.').replace('{amount}', '9.85'));
         await click(byText(xx('Total')), 'the unit button');
         expect(byText(xx('/ Hr'))).not.toBeNull();
         // Cash too, and the reach chooser's partners.
@@ -408,7 +408,7 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(host.textContent).not.toContain(xx('Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.'));
         expect(host.textContent).toContain(xx('💡 Contributions First'));
         expect(byText(xx('🟢 List an Offer first to post Needs'))).not.toBeNull();
-        expect(host.textContent).toContain(xx('1.5% fee: Fulfiller receives {amount} B.').replace('{amount}', '9.85'));
+        expect(host.textContent).toContain(xx('1.5% fee: Fulfiller receives {amount} Beans.').replace('{amount}', '9.85'));
         expect(bypassing(), 'the form, filled').toEqual([]);
         // The category sheet.
         await click(buttonHolding(xx('Select a category...')), 'the category field');
@@ -555,7 +555,7 @@ describe('the Map in English: the words are as they were', () => {
         const fee = () => Array.from(host.querySelectorAll('span')).find((s) => s.textContent?.startsWith('1.5% '))!.textContent;
         expect(fee()).toBe('1.5% transaction fee funds community projects & solvency. Learn more ⓘ (100% community owned)');
         await type(byLabel('Price'), '10');
-        expect(fee()).toBe('1.5% fee: You will receive 9.85 B. Learn more ⓘ (100% community owned)');
+        expect(fee()).toBe('1.5% fee: You will receive 9.85 Beans. Learn more ⓘ (100% community owned)');
         expect(byText('Total')).not.toBeNull();
         expect(byText('FREE')).not.toBeNull();
         await click(byText('🤝 Chosen'), 'Chosen');
@@ -578,7 +578,7 @@ describe('the listing screen (app/new-listing.tsx): the form out of the map, ope
         expect(title(), 'the form').not.toBeNull();
         expect(host.textContent).not.toContain('Contributions First');
         await type(byLabel('Price'), '10');
-        expect(host.textContent).toContain('1.5% fee: Fulfiller receives 9.85 B.');
+        expect(host.textContent).toContain('1.5% fee: Fulfiller receives 9.85 Beans.');
         // Photos are asked for, as every Offer and Need asks.
         expect(Array.from(host.querySelectorAll('span')).some((x) => x.textContent === 'PHOTOS * (min 1)')).toBe(true);
     });

@@ -2554,6 +2554,11 @@ export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): 
         params.push(options.category);
     }
 
+    // Keyset pagination on (published_at, id), not published_at alone. A feed
+    // routinely publishes a batch of items with one identical timestamp, and
+    // `published_at < cursor` drops every one of them that did not fit on the
+    // page. COALESCE keeps NULL-dated items reachable too: `NULL < cursor` is
+    // NULL, so under the old clause they could never appear past page 1.
     const cursor = options.cursor && typeof options.cursor === 'string' ? decodePulseCursor(options.cursor) : null;
     if (cursor) {
         const { sortKey, id } = cursor;

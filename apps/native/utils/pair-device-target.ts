@@ -31,7 +31,7 @@
  * sent. One that answers as something else, or an older server, gets nothing ('replaced'); one that doesn't answer gets
  * nothing yet ('not-answering'). A community whose server can't say who it is (no key: an older server) keeps today's rule.
  */
-import { addressOf, t } from '@beanpool/core';
+import { addressOf, parseSettingsSigninQr, t } from '@beanpool/core';
 import { plainOriginOf } from './node-url';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { communityRecordNaming, communityRecordOf, recordHolds, type CommunityRecord } from './community-index';
@@ -85,20 +85,35 @@ export function isUnreadablePairingQr(raw: unknown): boolean {
 }
 
 /**
+ * Whether a scanned code is the web app's "Link with Mobile App" code (`beanpool://pair?…`), readable or not: the
+ * Settings sign-in scanner sends it to Link a device (utils/settings-signin.ts readSigninScan).
+ */
+export function isDeviceLinkCode(raw: unknown): boolean {
+    if (parsePairingQr(raw) !== null) return true;
+    // Only the `pair` segment itself: `beanpool://pair-in?…` is the web's Bring to phone code (app/pair-in.tsx reads it
+    // from Welcome → Scan from a browser), which Link a device would refuse (#3384 review).
+    return isUnreadablePairingQr(raw) && /^beanpool:\/\/pair(?:[?/#]|$)/.test((raw as string).trim().toLowerCase());
+}
+
+/**
  * What one code means to the pairing screen, read the same way however it arrived: the camera on the screen, or a
  * `beanpool://pair` link the phone's camera app (or any other) opened (utils/pair-link.ts, app/+native-intent.ts).
  *  - 'pairing': the strict grammar read it; the screen still asks transferTarget where it may go, and sends nothing
  *    before the member's tap, the phone's unlock and the four digits.
  *  - 'unreadable': refused, said so, nothing sent. Any link is, when the grammar refuses it: a link was opened on
  *    purpose, so it is never silently dropped.
+ *  - 'settings-signin': a node's Settings sign-in code (`beanpool-settings-signin:v1?…`, readable or not) in the camera's
+ *    view: Settings → Manage this community from a computer's (app/settings-signin.tsx), never this screen's. Nothing read.
  *  - 'ignore': some other QR in the camera's view.
  */
-export type PairingRead = { kind: 'pairing'; qr: PairingQr } | { kind: 'unreadable' } | { kind: 'ignore' };
+export type PairingRead = { kind: 'pairing'; qr: PairingQr } | { kind: 'unreadable' } | { kind: 'settings-signin' } | { kind: 'ignore' };
 
 export function readPairingCode(raw: unknown, source: 'camera' | 'link'): PairingRead {
     const qr = parsePairingQr(raw);
     if (qr) return { kind: 'pairing', qr };
-    return source === 'link' || isUnreadablePairingQr(raw) ? { kind: 'unreadable' } : { kind: 'ignore' };
+    if (source === 'link' || isUnreadablePairingQr(raw)) return { kind: 'unreadable' };
+    const signin = parseSettingsSigninQr(raw);
+    return signin.ok || signin.reason === 'malformed' ? { kind: 'settings-signin' } : { kind: 'ignore' };
 }
 
 /** The key an address must prove with at the scan, and the highest take-over count the phone has seen for it. */

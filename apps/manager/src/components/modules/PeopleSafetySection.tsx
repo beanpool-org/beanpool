@@ -27,7 +27,6 @@ import { ReportedGroupMessage } from './ReportedGroupMessage';
 import { ReportedDirectMessage } from './ReportedDirectMessage';
 import { ReportedComplaint } from './ReportedComplaint';
 import { AgentSuggestionsPanel } from './AgentSuggestionsPanel';
-import { KnowledgeDraftsPanel } from './KnowledgeDraftsPanel';
 import { useInPageConfirm } from '../common/InPageConfirm';
 
 interface PeopleSafetySectionProps {
@@ -471,16 +470,6 @@ export function PeopleSafetySection({
                             )}
                         </SectionErrorBoundary>
                     )}
-
-                    {/* Local knowledge suggestions waiting to check: owners and admins answer them here or in Learn. */}
-                    <SectionErrorBoundary sectionName="Local knowledge to check" resetKey={activeNode.id}>
-                        <KnowledgeDraftsPanel
-                            activeNode={activeNode}
-                            viewer={rolesViewer}
-                            draftCount={typeof nodeData?.knowledgeDraftCount === 'number' ? nodeData.knowledgeDraftCount : 0}
-                            onChanged={refreshReports}
-                        />
-                    </SectionErrorBoundary>
 
                     {/* An AI assistant's suggestions (admin MCP S4): approved by its member, the report beside each. */}
                     <SectionErrorBoundary sectionName="AI assistant suggestions" resetKey={activeNode.id}>

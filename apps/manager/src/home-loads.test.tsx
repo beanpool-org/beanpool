@@ -52,8 +52,6 @@ interface NodeStub {
     diag: () => Promise<unknown>;
     /** What /admin/takeover/status answers once signed in; a main server with a recovery code when not given. */
     takeover?: () => Promise<unknown>;
-    /** What /admin/knowledge/drafts answers once signed in: the Local knowledge drafts to check (none when not given). */
-    knowledge?: () => Promise<unknown>;
     /** Requests made before the sign-in finished, held until the test lets them answer. */
     held: Array<() => void>;
     hold: boolean;
@@ -78,7 +76,6 @@ function stubNode(node: NodeStub) {
         if (u.includes(DATA)) return node.data();
         if (u.includes(DIAGNOSTICS)) return node.diag();
         if (u.includes(TAKEOVER_STATUS)) return node.takeover ? node.takeover() : ok(takeoverStatus());
-        if (u.includes('/api/local/admin/knowledge/drafts')) return node.knowledge ? node.knowledge() : ok({ drafts: [], total: 0, limit: 50, offset: 0, unchecked: { total: 0, rows: [] } });
         return ok({ success: true, health: { flags: [] }, reports: [] });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -332,29 +329,24 @@ describe('Settings Home after the phone link: real figures, or "couldn\'t load",
         expect(await screen.findByTestId('server-alerts')).toBeInTheDocument();
     });
 
-    it('a node with 9 Local knowledge drafts to check lists them in Action Required, opening People & Safety; none when there are none', async () => {
+    it('a node with 9 Local knowledge drafts to check shows a plain Home line telling the owner to answer them on Learn (no button, no admin knowledge fetch)', async () => {
         const node: NodeStub = {
             signedIn: false, hold: false, held: [],
             data: () => ok({ ...communityData(), knowledgeDraftCount: 9 }),
             diag: () => ok(diagnostics()),
-            knowledge: () => ok({
-                drafts: Array.from({ length: 9 }, (_, i) => ({ id: `d${i}`, kind: 'new', title: `Draft ${i}`, topic: 'food', from: { pubkey: 'cd'.repeat(32), name: 'Bea' }, assistant: null, createdAt: '2026-11-20T00:00:00.000Z' })),
-                total: 9, limit: 50, offset: 0, unchecked: { total: 0, rows: [] },
-            }),
         };
-        stubNode(node);
+        const fetchMock = stubNode(node);
         await openFromPhone();
         const panel = await screen.findByTestId('home-action-required');
-        await waitFor(() => expect(within(panel).getByText('Local knowledge to check: 9')).toBeInTheDocument());
-        await act(async () => {
-            fireEvent.click(within(panel).getByRole('button', { name: /Local knowledge to check: 9/ }));
-        });
-        // People & Safety → Triage & Moderation, where the same 9 are listed to open and answer.
-        const drafts = await screen.findByTestId('knowledge-drafts-card');
-        await waitFor(() => expect(within(drafts).getByText('Local knowledge to check (9)')).toBeInTheDocument());
+        const line = await within(panel).findByTestId('home-knowledge-drafts-line');
+        expect(line).toHaveTextContent('9 Local knowledge drafts to check. Answer them in the BeanPool app, on Learn.');
+        expect(within(panel).queryByRole('button', { name: /Local knowledge/ })).toBeNull();
+        expect(within(panel).queryByRole('link', { name: /Local knowledge/ })).toBeNull();
+        expect(within(panel).queryByText(/All clear/)).toBeNull();
+        expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/local/admin/knowledge'))).toBe(false);
     });
 
-    it('a node with no Local knowledge drafts to check lists none', async () => {
+    it('a node with no Local knowledge drafts to check shows no Local knowledge line', async () => {
         const node: NodeStub = {
             signedIn: false, hold: false, held: [],
             data: () => ok({ ...communityData(), knowledgeDraftCount: 0 }),
@@ -363,6 +355,7 @@ describe('Settings Home after the phone link: real figures, or "couldn\'t load",
         stubNode(node);
         await openFromPhone();
         await waitFor(() => expect(card(/Members/)).toHaveTextContent('34'));
-        expect(screen.queryByText(/Local knowledge to check/)).toBeNull();
+        expect(screen.queryByTestId('home-knowledge-drafts-line')).toBeNull();
+        expect(screen.queryByText(/Local knowledge/)).toBeNull();
     });
 });

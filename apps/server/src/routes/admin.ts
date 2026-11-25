@@ -999,6 +999,7 @@ router.post('/api/local/admin/data', async (ctx) => {
         // they are answered (People → Invites in the app); the manager has no list of them.
         knockCount: actionableKnockCount(),
         // Local knowledge suggestions waiting for an owner or admin to check (engine/knowledge-drafts.ts): a count, no names.
+        // Settings Home shows only the count and says where they are answered (in the BeanPool app, on Learn).
         knowledgeDraftCount: knowledgeDraftCount(),
         // Of trades, only the community's totals (queue item 29, Marty 4 Oct).
         tradeTotals: getTradeTotals(),

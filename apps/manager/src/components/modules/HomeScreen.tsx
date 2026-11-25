@@ -12,8 +12,6 @@ import type { RolesViewer } from './NodeRolesPanel';
 
 /** The Alerts card (AlertsPanel, under Backups & Restore): where each of the server's alerts is listed and marked seen. */
 export const SERVER_ALERTS_ANCHOR = 'server-alerts';
-/** The Local knowledge drafts card (KnowledgeDraftsPanel, under People & Safety → Triage & Moderation). */
-export const KNOWLEDGE_DRAFTS_ANCHOR = 'knowledge-drafts';
 
 type HomeTab = 'shape' | 'people' | 'economy' | 'bulletin' | 'appliance';
 
@@ -274,19 +272,11 @@ export function HomeScreen({
         });
     }
 
-    // Local knowledge suggestions waiting for an owner or admin to check: opens Triage & Moderation at the drafts panel.
+    // Local knowledge suggestions waiting for an owner or admin to check: answered only in the apps (phone Learn or web
+    // Learn), never in Settings. Home shows at most a plain count line telling owners and admins where to answer them.
     const knowledgeDraftCount = typeof nodeData?.knowledgeDraftCount === 'number' ? nodeData.knowledgeDraftCount : 0;
     const canCheckKnowledge = !viewer || viewer.kind === 'token' || viewer.role === 'owner' || viewer.role === 'admin';
-    if (canCheckKnowledge && knowledgeDraftCount > 0) {
-        actionItems.push({
-            key: 'knowledge-drafts',
-            icon: '📖',
-            text: `Local knowledge to check: ${knowledgeDraftCount}`,
-            tab: 'people',
-            sub: 'moderation',
-            anchor: KNOWLEDGE_DRAFTS_ANCHOR,
-        });
-    }
+    const knowledgeDraftLine = canCheckKnowledge && knowledgeDraftCount > 0;
 
     // Core settings nobody has confirmed (Core settings design §3): offered to owners, never forced; it ends when the lock row exists.
     const coreUnconfirmed = Boolean(communityShape && !communityShape.standby && communityShape.core && !communityShape.core.lock);
@@ -621,7 +611,7 @@ export function HomeScreen({
                     // The words the phone's "Needs you" said, so the owner who tapped it sees what it meant.
                     <p className="text-xs font-semibold text-nature-200 m-0">This server has alerts: {serverAlerts!.count}</p>
                 )}
-                {actionItems.length === 0 && unchecked.length === 0 && !coreAdminLine && (
+                {actionItems.length === 0 && unchecked.length === 0 && !coreAdminLine && !knowledgeDraftLine && (
                     <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-4 py-3 rounded-xl">
                         <span>🟢</span>
                         <span>All clear — node is running cleanly with no pending actions.</span>
@@ -630,6 +620,13 @@ export function HomeScreen({
                 {coreAdminLine && (
                     <p data-testid="home-core-admin-line" className="text-xs text-nature-300 m-0 p-3 rounded-xl bg-nature-950 border border-nature-800">
                         🧭 The owners haven&apos;t confirmed the core settings yet. You can read them and advise.
+                    </p>
+                )}
+                {knowledgeDraftLine && (
+                    <p data-testid="home-knowledge-drafts-line" className="text-xs text-nature-300 m-0 p-3 rounded-xl bg-nature-950 border border-nature-800 min-w-0 break-words">
+                        📖 {knowledgeDraftCount === 1
+                            ? '1 Local knowledge draft to check. Answer it in the BeanPool app, on Learn.'
+                            : `${knowledgeDraftCount} Local knowledge drafts to check. Answer them in the BeanPool app, on Learn.`}
                     </p>
                 )}
                 {actionItems.length > 0 && (

@@ -88,7 +88,7 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
     // previews Learn from the sample community instead. The posts read leaves it out there whatever is asked (marketplace.ts).
     {
         needs: ['knowledge'],
-        paths: [/^\/api\/knowledge(\/|$)/, /^\/api\/local\/admin\/knowledge(\/|$)/],
+        paths: [/^\/api\/knowledge(\/|$)/],
     },
     // The forum (routes/forum.ts): every route, reads included, while its owners have it switched off. Its topics are kept for
     // when it is on again.

@@ -75,7 +75,6 @@ import { keptNoticeDetails } from '../engine/kept-notices.js';
 import { ForumRefusal } from '../engine/forum.js';
 import { publishFromAnswer } from '../engine/forum-learn.js';
 import { KNOWLEDGE_DRAFT_WORDS, KNOWLEDGE_LIMITS, isKnowledgeTopic, word, wordsFor, type KnowledgeDraftMine, type KnowledgeToCheckList } from '@beanpool/core';
-import { TOKEN_REFUSED_CODE } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
 // A refusal with a value in it, in English as a template wrote it, its sentence marked for the way out to find again in the
@@ -362,79 +361,6 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
             if (!adminDeletePost(id, { reasonCategory: typeof reasonCategory === 'string' ? reasonCategory : null })) {
                 return answer(ctx, 404, word('This page of Local knowledge isn’t showing any more.'), 'not_found');
             }
-            ctx.body = { ok: true };
-        } catch (e) {
-            refused(ctx, e);
-        }
-    });
-
-    // ── Node Settings (/settings) checking routes for owners and admins ────────────────────────
-    // Reuses the exact same engine rules as /api/knowledge/drafts* under a key-based Settings session
-    // (never an automation token, never a moderator's session). The member-signed /api/knowledge/drafts*
-    // routes above stay strictly key-signed.
-    const settingsChecker = async (ctx: any, write = false): Promise<string | null> => {
-        if (!(await deps.checkAdminAuth(ctx))) return null;
-        if (ctx.state?.automationTokenId) {
-            answer(ctx, 403, 'An automation token cannot check or answer Local knowledge drafts.', TOKEN_REFUSED_CODE);
-            return null;
-        }
-        const key = ctx.state?.isKeySession === true && typeof ctx.state?.actor === 'string' ? ctx.state.actor : null;
-        if (!key || !isNodeMember(key) || !checksKnowledge(key)) {
-            answer(ctx, 403, KNOWLEDGE_WORDS.adminsOnly, 'admins_only');
-            return null;
-        }
-        if (write) {
-            try {
-                assertMemberActive(key);
-            } catch {
-                answer(ctx, 403, PAUSED, 'not_active');
-                return null;
-            }
-            if (getNodeRole() !== 'primary') {
-                answer(ctx, 503, STANDBY, 'standby');
-                return null;
-            }
-        }
-        return key;
-    };
-
-    router.get('/api/local/admin/knowledge/drafts', async (ctx) => {
-        ctx.set('Cache-Control', 'no-store');
-        const key = await settingsChecker(ctx, false);
-        if (!key) return;
-        const limit = wholeQuery(ctx.query.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
-        const offset = wholeQuery(ctx.query.offset, 0, 1_000_000);
-        if (limit === null || limit < 1 || offset === null) return answer(ctx, 400, `limit is 1 to ${MAX_LIST_LIMIT}, and offset a whole number.`, 'bad_request');
-        ctx.body = { ...knowledgeDraftsToCheck(limit, offset), limit, offset, unchecked: knowledgeUnchecked(key) } satisfies KnowledgeToCheckList;
-    });
-
-    router.get('/api/local/admin/knowledge/drafts/:id', async (ctx) => {
-        ctx.set('Cache-Control', 'no-store');
-        const key = await settingsChecker(ctx, false);
-        if (!key) return;
-        const draft = knowledgeDraftWhole(ctx.params.id);
-        if (!draft) return answer(ctx, 404, DRAFT_WORDS.notWaiting, 'not_found');
-        ctx.body = { draft };
-    });
-
-    router.post('/api/local/admin/knowledge/drafts/:id/approve', async (ctx) => {
-        const key = await settingsChecker(ctx, true);
-        if (!key) return;
-        try {
-            const a = approveKnowledgeDraft(send, key, ctx.params.id, ((ctx as any).requestBody || {}) as Record<string, unknown>);
-            tellSender(a, { postId: a.post.id });
-            ctx.body = { post: a.post };
-        } catch (e) {
-            refused(ctx, e);
-        }
-    });
-
-    router.post('/api/local/admin/knowledge/drafts/:id/no', async (ctx) => {
-        const key = await settingsChecker(ctx, true);
-        if (!key) return;
-        const { reason, words } = ((ctx as any).requestBody || {}) as { reason?: unknown; words?: unknown };
-        try {
-            tellSender(declineKnowledgeDraft(key, ctx.params.id, reason, words), {});
             ctx.body = { ok: true };
         } catch (e) {
             refused(ctx, e);

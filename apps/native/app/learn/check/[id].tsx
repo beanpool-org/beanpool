@@ -4,13 +4,13 @@
  * credits, and Approve, Edit first, or say Not this one with a reason and optional words.
  * Parity with apps/pwa/src/components/LearnCheck.tsx LearnCheckOne.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator, DeviceEventEmitter, Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+    ActivityIndicator, BackHandler, DeviceEventEmitter, Keyboard, Linking, Pressable, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     KNOWLEDGE_DECLINE_REASONS, KNOWLEDGE_LIMITS, KNOWLEDGE_TAG_WORDS, KNOWLEDGE_TOPICS, formatCount, t, upperCase,
@@ -23,6 +23,7 @@ import { forgetHomeForHeader } from '../../../utils/home-store';
 import { askForPostPhoto } from '../../../utils/post-photo';
 import { TagPicker } from '../../../components/TagPicker';
 import { hostOf, openableSource } from '../../../components/learn/KnowledgeDetail';
+import { photoToggleName } from '../../../components/learn/learn-keep';
 import { LEARN_LINES, topicOf } from '../../../components/learn/learn-lines';
 import {
     EMPTY_KNOWLEDGE_FORM, LEARN_WRITE, LINK_START, knowledgeFormProblem, learnRefusal,
@@ -36,14 +37,36 @@ import {
 
 const NO_LIBRARY = () => {};
 const first = (v: string | string[] | undefined): string => (Array.isArray(v) ? v[0] : v) ?? '';
-const shownPhoto = (src: string) => src.startsWith('data:image/');
+const RASTER_DATA_URL = /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,/i;
+const shownPhoto = (src: unknown): src is string => typeof src === 'string' && RASTER_DATA_URL.test(src);
+
+const openableHref = (url: unknown): string | null => {
+    if (typeof url !== 'string' || !openableSource(url)) return null;
+    try {
+        return new URL(url.trim()).href;
+    } catch {
+        return null;
+    }
+};
+
+const openableCommonsUrl = (url: unknown): string | null => {
+    const href = openableHref(url);
+    if (!href) return null;
+    const u = new URL(href);
+    return u.protocol === 'https:' && u.hostname === 'commons.wikimedia.org' && /^\/wiki\/File(?::|%3A)/i.test(u.pathname)
+        ? u.href
+        : null;
+};
 
 export default function LearnCheckOneScreen() {
     const router = useRouter();
+    const navigation = useNavigation();
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const params = useLocalSearchParams<{ id?: string | string[] }>();
     const id = first(params.id);
+    const mountedRef = useRef(true);
+    useEffect(() => () => { mountedRef.current = false; }, []);
 
     const [draft, setDraft] = useState<KnowledgeDraftWhole | null | 'failed' | undefined>(undefined);
     const [tries, setTries] = useState(0);
@@ -172,7 +195,7 @@ export default function LearnCheckOneScreen() {
     const finishWith = (said: string) => {
         forgetHomeForHeader();
         DeviceEventEmitter.emit(LEARN_CHECK_ANSWERED, said);
-        leaveScreen(router, 'learn/check/[id]');
+        if (mountedRef.current) leaveScreen(router, 'learn/check/[id]');
     };
 
     const leave = () => {
@@ -190,6 +213,21 @@ export default function LearnCheckOneScreen() {
         }
         leaveScreen(router, 'learn/check/[id]');
     };
+
+    const leaveRef = useRef(leave);
+    leaveRef.current = leave;
+
+    useEffect(() => {
+        const inEdit = mode === 'edit';
+        navigation.setOptions({ gestureEnabled: !inEdit });
+        if (!inEdit) return undefined;
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (!navigation.isFocused()) return false;
+            leaveRef.current();
+            return true;
+        });
+        return () => sub.remove();
+    }, [navigation, mode]);
 
     const header = (
         <View style={s.header}>
@@ -253,9 +291,9 @@ export default function LearnCheckOneScreen() {
             await go();
             finishWith(said);
         } catch (e) {
-            setRefusal(learnRefusal(e));
+            if (mountedRef.current) setRefusal(learnRefusal(e));
         } finally {
-            setBusy(false);
+            if (mountedRef.current) setBusy(false);
         }
     };
 
@@ -283,7 +321,7 @@ export default function LearnCheckOneScreen() {
     const renderCredit = (credit: KnowledgePhotoCredit) => {
         const notes = [...new Set(credit.restrictions.map(commonsRestrictionNote))];
         const read = creditReadDate(credit.readAt);
-        const canOpen = openableSource(credit.url);
+        const creditHref = openableCommonsUrl(credit.url);
         return (
             <View style={{ gap: 2 }} testID="learn-check-credit">
                 <Text style={s.creditMaker}>{credit.maker ? `📷 ${credit.maker} · ${credit.licence}` : `📷 ${credit.licence}`}</Text>
@@ -291,8 +329,8 @@ export default function LearnCheckOneScreen() {
                 {notes.map((note) => (
                     <Text key={note} style={s.creditNote} testID="learn-check-credit-note">{note}</Text>
                 ))}
-                {canOpen ? (
-                    <Pressable accessibilityRole="link" style={s.linkBtn} testID="learn-check-credit-page" onPress={() => void Linking.openURL(credit.url)}>
+                {creditHref ? (
+                    <Pressable accessibilityRole="link" style={s.linkBtn} testID="learn-check-credit-page" onPress={() => { void Linking.openURL(creditHref).catch(() => {}); }}>
                         <Text style={s.linkTitle}>{t(LEARN_CHECK_WORDS.openPage)}<Text importantForAccessibility="no">{' ↗'}</Text></Text>
                     </Pressable>
                 ) : null}
@@ -312,7 +350,11 @@ export default function LearnCheckOneScreen() {
         return (
             <View style={[s.container, { paddingTop: insets.top }]} testID="learn-check-edit-form">
                 {header}
-                <KeyboardAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+                <KeyboardAwareScrollView
+                    contentContainerStyle={[s.content, { paddingBottom: 48 + insets.bottom }]}
+                    keyboardShouldPersistTaps="handled"
+                    bottomOffset={24}
+                >
                     <Text style={s.inputLabel}>{t(LEARN_WRITE.titleLabel)}</Text>
                     <TextInput
                         testID="learn-edit-title"
@@ -321,6 +363,12 @@ export default function LearnCheckOneScreen() {
                         onChangeText={(title) => patchForm({ title })}
                         placeholder={t(LEARN_WRITE.titleHint)}
                         placeholderTextColor={colors.text.muted}
+                        accessibilityLabel={t(LEARN_WRITE.titleLabel)}
+                        multiline
+                        scrollEnabled={false}
+                        submitBehavior="blurAndSubmit"
+                        returnKeyType="next"
+                        editable={!busy}
                         maxLength={KNOWLEDGE_LIMITS.title}
                     />
                     <Text style={s.inputLabel}>{t(LEARN_WRITE.bodyLabel)}</Text>
@@ -331,7 +379,9 @@ export default function LearnCheckOneScreen() {
                         onChangeText={(body) => patchForm({ body })}
                         placeholder={t(LEARN_WRITE.bodyHint)}
                         placeholderTextColor={colors.text.muted}
+                        accessibilityLabel={t(LEARN_WRITE.bodyLabel)}
                         multiline
+                        editable={!busy}
                         maxLength={KNOWLEDGE_LIMITS.body}
                     />
                     <Text style={s.counter}>{t(LEARN_WRITE.counter, { n: formatCount(form.body.length), max: formatCount(KNOWLEDGE_LIMITS.body) })}</Text>
@@ -344,7 +394,8 @@ export default function LearnCheckOneScreen() {
                                     key={tp.id}
                                     testID={`learn-edit-topic-${tp.id}`}
                                     accessibilityRole="button"
-                                    accessibilityState={{ selected: on }}
+                                    accessibilityState={{ selected: on, disabled: busy }}
+                                    disabled={busy}
                                     style={[s.topicChip, on && s.topicChipOn]}
                                     onPress={() => patchForm({ topic: tp.id })}
                                 >
@@ -361,6 +412,8 @@ export default function LearnCheckOneScreen() {
                         onChangeText={(place) => patchForm({ place })}
                         placeholder={t(LEARN_WRITE.placeHint)}
                         placeholderTextColor={colors.text.muted}
+                        accessibilityLabel={t(LEARN_WRITE.placeLabel)}
+                        editable={!busy}
                         maxLength={KNOWLEDGE_LIMITS.place}
                     />
                     <TagPicker
@@ -379,14 +432,18 @@ export default function LearnCheckOneScreen() {
                                     style={[s.input, { flex: 1, minWidth: 0 }]}
                                     value={src.url}
                                     onChangeText={(url) => patchForm({ sources: form.sources.map((x, j) => (j === i ? { ...x, url } : x)) })}
+                                    accessibilityLabel={t(LEARN_WRITE.sourcesLabel)}
                                     autoCapitalize="none"
                                     autoCorrect={false}
                                     keyboardType="url"
+                                    editable={!busy}
                                     maxLength={KNOWLEDGE_LIMITS.sourceUrl}
                                 />
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel={t(LEARN_WRITE.removeLink)}
+                                    accessibilityState={{ disabled: busy }}
+                                    disabled={busy}
                                     style={s.remove}
                                     onPress={() => patchForm({ sources: form.sources.filter((_, j) => j !== i) })}
                                 >
@@ -399,6 +456,8 @@ export default function LearnCheckOneScreen() {
                                 onChangeText={(label) => patchForm({ sources: form.sources.map((x, j) => (j === i ? { ...x, label } : x)) })}
                                 placeholder={t(LEARN_WRITE.linkLabelHint)}
                                 placeholderTextColor={colors.text.muted}
+                                accessibilityLabel={t(LEARN_WRITE.linkLabelHint)}
+                                editable={!busy}
                                 maxLength={KNOWLEDGE_LIMITS.sourceLabel}
                             />
                         </View>
@@ -406,6 +465,8 @@ export default function LearnCheckOneScreen() {
                     {form.sources.length < KNOWLEDGE_LIMITS.sources ? (
                         <Pressable
                             accessibilityRole="button"
+                            accessibilityState={{ disabled: busy }}
+                            disabled={busy}
                             style={s.secondary}
                             onPress={() => patchForm({ sources: [...form.sources, { url: LINK_START, label: '' }] })}
                         >
@@ -421,6 +482,9 @@ export default function LearnCheckOneScreen() {
                                         <Image source={{ uri }} style={s.thumb} accessibilityLabel={t(LEARN_CHECK_WORDS.photoN, { n: i + 1 })} />
                                         <Pressable
                                             accessibilityRole="button"
+                                            accessibilityLabel={photoToggleName(t(LEARN_WRITE.removePhoto), i)}
+                                            accessibilityState={{ disabled: busy }}
+                                            disabled={busy}
                                             style={s.smallBtn}
                                             onPress={() => patchForm({ photos: form.photos.filter((_, j) => j !== i) })}
                                         >
@@ -431,9 +495,23 @@ export default function LearnCheckOneScreen() {
                             </View>
                             {byAssistant && form.photos.length < KNOWLEDGE_LIMITS.photos ? (
                                 <Pressable
+                                    testID="learn-edit-add-photo"
                                     accessibilityRole="button"
+                                    accessibilityState={{ disabled: busy }}
+                                    disabled={busy}
                                     style={s.secondary}
-                                    onPress={() => askForPostPhoto((dataUrl) => patchForm({ photos: [...form.photos, dataUrl].slice(0, KNOWLEDGE_LIMITS.photos) }))}
+                                    onPress={() => {
+                                        Keyboard.dismiss();
+                                        askForPostPhoto((dataUrl) => {
+                                            if (!mountedRef.current) return;
+                                            setForm((prev) => ({
+                                                ...prev,
+                                                photos: [...prev.photos, dataUrl].slice(0, KNOWLEDGE_LIMITS.photos),
+                                            }));
+                                            setEdited(true);
+                                            setRefusal(null);
+                                        });
+                                    }}
                                 >
                                     <Text style={s.secondaryText}>{t(LEARN_WRITE.addPhoto)}</Text>
                                 </Pressable>
@@ -444,11 +522,12 @@ export default function LearnCheckOneScreen() {
                     <Pressable
                         testID="learn-check-edit-approve"
                         accessibilityRole="button"
+                        accessibilityState={{ disabled: busy, busy }}
                         disabled={busy}
                         style={[s.primary, busy && s.primaryDisabled]}
                         onPress={submitEdit}
                     >
-                        <Text style={s.primaryText}>{t(LEARN_CHECK_WORDS.approve)}</Text>
+                        {busy ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={s.primaryText}>{t(LEARN_CHECK_WORDS.approve)}</Text>}
                     </Pressable>
                 </KeyboardAwareScrollView>
             </View>
@@ -462,7 +541,11 @@ export default function LearnCheckOneScreen() {
     return (
         <View style={[s.container, { paddingTop: insets.top }]} testID="learn-check-one">
             {header}
-            <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+            <KeyboardAwareScrollView
+                contentContainerStyle={[s.content, { paddingBottom: 48 + insets.bottom }]}
+                keyboardShouldPersistTaps="handled"
+                bottomOffset={24}
+            >
                 <View style={s.chips}>
                     <View style={s.chip}><Text style={s.chipText}>{upperCase(t(topicOf(d.topic).label))}</Text></View>
                     <View style={s.chip}><Text style={s.chipText}>{upperCase(draftKindWord(d.kind))}</Text></View>
@@ -554,15 +637,22 @@ export default function LearnCheckOneScreen() {
                                         <Text style={s.small} testID="learn-check-uploaded">{t(LEARN_CHECK_WORDS.uploadedByAssistant)}</Text>
                                     ) : null}
                                     {out ? <Text style={s.small}>{t(LEARN_CHECK_WORDS.leftOut)}</Text> : null}
-                                    <Pressable
-                                        testID={`learn-check-photo-toggle-${i}`}
-                                        accessibilityRole="button"
-                                        disabled={busy}
-                                        style={s.smallBtn}
-                                        onPress={() => togglePhoto(i)}
-                                    >
-                                        <Text style={s.smallBtnText}>{out ? t(LEARN_CHECK_WORDS.keepPhoto) : t(LEARN_CHECK_WORDS.removePhoto)}</Text>
-                                    </Pressable>
+                                    {(() => {
+                                        const toggleLabel = out ? t(LEARN_CHECK_WORDS.keepPhoto) : t(LEARN_CHECK_WORDS.removePhoto);
+                                        return (
+                                            <Pressable
+                                                testID={`learn-check-photo-toggle-${i}`}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={photoToggleName(toggleLabel, i)}
+                                                accessibilityState={{ disabled: busy }}
+                                                disabled={busy}
+                                                style={s.smallBtn}
+                                                onPress={() => togglePhoto(i)}
+                                            >
+                                                <Text style={s.smallBtnText}>{toggleLabel}</Text>
+                                            </Pressable>
+                                        );
+                                    })()}
                                 </View>
                             );
                         })}
@@ -574,13 +664,13 @@ export default function LearnCheckOneScreen() {
                         <Text style={s.boxLabel}>{t(LEARN_CHECK_WORDS.sources)}</Text>
                         {d.sources.map((src, i) => {
                             const host = hostOf(src.url);
-                            const openable = openableSource(src.url);
-                            return openable ? (
+                            const sourceHref = openableHref(src.url);
+                            return sourceHref ? (
                                 <Pressable
                                     key={`${i}-${src.url}`}
                                     accessibilityRole="link"
                                     style={s.linkBtn}
-                                    onPress={() => void Linking.openURL(src.url)}
+                                    onPress={() => { void Linking.openURL(sourceHref).catch(() => {}); }}
                                 >
                                     <Text style={s.linkTitle}>{src.label || host}<Text importantForAccessibility="no">{' ↗'}</Text></Text>
                                     <Text style={s.linkHost}>{host}</Text>
@@ -606,12 +696,13 @@ export default function LearnCheckOneScreen() {
                     <Pressable
                         testID="learn-check-tick"
                         accessibilityRole="checkbox"
-                        accessibilityState={{ checked: ticked }}
+                        accessibilityState={{ checked: ticked, disabled: busy }}
+                        disabled={busy}
                         style={s.checkRow}
                         onPress={() => setTicked((v) => !v)}
                     >
                         <View style={[s.checkBox, ticked && s.checkBoxOn]}>
-                            {ticked ? <Text style={s.checkMark}>✓</Text> : null}
+                            {ticked ? <Text style={s.checkMark} importantForAccessibility="no">✓</Text> : null}
                         </View>
                         <Text style={s.checkLabel}>{t(LEARN_CHECK_WORDS.sourcesTick)}</Text>
                     </Pressable>
@@ -627,7 +718,8 @@ export default function LearnCheckOneScreen() {
                                     key={r.id}
                                     testID={`learn-check-reason-${r.id}`}
                                     accessibilityRole="radio"
-                                    accessibilityState={{ selected }}
+                                    accessibilityState={{ checked: selected, selected, disabled: busy }}
+                                    disabled={busy}
                                     style={s.radioRow}
                                     onPress={() => setReason(r.id)}
                                 >
@@ -644,6 +736,8 @@ export default function LearnCheckOneScreen() {
                             style={[s.input, s.multiline]}
                             value={words}
                             onChangeText={setWords}
+                            accessibilityLabel={t(LEARN_CHECK_WORDS.reasonWordsLabel)}
+                            editable={!busy}
                             maxLength={KNOWLEDGE_LIMITS.reasonWords}
                             multiline
                         />
@@ -651,6 +745,7 @@ export default function LearnCheckOneScreen() {
                         <Pressable
                             testID="learn-check-no-send"
                             accessibilityRole="button"
+                            accessibilityState={{ disabled: !reason || busy, busy }}
                             disabled={!reason || busy}
                             style={[s.primary, (!reason || busy) && s.primaryDisabled]}
                             onPress={() => {
@@ -661,11 +756,14 @@ export default function LearnCheckOneScreen() {
                                 );
                             }}
                         >
-                            <Text style={s.primaryText}>{t(LEARN_CHECK_WORDS.send)}</Text>
+                            {busy ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={s.primaryText}>{t(LEARN_CHECK_WORDS.send)}</Text>}
                         </Pressable>
                         <Pressable
+                            testID="learn-check-no-back"
                             accessibilityRole="button"
-                            style={s.secondary}
+                            accessibilityState={{ disabled: busy }}
+                            disabled={busy}
+                            style={[s.secondary, busy && s.primaryDisabled]}
                             onPress={() => { setMode('read'); setRefusal(null); }}
                         >
                             <Text style={s.secondaryText}>{t(LEARN_CHECK_WORDS.back)}</Text>
@@ -678,6 +776,7 @@ export default function LearnCheckOneScreen() {
                         <Pressable
                             testID="learn-check-approve"
                             accessibilityRole="button"
+                            accessibilityState={{ disabled: !mayApprove || busy, busy }}
                             disabled={!mayApprove || busy}
                             style={[s.primary, (!mayApprove || busy) && s.primaryDisabled]}
                             onPress={() => void act(
@@ -688,11 +787,12 @@ export default function LearnCheckOneScreen() {
                                 fix ? t(LEARN_CHECK_WORDS.approvedFix) : t(LEARN_CHECK_WORDS.approvedNew),
                             )}
                         >
-                            <Text style={s.primaryText}>{t(LEARN_CHECK_WORDS.approve)}</Text>
+                            {busy ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={s.primaryText}>{t(LEARN_CHECK_WORDS.approve)}</Text>}
                         </Pressable>
                         <Pressable
                             testID="learn-check-edit"
                             accessibilityRole="button"
+                            accessibilityState={{ disabled: !mayApprove || busy }}
                             disabled={!mayApprove || busy}
                             style={[s.secondary, (!mayApprove || busy) && s.primaryDisabled]}
                             onPress={startEdit}
@@ -702,6 +802,7 @@ export default function LearnCheckOneScreen() {
                         <Pressable
                             testID="learn-check-not"
                             accessibilityRole="button"
+                            accessibilityState={{ disabled: busy }}
                             disabled={busy}
                             style={[s.secondary, busy && s.primaryDisabled]}
                             onPress={() => { setMode('no'); setRefusal(null); }}
@@ -710,7 +811,7 @@ export default function LearnCheckOneScreen() {
                         </Pressable>
                     </View>
                 )}
-            </ScrollView>
+            </KeyboardAwareScrollView>
         </View>
     );
 }

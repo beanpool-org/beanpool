@@ -19,16 +19,21 @@ const h = vi.hoisted(() => ({
     theme: 'light' as 'light' | 'dark',
     draftId: 'draft-1',
     emitted: [] as Array<{ event: string; args: unknown[] }>,
+    backListeners: new Set<() => boolean>(),
     signedGet: vi.fn(),
     signedRequestWithMethod: vi.fn(),
     forgetHomeForHeader: vi.fn(),
     leaveScreen: vi.fn(),
+    openURL: vi.fn(async () => {}),
+    alert: vi.fn(),
 }));
 
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), navigate: vi.fn(), canGoBack: vi.fn(() => true) }));
+const navigation = vi.hoisted(() => ({ setOptions: vi.fn(), isFocused: vi.fn(() => true) }));
 
 vi.mock('expo-router', () => ({
     useRouter: () => router,
+    useNavigation: () => navigation,
     router,
     useLocalSearchParams: () => ({ id: h.draftId }),
 }));
@@ -67,6 +72,7 @@ vi.mock('react-native', async () => {
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (accessibilityState && typeof accessibilityState.checked === 'boolean') attrs['aria-checked'] = String(accessibilityState.checked);
         if (accessibilityState && typeof accessibilityState.selected === 'boolean') attrs['aria-selected'] = String(accessibilityState.selected);
+        if (accessibilityState && typeof accessibilityState.busy === 'boolean') attrs['aria-busy'] = String(accessibilityState.busy);
         if (accessibilityLiveRegion) attrs['aria-live'] = accessibilityLiveRegion;
         if (testID) attrs['data-testid'] = testID;
         return el(tag, attrs, children);
@@ -79,19 +85,27 @@ vi.mock('react-native', async () => {
         Pressable: host('button'),
         ScrollView: host('div'),
         ActivityIndicator: () => el('span', { 'data-testid': 'spinner' }, '…'),
-        TextInput: ({ value, onChangeText, testID, placeholder }: any) => el('input', {
+        TextInput: ({ value, onChangeText, testID, placeholder, accessibilityLabel, editable }: any) => el('input', {
             value: value ?? '',
             placeholder,
+            'aria-label': accessibilityLabel,
+            disabled: editable === false,
             'data-testid': testID,
             onChange: (e: any) => onChangeText?.(e.target.value),
         }),
         StyleSheet: { create: (s: unknown) => s, flatten: (s: unknown) => flat(s), hairlineWidth: 1, absoluteFill: {} },
+        BackHandler: {
+            addEventListener: (_event: string, fn: () => boolean) => {
+                h.backListeners.add(fn);
+                return { remove: () => { h.backListeners.delete(fn); } };
+            },
+        },
         DeviceEventEmitter: {
             addListener: () => ({ remove: () => {} }),
             emit: (event: string, ...args: unknown[]) => { h.emitted.push({ event, args }); },
         },
-        Linking: { openURL: vi.fn(async () => {}) },
-        Alert: { alert: vi.fn() },
+        Linking: { openURL: (...args: unknown[]) => h.openURL(...args) },
+        Alert: { alert: (...args: unknown[]) => h.alert(...args) },
         Keyboard: { dismiss: vi.fn() },
     };
 });
@@ -100,7 +114,7 @@ vi.mock('../../app/ThemeContext', async () => {
     const look = () => ({ theme: h.theme, colors: h.theme === 'dark' ? darkColors : lightColors });
     return { useTheme: () => look(), useStyles: (make: any) => make(look()) };
 });
-vi.mock('../keyboard-alert', () => ({ Alert: { alert: vi.fn() } }));
+vi.mock('../keyboard-alert', () => ({ Alert: { alert: (...args: unknown[]) => h.alert(...args) } }));
 vi.mock('../leave-screen', () => ({ leaveScreen: (...args: unknown[]) => h.leaveScreen(...args) }));
 vi.mock('../home-store', () => ({ forgetHomeForHeader: () => h.forgetHomeForHeader() }));
 vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
@@ -166,10 +180,15 @@ beforeEach(() => {
     h.theme = 'light';
     h.draftId = 'draft-1';
     h.emitted.length = 0;
+    h.backListeners.clear();
     h.signedGet.mockReset();
     h.signedRequestWithMethod.mockReset();
     h.forgetHomeForHeader.mockReset();
     h.leaveScreen.mockReset();
+    h.openURL.mockReset().mockResolvedValue(undefined);
+    h.alert.mockReset();
+    navigation.setOptions.mockReset();
+    navigation.isFocused.mockReset().mockReturnValue(true);
     vi.clearAllMocks();
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -366,5 +385,93 @@ describe.each(['light', 'dark'] as const)('LearnCheckOneScreen (%s, 320 dp × 1.
         expect(h.forgetHomeForHeader).toHaveBeenCalledTimes(1);
         expect(h.emitted).toEqual([{ event: LEARN_CHECK_ANSWERED, args: ['Answered. The writer is told.'] }]);
         expect(h.leaveScreen).toHaveBeenCalledWith(router, 'learn/check/[id]');
+    });
+
+    it('drops SVG data URLs from display and keptPhotos, and restricts Wikimedia Commons credit links', async () => {
+        const svgUrl = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+        h.signedGet.mockResolvedValueOnce(okDraft(makeDraft({
+            photos: [svgUrl, PHOTO_A, PHOTO_B],
+            photoCredits: [
+                null,
+                {
+                    maker: 'Evil',
+                    licence: 'CC BY 4.0',
+                    url: 'https://phishing.example/wiki/File:Fake.jpg',
+                    readAt: '2026-11-24T00:00:00.000Z',
+                    restrictions: [],
+                },
+                {
+                    maker: 'Good',
+                    licence: 'CC BY-SA 4.0',
+                    url: 'https://commons.wikimedia.org/wiki/File:Real.jpg',
+                    readAt: '2026-11-24T00:00:00.000Z',
+                    restrictions: [],
+                },
+            ],
+        })));
+        h.signedRequestWithMethod.mockResolvedValueOnce({ post: { id: 'p-3' } });
+
+        await renderScreen();
+        expect(q('learn-check-photo-0')).toBeNull();
+        expect(q('learn-check-photo-1')).toBeTruthy();
+        expect(q('learn-check-photo-2')).toBeTruthy();
+        expect(q('learn-check-photo-toggle-1')!.getAttribute('aria-label')).toBe('Remove photo, Photo 2');
+
+        const creditLinks = host.querySelectorAll('[data-testid="learn-check-credit-page"]');
+        expect(creditLinks).toHaveLength(1);
+        h.openURL.mockRejectedValueOnce(new Error('no handler'));
+        await click(creditLinks[0] as HTMLElement);
+        expect(h.openURL).toHaveBeenCalledWith('https://commons.wikimedia.org/wiki/File:Real.jpg');
+
+        await click(q('learn-check-approve'));
+        expect(h.signedRequestWithMethod).toHaveBeenCalledWith(
+            'POST',
+            '/api/knowledge/drafts/draft-1/approve',
+            { photos: [PHOTO_A, PHOTO_B] },
+            { withStatus: true },
+        );
+    });
+
+    it('guards edit mode against Android hardware back and guards act() against unmount mid-request', async () => {
+        let resolveApprove: ((v: unknown) => void) | undefined;
+        h.signedGet.mockResolvedValueOnce(okDraft(makeDraft({ photos: [], photoCredits: [] })));
+        h.signedRequestWithMethod.mockImplementationOnce(() => new Promise((r) => { resolveApprove = r; }));
+
+        await renderScreen();
+        await click(q('learn-check-edit'));
+        expect(q('learn-check-edit-form')).toBeTruthy();
+        expect(navigation.setOptions).toHaveBeenLastCalledWith({ gestureEnabled: false });
+        expect(q('learn-edit-title')!.getAttribute('aria-label')).toBeTruthy();
+
+        // Hardware back with unsaved edit prompts Alert instead of popping the route.
+        await setInput(q('learn-edit-title'), 'Edited title');
+        await act(async () => {
+            for (const fn of h.backListeners) fn();
+        });
+        expect(h.alert).toHaveBeenCalledTimes(1);
+        expect(h.leaveScreen).not.toHaveBeenCalled();
+
+        // Discarding via Alert returns to read mode and re-enables swipe back.
+        const buttons = h.alert.mock.calls[0][2] as Array<{ onPress?: () => void }>;
+        await act(async () => { buttons[1].onPress?.(); });
+        expect(q('learn-check-one')).toBeTruthy();
+        expect(navigation.setOptions).toHaveBeenLastCalledWith({ gestureEnabled: true });
+
+        // Decline radio exposes aria-checked for TalkBack and reason input has aria-label.
+        await click(q('learn-check-not'));
+        expect(q('learn-check-no-words')!.getAttribute('aria-label')).toBeTruthy();
+        expect(q('learn-check-reason-person')!.getAttribute('aria-checked')).toBe('false');
+        await click(q('learn-check-reason-person'));
+        expect(q('learn-check-reason-person')!.getAttribute('aria-checked')).toBe('true');
+        await click(q('learn-check-no-back'));
+
+        // Start approve, verify busy state + spinner, then unmount before it settles: leaveScreen must NOT fire.
+        await act(async () => { q('learn-check-approve')!.click(); });
+        expect(q('learn-check-approve')!.getAttribute('aria-busy')).toBe('true');
+        expect(q('spinner')).toBeTruthy();
+        act(() => root.unmount());
+        await act(async () => { resolveApprove?.({ post: { id: 'p-4' } }); });
+        await settle();
+        expect(h.leaveScreen).not.toHaveBeenCalled();
     });
 });

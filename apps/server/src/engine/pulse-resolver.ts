@@ -2570,15 +2570,19 @@ export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): 
     // (platform, external_id) on different channels (e.g. a BeanPool channel and a member's own
     // YouTube channel), keep one at read time without deleting either row.
     //
+    // Excluded for 'website' and 'rss': `<guid>`/`<id>` values on self-hosted feeds are neither
+    // globally unique across blogs nor authoritative, so cross-channel dedupe there would both
+    // collapse unrelated posts and let an attacker's feed hijack a manually submitted website URL.
+    //
     // Implemented as a CROSS JOIN-ordered NOT EXISTS anti-join backed by idx_pulse_items_platform_ext
     // so SQLite keeps the outer keyset cursor, ORDER BY, and LIMIT directly on idx_pulse_items_feed /
     // idx_pulse_items_category_feed with zero temp B-tree sorts.
     //
     // Tie-breaker order (strict total order on non-NULL values; smaller tuple wins):
     //   1. Official BeanPool channel / curated items / admin-added BeanPool channels
-    //   2. OAuth-verified channels over unverified channels
-    //   3. Feed-harvested ('curated'/'autolist') over 'oauth' over 'manual' submissions
-    //   4. Earliest created_at, then published_at, then id
+    //   2. Server-fetched ('curated'/'autolist') from an OAuth-verified channel, then other
+    //      server-fetched ('curated'/'autolist'), then client-submitted ('manual'/'oauth')
+    //   3. Earliest created_at, then published_at, then id
     let beanpoolPubkey: string | null = null;
     try {
         beanpoolPubkey = getBeanPoolPubkey();
@@ -2596,7 +2600,8 @@ export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): 
            CROSS JOIN members m ON m.public_key = i.owner_pubkey
           WHERE ${conditions.join(' AND ')}
             AND (
-                i.external_id IS NULL OR i.external_id = ''
+                i.platform IN ('website', 'rss')
+                OR i.external_id IS NULL OR i.external_id = ''
                 OR NOT EXISTS (
                     SELECT 1
                       FROM pulse_items i2
@@ -2612,15 +2617,21 @@ export function getPulseFeed(options: PulseFeedOptions & PulseFeedExtras = {}): 
                        ${categorySubqueryClause}
                        AND (
                            CASE WHEN i2.channel_id = ? OR i2.curated = 1 OR (? IS NOT NULL AND i2.owner_pubkey = ?) THEN 0 ELSE 1 END,
-                           CASE WHEN c2.oauth_verified_at IS NOT NULL THEN 0 ELSE 1 END,
-                           CASE WHEN i2.source IN ('curated', 'autolist') THEN 0 WHEN i2.source = 'oauth' THEN 1 ELSE 2 END,
+                           CASE
+                               WHEN i2.source IN ('curated', 'autolist') AND c2.oauth_verified_at IS NOT NULL THEN 0
+                               WHEN i2.source IN ('curated', 'autolist') THEN 1
+                               ELSE 2
+                           END,
                            COALESCE(i2.created_at, ''),
                            COALESCE(i2.published_at, ''),
                            i2.id
                        ) < (
                            CASE WHEN i.channel_id = ? OR i.curated = 1 OR (? IS NOT NULL AND i.owner_pubkey = ?) THEN 0 ELSE 1 END,
-                           CASE WHEN c.oauth_verified_at IS NOT NULL THEN 0 ELSE 1 END,
-                           CASE WHEN i.source IN ('curated', 'autolist') THEN 0 WHEN i.source = 'oauth' THEN 1 ELSE 2 END,
+                           CASE
+                               WHEN i.source IN ('curated', 'autolist') AND c.oauth_verified_at IS NOT NULL THEN 0
+                               WHEN i.source IN ('curated', 'autolist') THEN 1
+                               ELSE 2
+                           END,
                            COALESCE(i.created_at, ''),
                            COALESCE(i.published_at, ''),
                            i.id

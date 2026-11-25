@@ -594,13 +594,25 @@ async function main(): Promise<void> {
         isCompleteFeedXml('<?xml version="1.0"?><rss version="2.0"><channel><title>RSS 2.0</title></channel></rss>'),
         'isCompleteFeedXml accepts complete RSS 2.0 feed'
     );
-    const redosStart = Date.now();
-    const redosPayload = '<feed xmlns="http://www.w3.org/2005/Atom">' + '<!--'.repeat(50000);
-    const redosComplete = isCompleteFeedXml(redosPayload);
-    const redosElapsedMs = Date.now() - redosStart;
+    const smallUnclosed = '<feed xmlns="http://www.w3.org/2005/Atom">' + '<!--'.repeat(5000);
+    const largeUnclosed = '<feed xmlns="http://www.w3.org/2005/Atom">' + '<!--'.repeat(50000);
+    const smallComplete = isCompleteFeedXml(smallUnclosed);
+    const largeComplete = isCompleteFeedXml(largeUnclosed);
+    // Measure scaling ratio in the same loop: O(N) grows ~10x for 10x input, whereas O(N^2) ReDoS grows ~100x.
+    let smallTotalNs = 0n;
+    let largeTotalNs = 0n;
+    for (let i = 0; i < 5; i++) {
+        const s0 = process.hrtime.bigint();
+        isCompleteFeedXml(smallUnclosed);
+        smallTotalNs += process.hrtime.bigint() - s0;
+        const l0 = process.hrtime.bigint();
+        isCompleteFeedXml(largeUnclosed);
+        largeTotalNs += process.hrtime.bigint() - l0;
+    }
+    const scalingRatio = Number(largeTotalNs) / Math.max(1, Number(smallTotalNs));
     assert(
-        !redosComplete && redosElapsedMs < 500,
-        `isCompleteFeedXml handles 50k unclosed XML comments in O(N) without ReDoS (${redosElapsedMs}ms)`
+        !smallComplete && !largeComplete && scalingRatio < 40,
+        `isCompleteFeedXml scales linearly on unclosed XML comments without ReDoS (10x input ratio=${scalingRatio.toFixed(1)}x)`
     );
 
     clearItems();

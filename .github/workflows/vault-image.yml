@@ -14,9 +14,42 @@ name: Key vault image (built twice, compared)
 # its API names the image, unsigned files the API's user stages are not installed, the firewall's DHCP rules, room on
 # the state partition, and a signed new image followed by an API-only release: the API keeps the image staged and
 # root's install step installs it into the other slot.
+#
+# A RELEASE image (run by hand with inputs; vault runbook step 6): the same builder, given the PUBLIC custodian list,
+# the version, the host profile and the networks, builds the image a release is made from. Every input empty (the
+# default, and every pull request) is the run above, exactly as it was. Given, two more jobs run: release-inputs checks
+# them in seconds, and release-image, only after build-twice passed on the same commit, builds twice with them, fails
+# unless the two builds are byte-identical, and uploads ONE artifact vault-image-<version>-<host>. No secret is read,
+# and nothing is published: a GitHub release is made by hand, later, with Marty's yes.
 
 on:
   workflow_dispatch:
+    inputs:
+      custodian_keys:
+        description: 'Release image only: the PUBLIC custodian list, {"genesisCustodians":["<64 hex>","<64 hex>","<64 hex>"]}. Never a key file. Empty: throwaway keys, as always.'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Release image only: its version, e.g. 1.1.0 (needed with custodian_keys)'
+        required: false
+        default: ''
+        type: string
+      host:
+        description: 'Release image only: a host profile in apps/vault/image/host-profiles, e.g. servury. Empty: none'
+        required: false
+        default: ''
+        type: string
+      network:
+        description: 'Release image only: static:<ipv4>/<prefix>,<gateway>. Empty: dhcp'
+        required: false
+        default: ''
+        type: string
+      network6:
+        description: 'Release image only: static:<ipv6>/<prefix>,<gateway> (needs network). Empty: router advertisements'
+        required: false
+        default: ''
+        type: string
   pull_request:
     paths:
       - 'apps/vault/image/**'
@@ -115,3 +148,141 @@ jobs:
           m="$(node -e 'const j=require(process.argv[1]); if (j.host.profile!=="servury"||!/^[0-9a-f]{96}$/.test(j.host.measurement)) process.exit(1); console.log(j.host.measurement)' "${RUNNER_TEMP}/snp/image.json")"
           node -e 'const p=require(process.argv[1]), j=require(process.argv[2]), h=p.hosts&&p.hosts[0], l=h&&h.launches[0]; if (p.platform!=="sev-snp"||p.hosts.length!==1||h.profile!=="servury"||h.launches.length!==1||l.measurement!==j.host.measurement||l.ukiSha256!==j.ukiSha256||l.source!=="computed"||h.minTcb.snp!==29||h.chipIds.length!==0) process.exit(1)' "${RUNNER_TEMP}/snp/host-policy.json" "${RUNNER_TEMP}/snp/image.json"
           cat "${RUNNER_TEMP}/snp/image.json" "${RUNNER_TEMP}/snp/host-policy.json" "${RUNNER_TEMP}/snp/SHA256SUMS"
+
+  # A release image: only when the workflow is run by hand with inputs (never on a pull request). The inputs first,
+  # checked in seconds by apps/vault/image/release-inputs.mjs, which reads them from the event file: a refused value
+  # (a key file or a passphrase pasted by mistake) is never printed, and no step's env: shows a raw input. The checks
+  # are the image build's own (image-settings.mjs) and the public list's shape: three different Ed25519 public keys.
+  release-inputs:
+    if: github.event_name == 'workflow_dispatch' && (inputs.custodian_keys != '' || inputs.version != '' || inputs.host != '' || inputs.network != '' || inputs.network6 != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      keys: ${{ steps.check.outputs.keys }}
+      version: ${{ steps.check.outputs.version }}
+      host: ${{ steps.check.outputs.host }}
+      network: ${{ steps.check.outputs.network }}
+      network6: ${{ steps.check.outputs.network6 }}
+      artifact: ${{ steps.check.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: The release image's inputs (public custodian keys, version, host, networks), checked before any build
+        id: check
+        run: node apps/vault/image/release-inputs.mjs
+
+  # Then the release image, only once build-twice has passed on the same commit (its throwaway image built twice the
+  # same bytes and booted, its test image ran a genesis, the Servury-profile image computed its measurement): built
+  # twice with the checked inputs, and the two must be byte-identical, every release file, listing and bundle. Not
+  # booted here (no SEV-SNP on the runner: the real boot is on the host). The artifact holds what a release proposal
+  # takes (image.json, host-policy.json, the UKI, the system partition and its verity tree, the qcow2 disk image,
+  # bundles/, SHA256SUMS), the listings to compare with a build elsewhere, and the public list it was built with.
+  release-image:
+    needs: [build-twice, release-inputs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      CUSTODIAN_KEYS: ${{ needs.release-inputs.outputs.keys }}
+      VERSION: ${{ needs.release-inputs.outputs.version }}
+      HOST: ${{ needs.release-inputs.outputs.host }}
+      NETWORK: ${{ needs.release-inputs.outputs.network }}
+      NETWORK6: ${{ needs.release-inputs.outputs.network6 }}
+      ARTIFACT: ${{ needs.release-inputs.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 9.0.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @beanpool/core --filter @beanpool/signin build
+      - name: The public custodian list, as checked (printed, so anyone can build the same image elsewhere)
+        run: |
+          set -euo pipefail
+          for v in CUSTODIAN_KEYS VERSION HOST NETWORK NETWORK6 ARTIFACT; do
+            if [ -z "${!v}" ]; then echo "release-inputs gave no ${v}" >&2; exit 1; fi
+          done
+          printf '%s\n' "${CUSTODIAN_KEYS}" > "${RUNNER_TEMP}/keys.json"
+          cat "${RUNNER_TEMP}/keys.json"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/image-cache
+          key: vault-image-${{ hashFiles('apps/vault/image/pins.env', 'apps/vault/image/mkosi/mkosi.conf') }}
+      - name: First build
+        run: |
+          apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version "${VERSION}" --host "${HOST}" \
+            --network "${NETWORK}" --network6 "${NETWORK6}" --out "${RUNNER_TEMP}/one" --cache "${RUNNER_TEMP}/image-cache"
+      - name: Second build
+        run: |
+          apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version "${VERSION}" --host "${HOST}" \
+            --network "${NETWORK}" --network6 "${NETWORK6}" --out "${RUNNER_TEMP}/two" --cache "${RUNNER_TEMP}/image-cache"
+      - name: The same bytes (every release file, listing and bundle), and image.json names the inputs
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/one"
+          files=(image.json vault.efi vault-root.raw vault-root-verity.raw "beanpool-vault_${VERSION}.raw" "beanpool-vault_${VERSION}.qcow2"
+            SHA256SUMS root-files.txt uki-sections.txt initrd-files.txt partitions.txt esp-files.txt)
+          if [ "${HOST}" != none ]; then files+=(host-policy.json); fi
+          diff <(ls -A bundles) <(ls -A "${RUNNER_TEMP}/two/bundles")
+          for f in "${files[@]}" bundles/*; do
+            cmp "$f" "${RUNNER_TEMP}/two/$f"
+            echo "same: $f ($(sha256sum "$f" | cut -c1-16))"
+          done
+          node -e '
+            const j = require(process.argv[1]); const [version, host, network, network6] = process.argv.slice(2);
+            const ok = j.version === version && (j.network ?? "dhcp") === network && (j.network6 ?? "ra") === network6
+              && (host === "none" ? j.host === undefined : j.host?.profile === host && /^[0-9a-f]{96}$/.test(j.host.measurement));
+            if (!ok) { console.error("image.json does not name the inputs"); process.exit(1); }
+          ' "${RUNNER_TEMP}/one/image.json" "${VERSION}" "${HOST}" "${NETWORK}" "${NETWORK6}"
+          cat image.json
+      - name: The artifact's files, checked against SHA256SUMS
+        run: |
+          set -euo pipefail
+          one="${RUNNER_TEMP}/one" stage="${RUNNER_TEMP}/artifact"
+          rm -rf "${stage}" && mkdir -p "${stage}/bundles"
+          files=(image.json SHA256SUMS vault.efi vault-root.raw vault-root-verity.raw "beanpool-vault_${VERSION}.qcow2"
+            root-files.txt uki-sections.txt initrd-files.txt partitions.txt esp-files.txt)
+          if [ "${HOST}" != none ]; then files+=(host-policy.json); fi
+          for f in "${files[@]}"; do ln "${one}/${f}" "${stage}/${f}"; done
+          ln "${one}"/bundles/* "${stage}/bundles/"
+          cp "${RUNNER_TEMP}/keys.json" "${stage}/custodian-keys.json"
+          cd "${stage}" && sha256sum -c SHA256SUMS && ls -la . bundles
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ needs.release-inputs.outputs.artifact }}
+          path: ${{ runner.temp }}/artifact/
+          if-no-files-found: error
+          retention-days: 30
+      - name: The hashes, in the job summary
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/artifact"
+          fence='```'
+          {
+            printf '## Key vault release image %s, host %s: built twice, the same bytes\n\n' "${VERSION}" "${HOST}"
+            printf 'Commit `%s`. Artifact **%s** of run %s (`gh run download %s -n %s`). Nothing is published: a release is made by hand, with Marty'\''s yes.\n\n' \
+              "${GITHUB_SHA}" "${ARTIFACT}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ID}" "${ARTIFACT}"
+            printf 'Settings: network `%s`, network6 `%s`, host `%s`.\n\n' "${NETWORK}" "${NETWORK6}" "${HOST}"
+            printf 'Custodian keys (public, in this order; compare each with the custodian'\''s own):\n\n%s\n' "${fence}"
+            node -e 'require(process.argv[1]).genesisCustodians.forEach((k, i) => console.log(`${i + 1}. ${k}`))' "${PWD}/custodian-keys.json"
+            printf '%s\n\nimage.json:\n\n%sjson\n' "${fence}" "${fence}"
+            cat image.json
+            printf '%s\n\n' "${fence}"
+            if [ -f host-policy.json ]; then
+              printf 'host-policy.json:\n\n%sjson\n' "${fence}"
+              cat host-policy.json
+              printf '%s\n\n' "${fence}"
+            fi
+            printf 'SHA256SUMS (the release files):\n\n%s\n' "${fence}"
+            cat SHA256SUMS
+            printf '%s\n\nSHA-256 of the other files:\n\n%s\n' "${fence}" "${fence}"
+            others=(image.json custodian-keys.json bundles/*)
+            if [ -f host-policy.json ]; then others+=(host-policy.json); fi
+            sha256sum "${others[@]}"
+            printf '%s\n' "${fence}"
+          } | tee -a "${GITHUB_STEP_SUMMARY}"

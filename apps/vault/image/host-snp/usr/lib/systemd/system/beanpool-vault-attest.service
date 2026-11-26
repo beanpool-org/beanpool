@@ -1,0 +1,44 @@
+# Root's SEV-SNP helper (vault comeback design §2.2; src/keyholder/snp.ts), on SEV-SNP host images only. It takes the
+# 64 bytes of a hello's binding on a socket only the keyholder reaches (group vault-attest), writes them to
+# configfs-tsm (/sys/kernel/config/tsm/report) and answers with the chip's signed report. It holds no secret: a report
+# it made up or replayed fails the custodian's tool's checks, and the vault stays locked. It needs /sys writable (so no
+# ProtectKernelTunables) and no network, devices or capabilities beyond root's own files in configfs.
+[Unit]
+Description=BeanPool key vault: SEV-SNP reports for the keyholder
+After=systemd-modules-load.service sys-kernel-config.mount
+RequiresMountsFor=/sys/kernel/config
+Before=beanpool-vault-keyholder.service
+
+[Service]
+Type=simple
+Group=vault-attest
+ExecStart=/opt/node/bin/node --disable-sigusr1 /usr/lib/beanpool-vault/vault-keyholder.mjs --attest-socket /run/beanpool-vault/attest/attest.sock
+Restart=always
+RestartSec=5
+LimitCORE=0
+UMask=0007
+RuntimeDirectory=beanpool-vault/attest
+RuntimeDirectoryMode=0750
+PrivateNetwork=yes
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

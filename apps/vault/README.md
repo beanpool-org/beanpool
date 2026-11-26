@@ -318,8 +318,8 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
 
 ## The image (`image/`; host design §5.1 items 5 and 6)
 
-`image/build.sh --custodian-keys <file> --version <x.y.z> --out <dir> [--network <setting>]` builds it with mkosi in a
-pinned container (`--network`: below):
+`image/build.sh --custodian-keys <file> --version <x.y.z> --out <dir> [--network <setting>] [--network6 <setting>]
+[--name <dns name>] [--host <profile>] [--acpi-off]` builds it with mkosi in a pinned container (the settings: below):
 
 - Debian 13 from snapshot.debian.org at the time in `image/pins.env` (security updates from the same snapshot), the
   official Node build (SHA-256 pinned), the esbuild bundles of the keyholder, launcher and API, Caddy.
@@ -373,9 +373,69 @@ and `image.json` records it as `"network": "static:…"` (a dhcp build's `image.
 before). The firewall's DHCP rules stay in both forms: with a static address networkd sends nothing to the DHCP
 ports, so they are harmless.
 
+**IPv6 set by hand, and the vault's name.** `--network6 static:<ipv6>/<prefix>,<gateway>` (with the static IPv4 form)
+adds the IPv6 address and gateway to the same file and stops taking router advertisements; the default, `ra`, is the
+image as it was. The gateway is inside the prefix or link-local (`fe80::/10`). `--name <dns name>` (default
+`vault.beanpool.org`) is the vault's own name: Caddy's site (`etc/caddy/Caddyfile`) and the API's `hosts`
+(`etc/beanpool-vault/api.json`), which phones sign their requests for. The default leaves both files byte for byte as
+they are. Both are checked strictly and recorded in `image.json` (`network6`, `name`) only when not the default.
+
+**An SEV-SNP host** (`--host <profile>`; vault comeback design §2.5, §2.6, §3.2). A host profile
+(`image/host-profiles/<profile>.json`) names what the chip measures at launch: the host's firmware (URL, SHA-256,
+the source it is built from), the vCPU count and model and the guest features, with the host command line empty (the
+UKI carries its own). It also names the release's floor for that host: the guest policy and the minimum firmware
+levels (`minTcb`). With `--host`:
+
+- the keyholder's config names the `sev-snp` attestor (`src/keyholder/snp.ts`): every hello's evidence is a fresh
+  report over its binding, asked for by root's helper (`vault-keyholder --attest-socket`,
+  `beanpool-vault-attest.service`) through configfs-tsm, on a socket only the keyholder reaches (group `vault-attest`).
+  If the helper fails, the hello fails: it never falls back to `none`. `image/host-snp/` is laid over the image:
+  `sev-guest` loaded at boot (configfs mounted by systemd), the helper's unit and group, and the keyholder's ordering;
+- the boot check asks the chip for one report and prints its public values on the console: guest policy (debug and
+  migration agent), VMPL, signer, the reported, committed and launch TCB, and the measurement;
+- after the build, `sev-snp-measure` (virtee's, pinned in `pins.env`, run from its wheel in the builder) computes the
+  launch measurement of this `vault.efi` on that host from the profile's firmware (downloaded into `--cache` and
+  checked against its SHA-256). `image.json` records it as `host: {profile, measurement}`, and `host-policy.json` is
+  the release's starting host policy (the measurement, `minReportedTcb` and `policy` as the report's own 8 bytes,
+  `signer: vcek`) for `vault-custodian release propose --host-policy`;
+- the floor is not in the image: raising `minTcb` needs a new signed release, not a new image.
+
+`--acpi-off` adds `acpi=off` to the UKI's fixed command line (BadAML, design §2.7). It stays off until test T6 shows the
+host boots that way; `image.json` records it as `kernelExtra`.
+
+Under the host's measured direct boot there is no systemd-boot and no `LoaderEntrySelected`: the image names itself
+by its `roothash` instead, as the UKI on the ESP whose own `.cmdline` names the roothash the kernel booted with
+(`src/shared/image-identity.ts`). With no boot loader to say which partition is the ESP, systemd mounts none by
+itself, so `host-snp/` mounts it (`efi.mount`: the partition labelled `ESP` at `/efi`, root's alone) for the identity
+and for root's install step. systemd-boot and the ESP stay in the disk image, so the same image still boots on a plain
+UEFI host (the boot test).
+
+The **Servury** profile (`host-profiles/servury.json`, Blackbox Nano, Montreal, chosen 26 Nov 2026): Servury's
+`OVMF.amdsev.fd` from blackbox release 2026.11.3 (SHA-256 `8731846c…958b`, unchanged since 2026.09), 1 vCPU,
+`EPYC-v4`, guest features `0x1`, guest policy `0x30000` (SMT allowed, debug off, no migration agent), signer VCEK, and
+the floor bootloader 4, tee 0, **SNP 29**, microcode 222: the levels its report showed on 26 Nov. AMD-SB-3059 is fixed
+at SNP 31 (`0x1F`); Servury had not patched on 26 Nov. Raise `minTcb.snp` to 31 in the profile as soon as they do, and
+sign a release with the new `host-policy.json`. The host has no DHCP. Its build:
+
+```
+apps/vault/image/build.sh --custodian-keys <keys.json> --version <x.y.z> --out <dir> --host servury \
+    --network static:68.164.4.44/23,68.164.4.1 --network6 static:2602:f41c:0:39c::1/64,<IPv6 gateway>
+```
+
+The IPv6 gateway is to be read off the server's own network settings before the build (the 26 Nov probe did not
+record it). Servury takes the install image by URL and SHA-256 (`beanpool-vault_<version>.qcow2`, below) and the
+UKI by URL and SHA-256 (`vault.efi`), with the panel's command line left empty. Never press "Reinstall": it replaces
+the disk with Servury's own release.
+
+**Release files.** Besides `vault.efi`, `vault-root.raw` and `vault-root-verity.raw`, a build writes the install image
+compressed as `beanpool-vault_<version>.qcow2` (by the builder's pinned `qemu-img`, the same bytes on every build; the
+raw disk is too big to publish) and `SHA256SUMS` over those four: a host that takes a disk image by URL gets the
+qcow2.
+
 **Checking a build.** Build it yourself with the release's custodian keys and version, and the same `--network` the
 release was built with, and compare: `image.json`
-(`{version, ukiSha256, roothash, imageHash}`, and `network` when it is not dhcp) must be the release's `image` and
+(`{version, ukiSha256, roothash, imageHash}`, and each setting that is not the default: `network`, `network6`, `name`,
+`kernelExtra`, `host`) must be the release's `image` and
 `imageHash`, and every file the same bytes. `root-files.txt`, `uki-sections.txt`, `initrd-files.txt`, `esp-files.txt` and `partitions.txt` list every file
 of the system tree, the UKI and its initrd, the ESP and the install image's partitions with their hashes, to find
 where two builds differ.

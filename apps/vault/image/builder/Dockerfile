@@ -1,6 +1,7 @@
 # The vault image's build environment (image/build.sh). The base is pinned by digest and every tool comes from the
 # same Debian snapshot as the image, so a rebuild months later uses the same mkosi, systemd-repart, ukify and
-# mkfs.erofs. This container is not itself a release artifact; only what it builds is.
+# mkfs.erofs. This container is not itself a release artifact; only what it builds is. qemu-utils makes the install
+# image's compressed release file (qemu-img); python3-cryptography is what sev-snp-measure (pins.env) imports.
 ARG BUILDER_BASE
 FROM ${BUILDER_BASE}
 ARG DEBIAN_SNAPSHOT
@@ -11,4 +12,5 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
       mkosi systemd-ukify systemd-repart systemd-boot-efi erofs-utils dosfstools mtools cryptsetup-bin bubblewrap \
       debian-archive-keyring apt zstd xz-utils ca-certificates python3-pefile cpio kmod \
+      qemu-utils python3-cryptography \
  && apt-get clean && rm -rf /var/lib/apt/lists/*

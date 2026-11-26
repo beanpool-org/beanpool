@@ -2226,6 +2226,7 @@ function PostDetailModal() {
                             </View>
                             {editPhotos.length > 0 ? <Text style={styles.editPhotoHint}>{t('Tap a photo to choose what its card shows.')}</Text> : null}
                             <PhotoFocusAdjust
+                                visible={editFocus.adjusting !== null}
                                 uri={editFocus.adjusting !== null ? editPhotos[editFocus.adjusting] ?? null : null}
                                 focus={editFocus.adjusting !== null ? editFocus.at(editFocus.adjusting) : null}
                                 onCancel={editFocus.close}

@@ -45,6 +45,12 @@ vi.mock('expo-image', async () => {
     const { createElement: h } = await import('react');
     return { Image: (props: Record<string, unknown>) => { if (props.testID) images.byId.set(String(props.testID), props); return h('img', { 'data-testid': props.testID ?? 'photo' }); } };
 });
+// The status bar's light entry is LightBarModal's own (status-bar-every-screen.test.ts drives the real one); here it draws its
+// children while visible, as the Modal mock does.
+vi.mock('../../components/LightBarModal', async () => {
+    const { createElement: h } = await import('react');
+    return { LightBarModal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? h('div', { 'data-modal': 'light-bar' }, children as any) : null) };
+});
 const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
     const { colors, darkColors } = await import('../../constants/colors');
@@ -60,7 +66,7 @@ beforeEach(() => { host = document.createElement('div'); document.body.appendChi
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 function draw(focus: PhotoFocus | null, onDone = vi.fn(), onCancel = vi.fn()) {
-    act(() => { root.render(createElement(PhotoFocusAdjust, { uri: 'file:///photo.jpg', focus, onDone, onCancel }) as any); });
+    act(() => { root.render(createElement(PhotoFocusAdjust, { visible: true, uri: 'file:///photo.jpg', focus, onDone, onCancel }) as any); });
     return { onDone, onCancel };
 }
 const press = (label: string) => {
@@ -99,6 +105,13 @@ describe('PhotoFocusAdjust', () => {
         press('Reset');
         press('Done');
         expect(onDone).toHaveBeenCalledWith(null);
+    });
+
+    it('opens on `visible` alone, as a LightBarModal: closed it draws nothing even with a photo named', () => {
+        act(() => { root.render(createElement(PhotoFocusAdjust, { visible: false, uri: 'file:///photo.jpg', focus: null, onDone: vi.fn(), onCancel: vi.fn() }) as any); });
+        expect(host.querySelector('[data-modal]')).toBeNull();
+        draw(null);
+        expect(host.querySelector('[data-modal]')!.getAttribute('data-modal')).toBe('light-bar');
     });
 
     it('Cancel keeps nothing', () => {

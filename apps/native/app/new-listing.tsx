@@ -1009,6 +1009,7 @@ export default function NewListingScreen() {
                             <Text style={styles.photoCount}>{upperCase(photoRequired ? t('{n}/5 photos', { n: postPhotos.length }) : t('{n}/5 photos (optional)', { n: postPhotos.length }))}</Text>
                             {postPhotos.length > 0 ? <Text style={styles.photoHint}>{t('Tap a photo to choose what its card shows.')}</Text> : null}
                             <PhotoFocusAdjust
+                                visible={photoFocus.adjusting !== null}
                                 uri={photoFocus.adjusting !== null ? postPhotos[photoFocus.adjusting] ?? null : null}
                                 focus={photoFocus.adjusting !== null ? photoFocus.at(photoFocus.adjusting) : null}
                                 onCancel={photoFocus.close}

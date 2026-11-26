@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, Modal, ScrollView, StyleSheet, Image as RNImage, type LayoutChangeEvent, type GestureResponderEvent } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Image as RNImage, type LayoutChangeEvent, type GestureResponderEvent } from 'react-native';
 import { Image } from 'expo-image';
 import { DEFAULT_PHOTO_FOCUS, MARKET_CARD_SHELL, photoFocusToward, photoFocusWindow, t, type PhotoFocus } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { focusContentPosition } from '../utils/photo-focus';
+import { LightBarModal } from './LightBarModal';
 
 /** The Market grid card's frame, width over height (core MARKET_CARD_SHELL.photo.grid): the crop the member is choosing. */
 const CARD_ASPECT = MARKET_CARD_SHELL.photo.grid.aspectWidth / MARKET_CARD_SHELL.photo.grid.aspectHeight;
@@ -19,10 +20,18 @@ const TARGET_DP = 48;
  * card below shows the result exactly as the Market draws it (the same contentPosition). Done hands back the focus (core
  * photo-focus.ts); Reset is the card's own crop again (no focus). The photo itself is never changed or copied.
  *
- * A plain Modal: no keyboard in it, so no KeyboardProvider (topic-native-gotchas). Scrolls at 320 dp and 1.3x text.
+ * A LightBarModal: its ground is the scrim and the photo's near-black in both themes, so the status bar shows light icons while
+ * it is open and the screen's own bar comes back as it closes (status-bar-every-screen.test.ts). No keyboard in it, so no
+ * KeyboardProvider (topic-native-gotchas). Scrolls at 320 dp and 1.3x text.
+ *
+ * `visible` is the opener's "which photo is being adjusted" alone, never the photo list: the forms set their photo list in the
+ * same handler that closes another Modal (an edit's start closes the pin drop), and that must not read as opening this one
+ * (modal-after-modal-guard.test.ts).
  */
-export function PhotoFocusAdjust({ uri, focus, onDone, onCancel }: {
-    /** The photo to adjust, or null when the screen is closed. */
+export function PhotoFocusAdjust({ visible, uri, focus, onDone, onCancel }: {
+    /** Whether the screen is open. */
+    visible: boolean;
+    /** The photo to adjust (data only: nothing is drawn without one). */
     uri: string | null;
     focus: PhotoFocus | null;
     onDone: (focus: PhotoFocus | null) => void;
@@ -74,7 +83,7 @@ export function PhotoFocusAdjust({ uri, focus, onDone, onCancel }: {
     const onStage = (e: LayoutChangeEvent) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
 
     return (
-        <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onCancel}>
+        <LightBarModal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
             <View style={styles.overlay}>
                 <View style={styles.sheet}>
                     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
@@ -126,6 +135,6 @@ export function PhotoFocusAdjust({ uri, focus, onDone, onCancel }: {
                     </ScrollView>
                 </View>
             </View>
-        </Modal>
+        </LightBarModal>
     );
 }

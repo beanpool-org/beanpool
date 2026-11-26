@@ -286,7 +286,7 @@ const STRANGER_REFUSED = new Set<string>([
     'POST /api/recovery/sso-nonce', 'POST /api/relay/complaint', 'POST /api/relay/find', 'POST /api/relay/group', 'POST /api/relay/mail',
     'POST /api/reports', 'POST /api/shops/mine/close', 'POST /api/shops/mine/offers', 'POST /api/treasury',
     'POST /api/treasury/:treasury/approve', 'POST /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing/release',
-    'POST /api/treasury/:treasury/complete', 'POST /api/treasury/:treasury/event', 'POST /api/treasury/:treasury/keepers/:pubkey/remove',
+    'POST /api/treasury/:treasury/complete', 'POST /api/treasury/:treasury/take-up', 'POST /api/treasury/:treasury/event', 'POST /api/treasury/:treasury/keepers/:pubkey/remove',
     'POST /api/treasury/:treasury/keepers/changes/:changeId/object', 'POST /api/treasury/:treasury/keepers/request',
     'POST /api/treasury/:treasury/keepers/requests/:requestId/approve', 'POST /api/treasury/:treasury/keepers/requests/:requestId/decline',
     'POST /api/treasury/:treasury/keepers/step-down', 'POST /api/treasury/:treasury/location', 'POST /api/treasury/:treasury/need',

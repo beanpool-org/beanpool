@@ -235,6 +235,7 @@ async function main() {
             ['POST', `/api/treasury/${ent}/approve`, { transactionId: 'nope' }],
             ['POST', `/api/treasury/${ent}/complete`, { transactionId: 'nope' }],
             ['POST', `/api/treasury/${ent}/reject`, { transactionId: 'nope' }],
+            ['POST', `/api/treasury/${ent}/take-up`, { postId: 'nope', hours: 1, itemOption: 'each', expect_c: hc(1) }],
             ['POST', `/api/treasury/${ent}/sweep`, {}],
             ['POST', `/api/enterprise/${ent}/pause`, {}],
             ['POST', `/api/enterprise/${ent}/resume`, {}],

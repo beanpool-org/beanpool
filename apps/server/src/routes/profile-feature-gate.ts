@@ -50,6 +50,9 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
             /^\/api\/marketplace\/posts\/(accept|request)\/?$/,
             /^\/api\/marketplace\/transactions\/(approve|reject|cancel-request|complete|cancel)\/?$/,
             /^\/api\/local\/admin\/(disputes|stranded-escrows)(\/|$)/,
+            // An enterprise's take-up of a member's offer holds Beans in trust as the accept above does (routes/treasury.ts),
+            // so it is off with deals held in trust too, not only with enterprises.
+            /^\/api\/(treasury|enterprise)\/[^/]+\/take-up\/?$/,
         ],
     },
     // Treasuries and enterprises are one construct under two names in this build (routes/treasury.ts serves both

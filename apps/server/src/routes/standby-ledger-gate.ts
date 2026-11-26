@@ -30,7 +30,9 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
     /^\/api\/marketplace\/standing\/[^/]+\/(stop|extend)\/?$/,
     // Paying a bill (engine/bills.ts): one ledger row.
     /^\/api\/bills\/[^/]+\/pay\/?$/,
-    /^\/api\/(treasury|enterprise)\/[^/]+\/(approve|complete|reject)\/?$/,
+    // An enterprise's steps of a trade, taken by a keeper: approving, completing, turning down, and taking up a member's
+    // offer (the hold and its release in one request, routes/treasury.ts).
+    /^\/api\/(treasury|enterprise)\/[^/]+\/(approve|complete|reject|take-up)\/?$/,
     // An enterprise's sweep to the Commons, a pledge to it (a crowdfund's moves Beans), and its wind-up's final sweep.
     /^\/api\/(treasury|enterprise)\/[^/]+\/(sweep|pledge|wind-up\/finalise)\/?$/,
     // A keeper's backing pledged or released (every alias, and DELETE .../pledge above): a pledge makes the enterprise's

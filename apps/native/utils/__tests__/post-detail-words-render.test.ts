@@ -541,7 +541,14 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
 describe('the photo opens whole', () => {
     const photoButton = (n: number, of: number) => host.querySelector<HTMLElement>(`button[aria-label="Photo ${n} of ${of}"]`);
     const viewer = () => host.querySelector('[data-modal]');
-    const viewed = () => viewer()?.querySelector('img[aria-label="Full-size photo"]')?.getAttribute('data-src') ?? null;
+    // The photo on show: with several photos the viewer swipes through them all, one page each, and its count ("2 / 2") names
+    // the page in view; with one photo it is the only one.
+    const viewed = () => {
+        const v = viewer();
+        const count = v?.querySelector('[data-testid="photo-viewer-count"]')?.textContent?.match(/^(\d+) \/ \d+$/);
+        const page = count ? v?.querySelector(`[data-testid="photo-viewer-page-${Number(count[1]) - 1}"]`) : v;
+        return page?.querySelector('img[aria-label="Full-size photo"]')?.getAttribute('data-src') ?? null;
+    };
     /** A button by its English label, exactly (`press` looks for the pseudo-locale's). */
     const tap = async (label: string) => {
         const el = host.querySelector<HTMLElement>(`button[aria-label="${label}"]`);

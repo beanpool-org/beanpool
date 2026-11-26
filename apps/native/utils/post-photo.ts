@@ -186,7 +186,8 @@ export function askForPostPhotos(room: number, add: (photo: string) => void, tit
             const picked = await pick(room);
             for (const photo of picked.photos) add(photo);
             if (picked.failed) notAdded(picked.failed);
-            else if (picked.leftOut > 0) Alert.alert(photosLeftOutLine(picked.leftOut));
+            // Short title, the words in the message (as the forum's "At most {n} photos." alert).
+            else if (picked.leftOut > 0) Alert.alert(t('Photos'), photosLeftOutLine(picked.leftOut));
         } catch (e: any) {
             notAdded(e);
         }

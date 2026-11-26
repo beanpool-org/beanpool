@@ -104,7 +104,8 @@ describe('Browse files with room for several', () => {
         expect(added).toEqual([photo('a'), photo('b')]);
         // Only the kept ones are redrawn: no work for the photos left out.
         expect(redraws.uris).toEqual(['file:///a.jpg', 'file:///b.jpg']);
-        expect(said.map((a) => a.title)).toEqual(['3 photos were left out: there was no room for more.']);
+        // A short title, the words in the message (alert-words-in-message).
+        expect(said.map((a) => [a.title, a.body])).toEqual([['Photos', '3 photos were left out: there was no room for more.']]);
     });
 
     it('room for one: the files door as it always was, and a second photo picked there is left out and said', async () => {
@@ -112,7 +113,7 @@ describe('Browse files with room for several', () => {
         const { added, said } = await choose(1, 'Browse files');
         expect(picker.calls).toEqual([{ mediaTypes: ['images'], quality: 1, base64: false, legacy: true }]);
         expect(added).toEqual([photo('a')]);
-        expect(said.map((a) => a.title)).toEqual(['1 photo was left out: there was no room for more.']);
+        expect(said.map((a) => [a.title, a.body])).toEqual([['Photos', '1 photo was left out: there was no room for more.']]);
     });
 });
 
@@ -126,8 +127,8 @@ describe('0 to 5 picked against the room left (the table)', () => {
                 pick(...NAMES.slice(0, n));
                 const { added, said } = await choose(room, 'Browse files');
                 expect(added).toEqual(NAMES.slice(0, kept).map(photo));
-                expect(said.map((a) => a.title)).toEqual(
-                    out === 0 ? [] : [out === 1 ? '1 photo was left out: there was no room for more.' : `${out} photos were left out: there was no room for more.`],
+                expect(said.map((a) => [a.title, a.body])).toEqual(
+                    out === 0 ? [] : [['Photos', out === 1 ? '1 photo was left out: there was no room for more.' : `${out} photos were left out: there was no room for more.`]],
                 );
             });
         }

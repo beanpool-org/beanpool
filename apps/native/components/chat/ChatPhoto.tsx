@@ -92,16 +92,25 @@ export function viewerStart(photos: readonly string[], uri: string, index?: numb
     return photos.indexOf(uri);
 }
 
-function ChatPhotoViewerModal({ uri, onClose }: { uri: string; onClose: () => void }) {
+/** The viewer's one window, dark in every theme (so light status-bar icons), with Close above whatever it shows. */
+function ViewerFrame({ centred, onClose, children }: { centred: boolean; onClose: () => void; children: React.ReactNode }) {
     const { colors } = useTheme();
     return (
         // Its own window: the close button takes the status-bar inset itself (a Dynamic Island's 59 pt is more than 50).
         <LightBarModal visible transparent animationType="fade" onRequestClose={onClose}>
-            <View style={{ flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' }}>
-                <ViewerPhoto uri={uri} onClose={onClose} />
+            <View style={{ flex: 1, backgroundColor: colors.overlay.imageViewerBg, ...(centred ? { alignItems: 'center' as const, justifyContent: 'center' as const } : {}) }}>
+                {children}
                 <ViewerClose onClose={onClose} />
             </View>
         </LightBarModal>
+    );
+}
+
+function ChatPhotoViewerModal({ uri, onClose }: { uri: string; onClose: () => void }) {
+    return (
+        <ViewerFrame centred onClose={onClose}>
+            <ViewerPhoto uri={uri} onClose={onClose} />
+        </ViewerFrame>
     );
 }
 
@@ -131,40 +140,37 @@ function ChatPhotoPagerModal({ photos, start, onClose }: { photos: readonly stri
         if (i !== at) setAt(i);
     };
     return (
-        <LightBarModal visible transparent animationType="fade" onRequestClose={onClose}>
-            <View style={{ flex: 1, backgroundColor: colors.overlay.imageViewerBg }}>
-                <ScrollView
-                    ref={pager}
-                    testID="photo-viewer-pager"
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    contentOffset={{ x: start * width, y: 0 }}
-                    onMomentumScrollEnd={onSettled}
-                    style={{ flex: 1 }}
-                >
-                    {photos.map((uri, i) => (
-                        <View key={i} testID={`photo-viewer-page-${i}`} style={{ width, alignItems: 'center', justifyContent: 'center' }}>
-                            <ViewerPhoto uri={uri} onClose={onClose} />
-                        </View>
-                    ))}
-                </ScrollView>
-                <View
-                    testID="photo-viewer-count"
-                    pointerEvents="none"
-                    accessible
-                    accessibilityLabel={t('Photo {n} of {count}', { n: shown + 1, count: photos.length })}
-                    accessibilityLiveRegion="polite"
-                    style={{
-                        position: 'absolute', top: Math.max(50, insets.top + 8), left: 20, minHeight: 48, paddingHorizontal: 14,
-                        borderRadius: 24, backgroundColor: colors.overlay.imageViewerCloseBg, alignItems: 'center', justifyContent: 'center',
-                    }}
-                >
-                    <Text style={{ color: colors.text.inverse, fontSize: 14, fontWeight: '800' }}>{shown + 1} / {photos.length}</Text>
-                </View>
-                <ViewerClose onClose={onClose} />
+        <ViewerFrame centred={false} onClose={onClose}>
+            <ScrollView
+                ref={pager}
+                testID="photo-viewer-pager"
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                contentOffset={{ x: start * width, y: 0 }}
+                onMomentumScrollEnd={onSettled}
+                style={{ flex: 1 }}
+            >
+                {photos.map((uri, i) => (
+                    <View key={i} testID={`photo-viewer-page-${i}`} style={{ width, alignItems: 'center', justifyContent: 'center' }}>
+                        <ViewerPhoto uri={uri} onClose={onClose} />
+                    </View>
+                ))}
+            </ScrollView>
+            <View
+                testID="photo-viewer-count"
+                pointerEvents="none"
+                accessible
+                accessibilityLabel={t('Photo {n} of {count}', { n: shown + 1, count: photos.length })}
+                accessibilityLiveRegion="polite"
+                style={{
+                    position: 'absolute', top: Math.max(50, insets.top + 8), left: 20, minHeight: 48, paddingHorizontal: 14,
+                    borderRadius: 24, backgroundColor: colors.overlay.imageViewerCloseBg, alignItems: 'center', justifyContent: 'center',
+                }}
+            >
+                <Text style={{ color: colors.text.inverse, fontSize: 14, fontWeight: '800' }}>{shown + 1} / {photos.length}</Text>
             </View>
-        </LightBarModal>
+        </ViewerFrame>
     );
 }
 

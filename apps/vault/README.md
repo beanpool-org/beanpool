@@ -405,8 +405,10 @@ host boots that way; `image.json` records it as `kernelExtra`.
 
 Under the host's measured direct boot there is no systemd-boot and no `LoaderEntrySelected`: the image names itself
 by its `roothash` instead, as the UKI on the ESP whose own `.cmdline` names the roothash the kernel booted with
-(`src/shared/image-identity.ts`). systemd-boot and the ESP stay in the disk image, so the same image still boots on a
-plain UEFI host (the boot test).
+(`src/shared/image-identity.ts`). With no boot loader to say which partition is the ESP, systemd mounts none by
+itself, so `host-snp/` mounts it (`efi.mount`: the partition labelled `ESP` at `/efi`, root's alone) for the identity
+and for root's install step. systemd-boot and the ESP stay in the disk image, so the same image still boots on a plain
+UEFI host (the boot test).
 
 The **Servury** profile (`host-profiles/servury.json`, Blackbox Nano, Montreal, chosen 26 Nov 2026): Servury's
 `OVMF.amdsev.fd` from blackbox release 2026.11.3 (SHA-256 `8731846c…958b`, unchanged since 2026.09), 1 vCPU,

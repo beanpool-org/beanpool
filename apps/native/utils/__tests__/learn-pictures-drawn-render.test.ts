@@ -178,7 +178,7 @@ vi.mock('../use-learn-mode', () => ({ useLearnMode: () => 'live' }));
 vi.mock('../../components/learn/useLearnWriter', () => ({
     useLearnWriter: () => ({ checks: h.checks, waiting: 0 }), readMyDrafts: vi.fn(async () => null), forgetLearnRole: vi.fn(async () => {}),
 }));
-vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
+vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn(), askForPostPhotos: vi.fn() }));
 vi.mock('../../components/TagPicker', () => ({ TagPicker: () => null }));
 vi.mock('../../components/AuthorCard', () => ({ AuthorCard: () => null, useMemberRating: () => ({ average: null, count: 0 }) }));
 vi.mock('../../components/PostTagChips', () => ({ PostTagChips: () => null }));

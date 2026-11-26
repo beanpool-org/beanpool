@@ -45,7 +45,7 @@ import { getProfileStatus, acceptNeedsProfileLine } from '../../utils/profile-st
 import { ReviewModal } from '../../components/ReviewModal';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { BillsTab } from '../../components/Bills';
-import { askForPostPhoto } from '../../utils/post-photo';
+import { askForPostPhotos } from '../../utils/post-photo';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { BeansText } from '../../components/BeansText';
 import { AuthorCard } from '../../components/AuthorCard';
@@ -603,8 +603,9 @@ function PostDetailModal() {
     // The photo frame is 4:3 of the column (the screen less the page's 16 a side); the carousel needs the number.
     const { width: screenWidth, fontScale } = useWindowDimensions();
     const photoHeight = Math.round((screenWidth - 32) * SHELL.photo.grid.aspectHeight / SHELL.photo.grid.aspectWidth);
-    // The photo a tap opened whole (the frame crops to 4:3): its own URL, the same ~800 px photo, in the chat's full-screen viewer.
-    const [viewerUri, setViewerUri] = useState<string | null>(null);
+    // The photo a tap opened whole (the frame crops to 4:3), among the photos the carousel drew: the same ~800 px photos in the
+    // full-screen viewer, which swipes through all of them from the one tapped.
+    const [viewer, setViewer] = useState<{ photos: string[]; index: number } | null>(null);
     // The note under IN RETURN, once the member has asked for the whole of it ("More").
     const [termsNoteOpen, setTermsNoteOpen] = useState(false);
     // Where the take-up sits in the page, for the scroll that brings its confirmation into view.
@@ -1735,7 +1736,7 @@ function PostDetailModal() {
 
     const pickEditPhoto = () => {
         if (editPhotos.length >= 5) return;
-        askForPostPhoto((photo) => {
+        askForPostPhotos(5 - editPhotos.length, (photo) => {
             setEditPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev));
         });
     };
@@ -2743,7 +2744,7 @@ function PostDetailModal() {
                   */}
                 {photos.length > 0 ? (
                     <View style={styles.photoFrame} testID="post-photo-frame">
-                        <PhotoCarousel photos={photos} height={photoHeight} borderRadius={SHELL.radius} onOpen={(_i, uri) => setViewerUri(uri)} />
+                        <PhotoCarousel photos={photos} height={photoHeight} borderRadius={SHELL.radius} onOpen={(index, _uri, shown) => setViewer({ photos: shown, index })} />
                     </View>
                 ) : (
                     <View style={styles.tileBanner} testID="post-tile-banner">
@@ -3106,7 +3107,7 @@ function PostDetailModal() {
                 </View>
             )}
             {/* The photo whole, over the page, until tapped or closed. Drawn only while open: it is a Modal, and most visits never open it. */}
-            {!!viewerUri && <ChatPhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} />}
+            {!!viewer && <ChatPhotoViewer uri={viewer.photos[viewer.index]} photos={viewer.photos} index={viewer.index} onClose={() => setViewer(null)} />}
             {showPinSheet && (
                 <PinSheet
                     visible

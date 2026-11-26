@@ -75,7 +75,7 @@ vi.mock('../../components/learn/useLearnWriter', () => ({
     readMyDrafts: vi.fn(async () => null),
     forgetLearnRole: vi.fn(async () => {}),
 }));
-vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
+vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn(), askForPostPhotos: vi.fn() }));
 // The form's Edit draws a page's pictures against the node's address (learn-keep.ts pagePhotoUri): read from the phone's store on a device.
 vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => 'https://node.test') }));
 vi.mock('../db', () => ({

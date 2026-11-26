@@ -28,7 +28,7 @@ const themeIs = vi.hoisted(() => ({ now: 'light' as 'light' | 'dark' }));
 /** Each host's onLayout, by testID, so a case can hand the photo frame the height Yoga gave it. */
 const layouts = vi.hoisted(() => new Map<string, (e: unknown) => void>());
 /** What the page handed the carousel last (the photo opens whole, slice DP4: its onOpen). */
-const carouselSaw = vi.hoisted(() => ({ props: null as null | { photos?: string[]; onOpen?: (index: number, uri: string) => void } }));
+const carouselSaw = vi.hoisted(() => ({ props: null as null | { photos?: string[]; onOpen?: (index: number, uri: string, shown: string[]) => void } }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', checkbox: 'checkbox' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(8).filter((x) => x && typeof x === 'object'));
@@ -135,7 +135,7 @@ vi.mock('../../components/MemberAvatar', async () => {
 // The carousel as the frame hands it: the height it was given, the corners it was given.
 vi.mock('../../components/PhotoCarousel', async () => {
     const { createElement: h } = await import('react');
-    return { PhotoCarousel: (p: { height?: number; borderRadius?: number; photos?: string[]; onOpen?: (index: number, uri: string) => void }) => (carouselSaw.props = p, h('div', { 'data-testid': 'event-carousel', 'data-height': String(p.height), 'data-radius': String(p.borderRadius), 'data-style': JSON.stringify({ height: p.height }) })) };
+    return { PhotoCarousel: (p: { height?: number; borderRadius?: number; photos?: string[]; onOpen?: (index: number, uri: string, shown: string[]) => void }) => (carouselSaw.props = p, h('div', { 'data-testid': 'event-carousel', 'data-height': String(p.height), 'data-radius': String(p.borderRadius), 'data-style': JSON.stringify({ height: p.height }) })) };
 });
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
 
@@ -579,7 +579,7 @@ describe('the photo opens whole', () => {
         await openFrame();
         expect(typeof carouselSaw.props?.onOpen).toBe('function');
         expect(viewer()).toBeNull();
-        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0]); });
+        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0], carouselSaw.props!.photos ?? []); });
         expect(viewed()).toBe('https://mullum.example/uploads/market.webp');
         await act(async () => { buttonNamed('Close photo')!.click(); });
         expect(viewer()).toBeNull();
@@ -587,7 +587,7 @@ describe('the photo opens whole', () => {
 
     it('a tap anywhere on the open photo closes it too', async () => {
         await openFrame();
-        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0]); });
+        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0], carouselSaw.props!.photos ?? []); });
         expect(viewer()).not.toBeNull();
         await act(async () => { buttonNamed('Dismiss full-size photo')!.click(); });
         expect(viewer()).toBeNull();

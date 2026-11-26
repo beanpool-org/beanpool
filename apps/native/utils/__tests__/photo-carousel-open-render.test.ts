@@ -78,9 +78,9 @@ describe('PhotoCarousel with onOpen', () => {
         expect(onOpen).not.toHaveBeenCalled();
         await act(async () => { buttons()[1].click(); });
         expect(onOpen).toHaveBeenCalledTimes(1);
-        expect(onOpen).toHaveBeenCalledWith(1, B);
+        expect(onOpen).toHaveBeenCalledWith(1, B, [A, B]);
         await act(async () => { buttons()[0].click(); });
-        expect(onOpen).toHaveBeenLastCalledWith(0, A);
+        expect(onOpen).toHaveBeenLastCalledWith(0, A, [A, B]);
     });
 
     it('one photo is one button; the counter and the dots are not buttons', async () => {
@@ -97,7 +97,7 @@ describe('PhotoCarousel with onOpen', () => {
         await draw(createElement(PhotoCarousel, { photos: ['', 'null', A, '   ', B], height: 216, onOpen }));
         expect(buttons().map((b) => b.getAttribute('aria-label'))).toEqual(['Photo 1 of 2', 'Photo 2 of 2']);
         await act(async () => { buttons()[1].click(); });
-        expect(onOpen).toHaveBeenCalledWith(1, B);
+        expect(onOpen).toHaveBeenCalledWith(1, B, [A, B]);
     });
 });
 

@@ -43,7 +43,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { createPost, getBalance, getReachablePeers } from '../utils/db';
 import { noteNotifyMoment, LISTING_MOMENT } from '../components/NotifyLine';
 import { hasUsableAvatar as sharedHasUsableAvatar } from '../utils/profile-status';
-import { askForPostPhoto } from '../utils/post-photo';
+import { askForPostPhotos } from '../utils/post-photo';
 import { useIdentity } from './IdentityContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PricingInfoModal } from '../components/info-content/PricingInfoModal';
@@ -641,8 +641,9 @@ export default function NewListingScreen() {
 
     const pickPhoto = async () => {
         if (postPhotos.length >= 5) return;
-        // The shared sheet: Camera, Gallery, and Browse files on Android, closed by Back (utils/post-photo).
-        askForPostPhoto((photo) => setPostPhotos(prev => [...prev, photo]));
+        // The shared sheet: Camera, Gallery, and Browse files on Android, closed by Back (utils/post-photo). Gallery and Browse
+        // files pick up to the room left in one go, each photo handed over in the order picked.
+        askForPostPhotos(5 - postPhotos.length, (photo) => setPostPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev)));
     };
 
     const showPricingGuide = () => {

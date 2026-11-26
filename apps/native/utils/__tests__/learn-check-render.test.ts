@@ -117,7 +117,7 @@ vi.mock('../../app/ThemeContext', async () => {
 vi.mock('../keyboard-alert', () => ({ Alert: { alert: (...args: unknown[]) => h.alert(...args) } }));
 vi.mock('../leave-screen', () => ({ leaveScreen: (...args: unknown[]) => h.leaveScreen(...args) }));
 vi.mock('../home-store', () => ({ forgetHomeForHeader: () => h.forgetHomeForHeader() }));
-vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
+vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn(), askForPostPhotos: vi.fn() }));
 vi.mock('../../components/TagPicker', () => ({ TagPicker: () => null }));
 vi.mock('../../components/learn/KnowledgeDetail', () => ({
     hostOf: (url: string) => {

@@ -49,7 +49,7 @@ import { getNodeFeatures, setSwitchOverride } from './config/node-profile.js';
 import { moneyRequestOf, recordAnswer } from './engine/money-requests.js';
 import { TAKE_UP_ROUTE } from './routes/treasury.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { feeOf, itemTakeUpRefusalText, wordsFor, type ItemTakeUpRefusal } from '@beanpool/core';
+import { feeOf, itemTakeUpRefusalText, wordsFor, TAKE_UP_REFUSALS, type ItemTakeUpRefusal } from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
@@ -139,8 +139,11 @@ async function call(method: 'GET' | 'POST', urlPath: string, id: Id, body?: unkn
     });
     const text = await res.text();
     let json: any; try { json = JSON.parse(text); } catch { /* empty */ }
+    if (urlPath.split('?')[0].endsWith('/take-up') && typeof json?.code === 'string') takeUpCodes.add(json.code);
     return { status: res.status, body: json, text };
 }
+/** Every code the take-up door answered in this suite: each must have its words in the apps (core TAKE_UP_REFUSALS, slice 2). */
+const takeUpCodes = new Set<string>();
 const post = (id: Id, urlPath: string, body: unknown) => call('POST', urlPath, id, body);
 const brief = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`;
 
@@ -664,6 +667,12 @@ async function main(): Promise<void> {
     assert(toCapped.status === 200 && surplus(capped) === 0 && swept === 0 && bal(capped) === hc(32) && commons() === commonsPre,
         `Beans members send to a stall with a ceiling of 10 are never swept: earned surplus 0, the stall keeps 32 (${brief(toCapped)}, swept ${swept})`);
     conserved('Rule 7');
+
+    // ── The apps' words (slice 2) ──────────────────────────────────────────────────────────────────────────────────
+    // Red if the door answers a code the apps have no line for (core enterprise-take-up.ts TAKE_UP_REFUSALS): add its line there.
+    const unworded = [...takeUpCodes].filter((code) => !Object.prototype.hasOwnProperty.call(TAKE_UP_REFUSALS, code));
+    assert(takeUpCodes.size >= 10 && unworded.length === 0,
+        `every code the take-up door answered here has its words in the apps (${[...takeUpCodes].sort().join(', ')}; none without: ${unworded.join(', ') || 'none'})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run && process.exitCode !== 1 ? 0 : 1);

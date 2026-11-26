@@ -163,9 +163,11 @@ function ChatPhotoPagerModal({ photos, start, onClose }: { photos: readonly stri
                 accessible
                 accessibilityLabel={t('Photo {n} of {count}', { n: shown + 1, count: photos.length })}
                 accessibilityLiveRegion="polite"
+                // The viewer's own near-black under white words: 4.5:1 and more whatever photo is behind it, a light one included
+                // (Close's lighter half-black is for an icon; words need the darker ground).
                 style={{
                     position: 'absolute', top: Math.max(50, insets.top + 8), left: 20, minHeight: 48, paddingHorizontal: 14,
-                    borderRadius: 24, backgroundColor: colors.overlay.imageViewerCloseBg, alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 24, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center',
                 }}
             >
                 <Text style={{ color: colors.text.inverse, fontSize: 14, fontWeight: '800' }}>{shown + 1} / {photos.length}</Text>

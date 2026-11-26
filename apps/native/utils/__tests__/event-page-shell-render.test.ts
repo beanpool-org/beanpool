@@ -579,7 +579,7 @@ describe('the photo opens whole', () => {
         await openFrame();
         expect(typeof carouselSaw.props?.onOpen).toBe('function');
         expect(viewer()).toBeNull();
-        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0], [MULLUM.photos[0]]); });
+        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0], carouselSaw.props!.photos ?? []); });
         expect(viewed()).toBe('https://mullum.example/uploads/market.webp');
         await act(async () => { buttonNamed('Close photo')!.click(); });
         expect(viewer()).toBeNull();
@@ -587,7 +587,7 @@ describe('the photo opens whole', () => {
 
     it('a tap anywhere on the open photo closes it too', async () => {
         await openFrame();
-        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0], [MULLUM.photos[0]]); });
+        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0], carouselSaw.props!.photos ?? []); });
         expect(viewer()).not.toBeNull();
         await act(async () => { buttonNamed('Dismiss full-size photo')!.click(); });
         expect(viewer()).toBeNull();

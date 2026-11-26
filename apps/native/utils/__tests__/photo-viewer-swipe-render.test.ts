@@ -154,12 +154,12 @@ describe('a post with several photos', () => {
         expect(counter.minHeight).toBeGreaterThanOrEqual(48);
     });
 
-    it('reads in both colour sets: white on the viewer\'s near-black, as Close is', async () => {
+    it('reads in both colour sets: white on the viewer\'s own near-black', async () => {
         for (const theme of ['light', 'dark'] as const) {
             h.theme = theme;
             const colors = theme === 'dark' ? darkColors : lightColors;
             await show(createElement(ChatPhotoViewer, { uri: A, photos: [A, B], index: 0, onClose: vi.fn() }));
-            expect(styleOf(count()).backgroundColor).toBe(colors.overlay.imageViewerCloseBg);
+            expect(styleOf(count()).backgroundColor).toBe(colors.overlay.imageViewerBg);
             expect(styleOf(count()?.querySelector('span') ?? null).color).toBe(colors.text.inverse);
             expect(colors.text.inverse.toLowerCase()).toMatch(/^#fff(fff)?$/);
             await act(async () => { root.render(null as any); });

@@ -113,7 +113,8 @@ describe('the forum kept on the phone', () => {
         const db = fs.readFileSync(path.resolve(__dirname, '../db.ts'), 'utf8');
         const cache = db.slice(db.indexOf('const CACHE_TABLES = ['), db.indexOf('] as const;', db.indexOf('const CACHE_TABLES = [')));
         expect(cache).toContain("'forum_kept'");
-        expect(db).toMatch(/export const COPY_SCHEMA = 8;/);
+        // Brought in at 8; the number has only risen since (9: photo focus points), and a copy below it is cleared and read again.
+        expect(Number(/export const COPY_SCHEMA = (\d+);/.exec(db)?.[1])).toBeGreaterThanOrEqual(8);
         expect(db).toContain('${FORUM_KEPT_TABLE_SQL}');
     });
 });

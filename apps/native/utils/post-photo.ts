@@ -9,7 +9,7 @@
  * is picked, not when a screen that offers one opens (as utils/picture-crop.ts).
  */
 import { Alert, Platform, type AlertButton } from 'react-native';
-import { fetchedPhotoOf, t } from '@beanpool/core';
+import { fetchedPhotoOf, photosLeftOutLine, photosThatFit, t } from '@beanpool/core';
 
 /** The longest a listing photo's width is sent. */
 export const POST_PHOTO_WIDTH = 800;
@@ -65,18 +65,87 @@ export async function postPhotoFromCamera(): Promise<string | null> {
     return !result.canceled && result.assets?.[0]?.uri ? postPhotoOf(result.assets[0].uri) : null;
 }
 
+/**
+ * What one pick from the photo picker or Browse files gave a form: the photos it keeps, each sent 800 px wide (postPhotoOf),
+ * in the order picked; how many did not fit the room it had left (photosThatFit: the first ones are kept); and, when one
+ * photo's redraw failed, that error (the others are still kept, so a bad photo never costs the good ones).
+ */
+export interface PickedPostPhotos {
+    photos: string[];
+    leftOut: number;
+    failed: unknown;
+}
+
+/** Each kept photo through the same 800 px redraw as one photo always went, in order. */
+async function redrawnInOrder(uris: readonly string[], leftOut: number): Promise<PickedPostPhotos> {
+    const photos: string[] = [];
+    let failed: unknown = null;
+    for (const uri of uris) {
+        try {
+            const photo = await postPhotoOf(uri);
+            if (photo) photos.push(photo);
+        } catch (e) {
+            failed ??= e ?? new Error('unreadable photo');
+        }
+    }
+    return { photos, leftOut, failed };
+}
+
+/** The picked photos' addresses, in the order the picker gave them; none when the member left without one. */
+function pickedUris(result: { canceled: boolean; assets?: ({ uri?: string | null } | null)[] | null }): string[] {
+    if (result.canceled) return [];
+    return (result.assets ?? []).map((a) => a?.uri).filter((uri): uri is string => typeof uri === 'string' && uri !== '');
+}
+
+/**
+ * Up to `room` photos from the system's photo picker, opened on Albums: no permission. With room for more than one, the member
+ * picks several in one go (Marty, 26 Nov 2026): the picker itself counts them to the room left (Android's photo picker and
+ * iOS's PHPicker both stop at the limit) and gives them back in the order they were picked. With room for one it opens exactly
+ * as it always did, a single pick.
+ */
+export async function postPhotosFromLibrary(room: number): Promise<PickedPostPhotos> {
+    const ImagePicker = await import('expo-image-picker');
+    const several = room > 1;
+    const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], quality: 1, base64: false, defaultTab: 'albums',
+        ...(several ? { allowsMultipleSelection: true, selectionLimit: Math.floor(room), orderedSelection: true } : {}),
+    });
+    const { kept, leftOut } = photosThatFit(pickedUris(result), room);
+    return redrawnInOrder(kept, leftOut);
+}
+
+/**
+ * Up to `room` photos from the system's document picker (legacy mode for images): reaches every folder without permission.
+ * The document picker has no count of its own, and the image picker would quietly cut the list at a selection limit, so it is
+ * asked for every photo picked (0: no limit) and the first `room` are kept here, where the member can be told how many were
+ * left out.
+ */
+export async function postPhotosFromFiles(room: number): Promise<PickedPostPhotos> {
+    const ImagePicker = await import('expo-image-picker');
+    const several = room > 1;
+    const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'], quality: 1, base64: false, legacy: true,
+        ...(several ? { allowsMultipleSelection: true, selectionLimit: 0 } : {}),
+    });
+    const { kept, leftOut } = photosThatFit(pickedUris(result), room);
+    return redrawnInOrder(kept, leftOut);
+}
+
+/** One photo, as a pick for a form with room for one: its redraw's failure is thrown, as it always was. */
+async function onePhoto(pick: Promise<PickedPostPhotos>): Promise<string | null> {
+    const picked = await pick;
+    if (picked.failed && picked.photos.length === 0) throw picked.failed;
+    return picked.photos[0] ?? null;
+}
+
 /** From the system's photo picker, opened on Albums: no permission. */
 export async function postPhotoFromLibrary(): Promise<string | null> {
-    const ImagePicker = await import('expo-image-picker');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, base64: false, defaultTab: 'albums' });
-    return !result.canceled && result.assets?.[0]?.uri ? postPhotoOf(result.assets[0].uri) : null;
+    return onePhoto(postPhotosFromLibrary(1));
 }
 
 /** From the system's document picker (legacy mode for images): reaches every folder without permission. */
 export async function postPhotoFromFiles(): Promise<string | null> {
-    const ImagePicker = await import('expo-image-picker');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, base64: false, legacy: true });
-    return !result.canceled && result.assets?.[0]?.uri ? postPhotoOf(result.assets[0].uri) : null;
+    return onePhoto(postPhotosFromFiles(1));
 }
 
 /**
@@ -99,18 +168,40 @@ export function askPhotoSource(title: string, sources: { camera?: () => void; ga
 
 /** Asks Camera, Gallery, or Browse files, then hands the picked photo to `add`. Nothing is asked of the phone until one is tapped. */
 export function askForPostPhoto(add: (photo: string) => void, title?: string): void {
-    const take = (pick: () => Promise<string | null>, failed?: (e: any) => void) => async () => {
+    askForPostPhotos(1, add, title);
+}
+
+/**
+ * Asks Camera, Gallery, or Browse files for a form with `room` photos left, then hands each picked photo to `add`, one call
+ * per photo in the order picked (a form appending to its list keeps them all). Gallery and Browse files let the member pick up
+ * to `room` in one go (Marty, 26 Nov 2026: "she had to go back in to gallery 3 times to select 3 photos"); the Camera still
+ * takes one. More picked than the room: the first ones are kept and an alert says how many were left out. A photo whose
+ * redraw fails says "Photo not added", as one always did, and the others are kept. Nothing is asked of the phone until one is
+ * tapped.
+ */
+export function askForPostPhotos(room: number, add: (photo: string) => void, title?: string): void {
+    const notAdded = (e: any) => Alert.alert(t('Photo not added'), e?.message || t('Could not open your photos.'));
+    const take = (pick: (room: number) => Promise<PickedPostPhotos>) => async () => {
         try {
-            const photo = await pick();
+            const picked = await pick(room);
+            for (const photo of picked.photos) add(photo);
+            if (picked.failed) notAdded(picked.failed);
+            else if (picked.leftOut > 0) Alert.alert(photosLeftOutLine(picked.leftOut));
+        } catch (e: any) {
+            notAdded(e);
+        }
+    };
+    const camera = async () => {
+        try {
+            const photo = await postPhotoFromCamera();
             if (photo) add(photo);
         } catch (e: any) {
-            if (failed) failed(e);
-            else Alert.alert(t('Photo not added'), e?.message || t('Could not open your photos.'));
+            Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'));
         }
     };
     askPhotoSource(title ?? t('Add Photo'), {
-        camera: take(postPhotoFromCamera, (e) => Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'))),
-        gallery: take(postPhotoFromLibrary),
-        files: take(postPhotoFromFiles),
+        camera,
+        gallery: take(postPhotosFromLibrary),
+        files: take(postPhotosFromFiles),
     });
 }

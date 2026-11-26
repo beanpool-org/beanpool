@@ -105,7 +105,7 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
     const { colors } = useTheme();
-    const [viewerUri, setViewerUri] = useState<string | null>(null);
+    const [viewer, setViewer] = useState<{ photos: string[]; index: number } | null>(null);
     const [reporting, setReporting] = useState(false);
     // Keeping it right (K5): the node's answer to an action, shown until the copy catches up (a new `held` drops it); this
     // member's tap and its count; "Still right" done; the out-of-date note being written (null: shut); the node's refusal.
@@ -273,7 +273,7 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                 {/* Its own tags (Learn's tags): each opens Learn on a search for it, never the Market. */}
                 <PostTagChips tags={[]} freeTags={page.freeTags} freeTagLabel={(tag) => t(KNOWLEDGE_TAG_WORDS.searchFor, { tag })}
                     onFreeTag={(tag) => router.push({ pathname: '/learn', params: { q: encodeURIComponent(tag) } } as any)} />
-                {photos.length > 0 ? <PhotoCarousel photos={photos} height={220} borderRadius={14} onOpen={(_i, uri) => setViewerUri(uri)} /> : null}
+                {photos.length > 0 ? <PhotoCarousel photos={photos} height={220} borderRadius={14} onOpen={(index, _uri, shown) => setViewer({ photos: shown, index })} /> : null}
                 {sources.length > 0 ? (
                     <View style={{ gap: 8 }}>
                         <Text style={styles.label}>{t(LEARN_LINES.sources)}</Text>
@@ -417,7 +417,7 @@ export function KnowledgeDetail({ page: held, beansLive = false }: { page: Knowl
                     </View>
                 ) : null}
             </ScrollView>
-            {viewerUri ? <ChatPhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} /> : null}
+            {viewer ? <ChatPhotoViewer uri={viewer.photos[viewer.index]} photos={viewer.photos} index={viewer.index} onClose={() => setViewer(null)} /> : null}
         </View>
     );
 }

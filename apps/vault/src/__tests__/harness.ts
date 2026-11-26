@@ -22,6 +22,7 @@ import { createVaultApi, type VaultApi, type VaultApiOptions } from '../api/serv
 import { parseBackupFile } from '../shared/backup-format.js';
 import { LocalDirectoryFeed } from '../shared/release-feed.js';
 import { confirmShare, custodianKey, genesis, presentShare, type CallOptions, type CustodianKey } from '../custodian/lib.js';
+import type { Attestor } from '../keyholder/attestor.js';
 import type { MemoryHygiene } from '../keyholder/hygiene.js';
 import { Keyholder } from '../keyholder/keyholder.js';
 import { listenKeyholder, type KeyholderServer } from '../keyholder/server.js';
@@ -167,6 +168,10 @@ export async function startVault(opts: {
     imageWaiting?: VaultApiOptions['imageWaiting'];
     /** A wait (the off-box upload's retry), in place of the test clock moved on at once: something done meanwhile. */
     sleep?: (ms: number, clock: Clock) => Promise<void>;
+    /** What the keyholder's hello carries as proof of its code (keyholder/attestor.ts): a fixture SEV-SNP chip, say. */
+    attestor?: Attestor;
+    /** The image the keyholder says it booted, in place of this harness's own release (a vault built as a later release). */
+    releaseHash?: string;
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -185,7 +190,7 @@ export async function startVault(opts: {
     let pinned = custodians.map(c => c.publicKey);
     const makeKeyholder = () => new Keyholder({
         stateDir, genesisCustodians: pinned, clock: clock.now, iterationExponent: 0, hygiene: opts.hygiene,
-        releaseHash: release.manifest.imageHash,
+        releaseHash: opts.releaseHash ?? release.manifest.imageHash, attestor: opts.attestor,
     });
     let kh = makeKeyholder();
     let server: KeyholderServer = await listenKeyholder(kh, socketPath);

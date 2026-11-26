@@ -37,7 +37,7 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { StackActions, useRoute } from '@react-navigation/native';
 import {
     POST_TYPE_LINES, carryTotalToEach, feeOf, formatHundredths, parseHundredths, perItemCreateFields, perItemFeeLine, perItemLines,
-    priceUnitsOffered, storedPhotoFocus, t, upperCase, type PerItemField,
+    priceUnitsOffered, t, upperCase, type PerItemField,
 } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getReachablePeers } from '../utils/db';
@@ -322,10 +322,8 @@ export default function NewListingScreen() {
     const [reachablePeerList, setReachablePeerList] = useState<{ peerId: string; callsign: string | null }[]>([]);
     const [postPhotos, setPostPhotos] = useState<string[]>([]);
     // Each photo's focus, the part its card keeps (core photo-focus.ts): held by the photo itself, so it goes wherever that
-    // photo goes in postPhotos (taken off, several picked at once, the list put in whole by a draft).
+    // photo goes in postPhotos (taken off, several picked at once, or the list put in whole by a saved draft).
     const photoFocus = usePhotoFocusList();
-    // The focus the draft keeps, as posts.photo_focus holds it: a string, so the draft is saved only when it changes.
-    const postFocusStored = storedPhotoFocus(photoFocus.forPhotos(postPhotos));
     const [postLat, setPostLat] = useState<number | null>(null);
     const [postLng, setPostLng] = useState<number | null>(null);
     const [pinDropMode, setPinDropMode] = useState(false);
@@ -452,11 +450,11 @@ export default function NewListingScreen() {
             const draft = {
                 anchorUrl, postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits,
                 postPriceType: pickedPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
-                postPhotoFocus: postFocusStored, postReach, postReachPeers, savedAt: Date.now(),
+                postReach, postReachPeers, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, pickedPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postFocusStored, postLat, postLng, postReach, postReachPeers]);
+    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, pickedPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
@@ -473,10 +471,7 @@ export default function NewListingScreen() {
         setPostItemLot(typeof d.postItemLot === 'string' ? d.postItemLot : '');
         setPostRepeatable(!!d.postRepeatable);
         setPostCashAlsoNeeded(!!d.postCashAlsoNeeded);
-        const draftPhotos: string[] = Array.isArray(d.postPhotos) ? d.postPhotos : [];
-        setPostPhotos(draftPhotos);
-        // The list put in whole: each photo's focus as the draft kept it, held by photo (none for a draft from before).
-        photoFocus.resetFrom(draftPhotos, { photo_focus: d.postPhotoFocus });
+        setPostPhotos(Array.isArray(d.postPhotos) ? d.postPhotos : []);
         setPostLat(typeof d.postLat === 'number' ? d.postLat : null);
         setPostLng(typeof d.postLng === 'number' ? d.postLng : null);
         setPostReach(d.postReach === 'peers' || d.postReach === 'everywhere' ? d.postReach : 'local');

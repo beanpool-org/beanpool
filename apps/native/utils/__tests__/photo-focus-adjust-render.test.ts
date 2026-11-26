@@ -60,11 +60,11 @@ beforeEach(() => { host = document.createElement('div'); document.body.appendChi
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 function draw(focus: PhotoFocus | null, onDone = vi.fn(), onCancel = vi.fn()) {
-    act(() => { root.render(createElement(PhotoFocusAdjust, { uri: 'file:///photo.jpg', focus, onDone, onCancel })); });
+    act(() => { root.render(createElement(PhotoFocusAdjust, { uri: 'file:///photo.jpg', focus, onDone, onCancel }) as any); });
     return { onDone, onCancel };
 }
 const press = (label: string) => {
-    const button = [...host.querySelectorAll('button')].find((b) => b.textContent === label);
+    const button = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === label);
     if (!button) throw new Error(`no button ${label}`);
     act(() => { button.click(); });
 };
@@ -142,7 +142,7 @@ describe('usePhotoFocusList: an edit sends the focus only when the member change
         const { usePhotoFocusList } = await import('../use-photo-focus-list');
         let hook: ReturnType<typeof usePhotoFocusList> | null = null;
         const Probe = () => { hook = usePhotoFocusList(); return null; };
-        act(() => { root.render(createElement(Probe)); });
+        act(() => { root.render(createElement(Probe) as any); });
         act(() => { hook!.resetFrom({ photo_focus: '[{"x":0.2,"y":0.8}]' }); });
         expect(hook!.touched).toBe(false);
         expect(hook!.forEdit(2)).toBeUndefined();

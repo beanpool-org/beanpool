@@ -3,7 +3,12 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmdirSync, rmSync, writ
 import net from 'node:net';
 import path from 'node:path';
 import { vaultB64, vaultUnb64 } from '@beanpool/core';
+import { describeTcb, readSnpReport, snpEvidence, splitSnpEvidence, type SnpReport } from '../shared/snp-report.js';
 import { noneAttestor, type Attestor } from './attestor.js';
+
+// The report's layout and the evidence wrapper live in shared/ (the custodian's chip check reads them too).
+export { readSnpReport, snpEvidence, splitSnpEvidence, SNP_EVIDENCE_MAGIC, SNP_EVIDENCE_VERSION, SNP_REPORT_SIZE } from '../shared/snp-report.js';
+export type { SnpReport, SnpTcb } from '../shared/snp-report.js';
 
 /**
  * AMD SEV-SNP reports for the keyholder's hello (vault comeback design §2.2). Linux's configfs-tsm gives them: make a
@@ -17,81 +22,14 @@ import { noneAttestor, type Attestor } from './attestor.js';
  * custodian's tool's checks fail (a report must carry the tool's own binding, signed by the chip) and the vault stays
  * locked. The checks here are belt and braces against a mistake, not the trust check, which is the tool's.
  *
- * Evidence bytes: "BVSN", a version byte (1), the 1,184-byte report, then the certificate table (may be empty).
+ * Evidence bytes: "BVSN", a version byte (1), the 1,184-byte report, then the certificate table (may be empty)
+ * (shared/snp-report.ts).
  */
 
-export const SNP_REPORT_SIZE = 0x4a0;
-export const SNP_EVIDENCE_MAGIC = 'BVSN';
-export const SNP_EVIDENCE_VERSION = 1;
 export const TSM_REPORT_DIR = '/sys/kernel/config/tsm/report';
 export const ATTEST_SOCKET = '/run/beanpool-vault/attest/attest.sock';
 /** A request or an answer on the helper's socket larger than this is not one (a report plus a certificate table is ~10 KiB). */
 const ATTEST_MAX_BYTES = 256 * 1024;
-
-/** One TCB_VERSION as Milan and Genoa lay it out (Turin's differs: §2.4; its reader comes with a Turin host). */
-export interface SnpTcb {
-    bootloader: number;
-    tee: number;
-    snp: number;
-    microcode: number;
-}
-
-export interface SnpReport {
-    version: number;
-    policy: bigint;
-    vmpl: number;
-    signatureAlgo: number;
-    platformInfo: bigint;
-    /** Bits 2-4 of the signer field: 0 the chip's own key (VCEK), 1 a cloud's (VLEK). */
-    signingKey: number;
-    maskChipKey: boolean;
-    reportData: Buffer;
-    measurement: Buffer;
-    reportedTcb: SnpTcb;
-    chipId: Buffer;
-    committedTcb: SnpTcb;
-    launchTcb: SnpTcb;
-}
-
-function tcbAt(r: Buffer, offset: number): SnpTcb {
-    return { bootloader: r[offset], tee: r[offset + 1], snp: r[offset + 6], microcode: r[offset + 7] };
-}
-
-/** The public fields of a report (offsets: go-sev-guest abi.go). Throws on anything that is not 1,184 bytes. */
-export function readSnpReport(bytes: Uint8Array): SnpReport {
-    const r = Buffer.from(bytes);
-    if (r.length !== SNP_REPORT_SIZE) throw new Error(`An SEV-SNP report is ${SNP_REPORT_SIZE} bytes, not ${r.length}.`);
-    const signer = r.readUInt32LE(0x48);
-    return {
-        version: r.readUInt32LE(0x00),
-        policy: r.readBigUInt64LE(0x08),
-        vmpl: r.readUInt32LE(0x30),
-        signatureAlgo: r.readUInt32LE(0x34),
-        platformInfo: r.readBigUInt64LE(0x40),
-        signingKey: (signer >> 2) & 0x7,
-        maskChipKey: (signer & 0x2) !== 0,
-        reportData: Buffer.from(r.subarray(0x50, 0x90)),
-        measurement: Buffer.from(r.subarray(0x90, 0xc0)),
-        reportedTcb: tcbAt(r, 0x180),
-        chipId: Buffer.from(r.subarray(0x1a0, 0x1e0)),
-        committedTcb: tcbAt(r, 0x1e0),
-        launchTcb: tcbAt(r, 0x1f0),
-    };
-}
-
-/** "BVSN" ‖ version ‖ report ‖ certificate table. */
-export function snpEvidence(report: Uint8Array, auxblob: Uint8Array): Buffer {
-    if (report.length !== SNP_REPORT_SIZE) throw new Error('Not an SEV-SNP report.');
-    return Buffer.concat([Buffer.from(SNP_EVIDENCE_MAGIC, 'ascii'), Buffer.from([SNP_EVIDENCE_VERSION]), Buffer.from(report), Buffer.from(auxblob)]);
-}
-
-export function splitSnpEvidence(evidence: Uint8Array): { report: Buffer; auxblob: Buffer } {
-    const e = Buffer.from(evidence);
-    if (e.length < 5 + SNP_REPORT_SIZE || e.subarray(0, 4).toString('ascii') !== SNP_EVIDENCE_MAGIC || e[4] !== SNP_EVIDENCE_VERSION) {
-        throw new Error('Not BeanPool SEV-SNP evidence.');
-    }
-    return { report: Buffer.from(e.subarray(5, 5 + SNP_REPORT_SIZE)), auxblob: Buffer.from(e.subarray(5 + SNP_REPORT_SIZE)) };
-}
 
 /** The file operations configfs-tsm needs; tests pass a fake that behaves like the kernel's. */
 export interface TsmFs {
@@ -274,12 +212,14 @@ export function attestorFrom(config: { attestor?: unknown; attestSocket?: unknow
 
 /** The boot check's lines (public values only): policy, VMPL, signer, and the three TCBs. */
 export function describeSnpReport(r: SnpReport): string[] {
-    const tcb = (t: SnpTcb) => `bootloader ${t.bootloader}, tee ${t.tee}, snp ${t.snp}, microcode ${t.microcode}`;
+    const tcb = describeTcb;
     return [
         `report version ${r.version}, policy 0x${r.policy.toString(16)} (debug ${(r.policy >> 19n) & 1n ? 'ON' : 'off'}, migration agent ${(r.policy >> 18n) & 1n ? 'ON' : 'off'}), VMPL ${r.vmpl}`,
         `signer ${r.signingKey === 0 ? 'VCEK (the chip\'s own key)' : r.signingKey === 1 ? 'VLEK' : `unknown (${r.signingKey})`}${r.maskChipKey ? ', chip key masked' : ''}`,
         `reported TCB ${tcb(r.reportedTcb)}`,
         `committed TCB ${tcb(r.committedTcb)}; launch TCB ${tcb(r.launchTcb)}`,
         `measurement ${r.measurement.toString('hex')}`,
+        // The custodian's tool names a chip it has not seen by these 8 characters (--accept-new-machine): compare them.
+        `chip ${r.chipId.toString('hex').slice(0, 8)}…; CPUID family 0x${r.cpuid.family.toString(16)}, model 0x${r.cpuid.model.toString(16)}`,
     ];
 }

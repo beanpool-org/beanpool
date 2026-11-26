@@ -23,10 +23,12 @@
     "snp": 29,
     "microcode": 222
   },
+  "requireAliasCheck": true,
   "notes": [
     "Servury Blackbox Nano, Montreal. Chosen by Marty on 26 Nov 2026 (vault comeback design, DECIDED block).",
     "Launch inputs from Servury's measured-boot guide and RELEASE.json 2026.11.3 (read 26 Nov 2026): 1 vCPU on Nano, EPYC-v4, guest features 0x1, guest policy 0x30000 (SMT allowed, debug off, no migration agent). The firmware's hash is the same in releases 2026.09 to 2026.11.3.",
     "minTcb is the release's floor, not part of the image: the levels the 26 Nov probe read off this host's report (bootloader 4, tee 0, SNP 29, microcode 222). AMD-SB-3059 is fixed at SNP 0x1F = 31 (Milan SEV firmware 1.3A.03); this host was not patched on 26 Nov. Raise snp to 31 here as soon as Servury patches, and sign a release with the new host policy.",
+    "requireAliasCheck: the firmware's check for aliased memory (BadRAM, AMD-SB-3015; platform info bit 5) must have run. SEV firmware 1.58 is far newer than that fix, but the probe did not record platform info: the first report on the TEST image (design test T2) confirms it before any real share. If it is not set, the custodian's tool refuses with 'alias_check' and says so.",
     "The chip family (Milan) is the director's reading of the probe (SEV firmware 1.58 build 1 = 1.3A.01, a Milan level); the first report's CPUID fields confirm it (design test T2)."
   ]
 }

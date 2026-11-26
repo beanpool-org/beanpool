@@ -331,7 +331,7 @@ if [ "${platform}" = sev-snp ]; then
         echo "build.sh: sev-snp-measure gave ${measurement:-no answer}, not a 48-byte measurement" >&2
         exit 2
     fi
-    node "${here}/image-settings.mjs" host-policy "${host}" "${measurement}" > "${out}/host-policy.json"
+    node "${here}/image-settings.mjs" host-policy "${host}" "${measurement}" "${uki_sha}" > "${out}/host-policy.json"
     echo "build.sh: launch measurement on host ${host}: ${measurement}" >&2
 fi
 image_hash="$(printf 'beanpool-vault-image/1\n%s\n%s\n' "${uki_sha}" "${roothash}" | (sha256sum 2>/dev/null || shasum -a 256) | cut -d' ' -f1)"

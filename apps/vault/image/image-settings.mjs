@@ -196,7 +196,7 @@ export function readHostProfile(name, dir = HOST_PROFILES) {
     } catch {
         refuseProfile(name, `no readable host-profiles/${name}.json`);
     }
-    exact(p, ['profile', 'platform', 'product', 'firmware', 'launch', 'guestPolicy', 'signer', 'minTcb', 'notes'], 'the profile', name);
+    exact(p, ['profile', 'platform', 'product', 'firmware', 'launch', 'guestPolicy', 'signer', 'minTcb', 'requireAliasCheck', 'notes'], 'the profile', name);
     if (p.profile !== name) refuseProfile(name, `the file names profile ${JSON.stringify(p.profile)}`);
     if (p.platform !== 'sev-snp') refuseProfile(name, 'platform is sev-snp (the only confidential platform this build knows)');
     if (p.product !== 'Milan' && p.product !== 'Genoa') refuseProfile(name, 'product is Milan or Genoa');
@@ -219,6 +219,7 @@ export function readHostProfile(name, dir = HOST_PROFILES) {
     if (p.signer !== 'vcek') refuseProfile(name, 'signer is vcek (the chip\'s own key)');
     exact(p.minTcb, ['bootloader', 'tee', 'snp', 'microcode'], 'minTcb', name);
     if (!Object.values(p.minTcb).every(byte)) refuseProfile(name, 'each minTcb level is 0 to 255');
+    if (typeof p.requireAliasCheck !== 'boolean') refuseProfile(name, 'requireAliasCheck is true or false');
     if (p.notes !== undefined && !(Array.isArray(p.notes) && p.notes.every((n) => typeof n === 'string'))) refuseProfile(name, 'notes is a list of text');
     return p;
 }
@@ -231,17 +232,29 @@ function le64hex(n) {
 }
 
 /**
- * The release's starting host policy for this profile and this build's measurement, in the shape today's release
- * parser takes (src/shared/release.ts HostPolicySevSnp; the custodian tool's checker lane gives it design §2.4's
- * shape): `minReportedTcb` and `policy` as the report's own 8 bytes. TCB_VERSION on Milan and Genoa: bootloader, tee,
- * four reserved bytes, snp, microcode.
+ * The release's starting host policy for this profile, this build's UKI and its computed measurement, in design §2.4's
+ * shape (src/shared/release.ts HostPolicySevSnp; the custodian's chip check reads it): one host entry with this one
+ * launch (`source: computed`), the profile's guest policy as the report's own 8 bytes, its firmware floor and alias-check
+ * rule, and no chip yet (the first unlock on a new chip needs the custodian's --accept-new-machine; the next release
+ * lists the chip). A release that keeps an older image running until its restart adds that image's launch by hand
+ * (apps/vault/README.md, "The host policy").
  */
-export function hostPolicy(profile, measurement) {
+export function hostPolicy(profile, measurement, ukiSha256) {
     if (profile.profile === 'none') throw new Error('no host profile: the release\'s host policy is {"platform": "none"}');
     if (typeof measurement !== 'string' || !/^[0-9a-f]{96}$/.test(measurement)) throw new Error('the launch measurement is 48 bytes of lower-case hex');
+    if (typeof ukiSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(ukiSha256)) throw new Error('the UKI\'s SHA-256 is 32 bytes of lower-case hex');
     const t = profile.minTcb;
-    const tcb = Buffer.from([t.bootloader, t.tee, 0, 0, 0, 0, t.snp, t.microcode]).toString('hex');
-    return { platform: 'sev-snp', measurement, minReportedTcb: tcb, policy: le64hex(BigInt(profile.guestPolicy)), signer: profile.signer };
+    return {
+        platform: 'sev-snp', signer: profile.signer,
+        hosts: [{
+            profile: profile.profile, product: profile.product,
+            launches: [{ ukiSha256, firmwareSha256: profile.firmware.sha256, measurement, source: 'computed' }],
+            policies: [le64hex(BigInt(profile.guestPolicy))],
+            minTcb: { bootloader: t.bootloader, tee: t.tee, snp: t.snp, microcode: t.microcode },
+            requireAliasCheck: profile.requireAliasCheck,
+            chipIds: [],
+        }],
+    };
 }
 
 /** The static form's etc/systemd/network/80-wan.network; null for dhcp (the image's own file stays). */
@@ -349,8 +362,8 @@ if (isMain()) {
             };
             if (!Object.hasOwn(fields, args[1]) || fields[args[1]] === undefined) throw new Error(`--host ${args[0]}: no ${args[1]}`);
             process.stdout.write(`${fields[args[1]]}\n`);
-        } else if (command === 'host-policy' && args.length === 2) {
-            process.stdout.write(`${JSON.stringify(hostPolicy(readHostProfile(args[0]), args[1]), null, 2)}\n`);
+        } else if (command === 'host-policy' && args.length === 3) {
+            process.stdout.write(`${JSON.stringify(hostPolicy(readHostProfile(args[0]), args[1], args[2]), null, 2)}\n`);
         } else if (command === 'image-json' && (args.length === 5 || args.length === 10)) {
             const [version, ukiSha256, roothash, imageHash, net, net6 = 'ra', name = DEFAULT_VAULT_NAME, profile = 'none', measurement = '', acpi = 'acpi'] = args;
             const p = readHostProfile(profile);
@@ -362,7 +375,7 @@ if (isMain()) {
             }));
         } else {
             process.stderr.write('usage: image-settings.mjs check <network> | write <network> <file> [<network6>] | check6 <network6> | check-name <name>'
-                + ' | write-name <name> <Caddyfile> <api.json> | host <profile> <field> | host-policy <profile> <measurement>'
+                + ' | write-name <name> <Caddyfile> <api.json> | host <profile> <field> | host-policy <profile> <measurement> <ukiSha256>'
                 + ' | image-json <version> <ukiSha256> <roothash> <imageHash> <network> [<network6> <name> <profile> <measurement> <acpi|acpi-off>]\n');
             process.exit(2);
         }

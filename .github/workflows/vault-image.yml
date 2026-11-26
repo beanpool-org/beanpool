@@ -113,5 +113,5 @@ jobs:
           apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/snp" --cache "${RUNNER_TEMP}/image-cache" \
             --host servury --network static:192.0.2.10/23,192.0.2.1 --network6 static:2001:db8:0:39c::1/64,fe80::1 --name vault.example.org
           m="$(node -e 'const j=require(process.argv[1]); if (j.host.profile!=="servury"||!/^[0-9a-f]{96}$/.test(j.host.measurement)) process.exit(1); console.log(j.host.measurement)' "${RUNNER_TEMP}/snp/image.json")"
-          node -e 'const p=require(process.argv[1]); if (p.platform!=="sev-snp"||p.measurement!==process.argv[2]||p.minReportedTcb!=="0400000000001dde") process.exit(1)' "${RUNNER_TEMP}/snp/host-policy.json" "${m}"
+          node -e 'const p=require(process.argv[1]), j=require(process.argv[2]), h=p.hosts&&p.hosts[0], l=h&&h.launches[0]; if (p.platform!=="sev-snp"||p.hosts.length!==1||h.profile!=="servury"||h.launches.length!==1||l.measurement!==j.host.measurement||l.ukiSha256!==j.ukiSha256||l.source!=="computed"||h.minTcb.snp!==29||h.chipIds.length!==0) process.exit(1)' "${RUNNER_TEMP}/snp/host-policy.json" "${RUNNER_TEMP}/snp/image.json"
           cat "${RUNNER_TEMP}/snp/image.json" "${RUNNER_TEMP}/snp/host-policy.json" "${RUNNER_TEMP}/snp/SHA256SUMS"

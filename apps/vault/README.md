@@ -219,7 +219,8 @@ A release is two files and their assets, published as a GitHub release whose tag
   `imageHash = SHA-256("beanpool-vault-image/1\n" ‖ ukiSha256 ‖ "\n" ‖ roothash ‖ "\n")` (hex): the boot file and
   the dm-verity root hash of the system partition it names. `apiBundleHash` is the SHA-256 of `vault-api.mjs`.
   `custodianKeys` are the three keys that sign the **next** release. `hostPolicy` is what custodians' tools check the
-  host against: `{platform: "none"}` on 1984. `previous` is the SHA-256 of the manifest before it (null for the first).
+  host against: `{platform: "none"}` on 1984, `sev-snp` on Servury (the chip check, below); `release propose` carries
+  it forward unchanged unless told otherwise. `previous` is the SHA-256 of the manifest before it (null for the first).
 - `vault-release.sigs.json`: Ed25519 signatures (RFC 8032, the custodians' ceremony keys) over
   `"beanpool-vault-release/1\n" ‖ hex(SHA-256(vault-release.json))`. Two are needed.
 - Assets: `vault-api.mjs`; for a release with a new image also `vault.efi` (the UKI), `vault-root.raw` and
@@ -239,10 +240,20 @@ vault-custodian release status                       # the chain as the vault wi
 vault-custodian release propose --version 1.1.0 --same-image --same-custodians \
     --api-bundle out/bundles/vault-api.mjs --out proposal/          # or --image out/image.json for a new image
                                                     # (built with --network static:…? add --notes "network static:…")
+                                                    # the host policy in force goes forward as it is (the chip check
+                                                    # stays); --host-policy <file> to change it: see below
 vault-custodian release sign --dir proposal/ --key my-key.json      # each of two custodians; shows every line first
 vault-custodian release verify --dir proposal/                      # "the vault would take it"
 gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-release.sigs.json proposal/vault-api.mjs
 ```
+
+**The host policy in a proposal.** With no flag, `release propose` copies the newest release's `hostPolicy` exactly as
+it was signed, so an API update on a chip-checked vault keeps the chip check. `--host-policy <file>` changes it: raising
+the floor, listing a chip, or a new image's launch (on `sev-snp` a new image needs it: the tool refuses a policy that
+lists no launch of the proposed release's UKI, since every unlock on that image would then be refused). The first
+release names one or the other. Dropping the hardware check (`none` after `sev-snp`) takes `--host-policy-none`, a
+flag of its own: a `--host-policy` file that says `none` is refused then. `propose`, `sign` and `verify` show such a
+release with `!!! DOWNGRADE` lines under the host policy; sign it only if every custodian agreed.
 
 ## Updates without anyone logging in (design §3)
 
@@ -396,8 +407,9 @@ levels (`minTcb`). With `--host`:
 - after the build, `sev-snp-measure` (virtee's, pinned in `pins.env`, run from its wheel in the builder) computes the
   launch measurement of this `vault.efi` on that host from the profile's firmware (downloaded into `--cache` and
   checked against its SHA-256). `image.json` records it as `host: {profile, measurement}`, and `host-policy.json` is
-  the release's starting host policy (the measurement, `minReportedTcb` and `policy` as the report's own 8 bytes,
-  `signer: vcek`) for `vault-custodian release propose --host-policy`;
+  the release's starting host policy for `vault-custodian release propose --host-policy`: one host entry with this
+  UKI's launch (`source: computed`), the profile's guest policy and floor, and no chip yet ("The host policy", under
+  the custodian tool below);
 - the floor is not in the image: raising `minTcb` needs a new signed release, not a new image.
 
 `--acpi-off` adds `acpi=off` to the UKI's fixed command line (BadAML, design §2.7). It stays off until test T6 shows the
@@ -412,10 +424,10 @@ UEFI host (the boot test).
 
 The **Servury** profile (`host-profiles/servury.json`, Blackbox Nano, Montreal, chosen 26 Nov 2026): Servury's
 `OVMF.amdsev.fd` from blackbox release 2026.11.3 (SHA-256 `8731846c…958b`, unchanged since 2026.09), 1 vCPU,
-`EPYC-v4`, guest features `0x1`, guest policy `0x30000` (SMT allowed, debug off, no migration agent), signer VCEK, and
-the floor bootloader 4, tee 0, **SNP 29**, microcode 222: the levels its report showed on 26 Nov. AMD-SB-3059 is fixed
-at SNP 31 (`0x1F`); Servury had not patched on 26 Nov. Raise `minTcb.snp` to 31 in the profile as soon as they do, and
-sign a release with the new `host-policy.json`. The host has no DHCP. Its build:
+`EPYC-v4`, guest features `0x1`, guest policy `0x30000` (SMT allowed, debug off, no migration agent), signer VCEK, the
+alias check required, and the floor bootloader 4, tee 0, **SNP 29**, microcode 222: the levels its report showed on
+26 Nov. AMD-SB-3059 is fixed at SNP 31 (`0x1F`); Servury had not patched on 26 Nov. Raise `minTcb.snp` to 31 in the
+profile as soon as they do, and sign a release with it ("Raising the floor", below). The host has no DHCP. Its build:
 
 ```
 apps/vault/image/build.sh --custodian-keys <keys.json> --version <x.y.z> --out <dir> --host servury \
@@ -496,11 +508,12 @@ genesis, an unlock, a reshare or a restore, the tool:
    `--accept-release <version>`, when a new image is waiting for its restart);
 4. checks the host against the newest release's `hostPolicy`, never anything the vault says. On `none` it prints:
    *"This vault's host can read its memory. There is no hardware proof of what it runs."* and sends your part only
-   when you type yes (or passed `--no-hardware-proof`). `tdx` and `sev-snp` need evidence and a checker for it
-   (`src/custodian/checker.ts`, V8); until then they are refused. An unknown platform is refused.
+   when you type yes (or passed `--no-hardware-proof`). On `sev-snp` it checks the chip's signed report (the chip check,
+   below): it passes, or nothing is sent and the reason is shown; there is no yes to type and no flag that skips it.
+   `tdx` has no checker and is refused. An unknown platform is refused.
 
-These checks catch mistakes (an image nobody signed, an old one still running), not a hostile host, which can answer
-with any hash it likes. What guards against a planted image: a compromised API can't get one booted, since only root's
+On `none`, these checks catch mistakes (an image nobody signed, an old one still running), not a hostile host, which
+can answer with any hash it likes. What guards against a planted image: a compromised API can't get one booted, since only root's
 check from the pinned keys installs anything, so a planned restart boots a two-signed image. A hostile host, on
 `none`, can boot anything it likes: against that there is nothing technical, only the reinstall-before-unlock rule after
 a restart nobody planned and the split hosting login (design §2.2, §2.5).
@@ -516,6 +529,89 @@ vault-custodian unlock --url https://vault.beanpool.org --key my-key.json --shar
 vault-custodian fetch-share --url https://vault.beanpool.org --key my-key.json --out shares/   # after a genesis or reshare: saves and confirms
 vault-custodian confirm --url https://vault.beanpool.org --key my-key.json --share share-2-3-xxxx.json   # a share saved earlier
 ```
+
+### The chip check (`sev-snp`; vault comeback design §2.3)
+
+Before any share, genesis, restore or settings goes to a vault whose newest release says `sev-snp`, the tool checks the
+report in the vault's hello (`src/custodian/snp-checker.ts`). In order, so the refusal names the first thing wrong:
+
+1. BeanPool's evidence wrapper around a 1,184-byte report of a version the tool reads (2 to 5), signed with ECDSA P-384;
+2. the report's REPORT_DATA is the `bind` the tool computed from its own fresh nonce (constant time): the report was
+   made for this hello, at this boot, for this hello key. A report has no clock in it; the nonce is the freshness;
+3. the guest policy never allows debug (bit 19) or a migration agent (bit 18), whatever a release says;
+4. VMPL 0; signed by the chip's own key (VCEK, not a cloud's VLEK, not masked); the chip ID not zeroed;
+5. the measurement is one the release lists. The host entry that lists it must then pass whole: its guest policy, its
+   alias check (platform info bit 5, the BadRAM fix) if it asks for it, and the reported, committed and launch firmware
+   levels each at or above its floor, part by part;
+6. the VCEK chains to AMD's root pinned in the tool (`src/custodian/amd-roots.ts`: Milan's ARK and ASK, byte for byte
+   AMD's key server's, go-sev-guest's and virtee's copies), is in date, names this chip and these firmware levels, and
+   the report's signature verifies under it;
+7. AMD's revocation list is signed by the pinned root, in date, and does not list the ASK;
+8. the chip is one the release lists (`chipIds`). If not, and only after every check above passed, the tool names the
+   chip's first 8 characters: run again with `--accept-new-machine <them>` if you know why (a first start on a host, or
+   the host told you it moved the server; design Question 7). The vault's boot console prints the same 8 (`snp: chip`);
+9. the measurement is the launch of the UKI of the release the vault's hello names: the newest, or the one named with
+   `--accept-release`. A vault that says it runs one release while the chip shows another is refused.
+
+The VCEK comes from the host's certificate table if it has one that fits the report, otherwise from AMD's key server
+(`https://kdsintf.amd.com/vcek/v1/<product>/<chip>?blSPL=..&teeSPL=..&snpSPL=..&ucodeSPL=..`) once per chip and
+firmware level, cached in `--amd-cache` (default `~/.cache/beanpool-vault/amd`) once it checks out against the pinned
+ASK. A table VCEK that is AMD's but for older firmware levels (a host that patched its firmware and kept its old
+table), another chip, or out of date is not a refusal by itself: the tool asks AMD for this chip's at the reported
+levels, and the `certificates` line says so. A table VCEK that is not signed by the pinned ASK is refused. The revocation list is fetched from AMD at every check; the cached copy is used only when AMD can't be reached,
+and only while it is in date. With a cached VCEK and a list in date the tool works offline; with no list in date it
+refuses. Whatever the source, both are checked against the pinned root every time, so a tampered cache can only make
+the tool refuse.
+
+On success the tool prints what it checked (chip, certificates, revocation list, firmware against the floor, guest
+policy, the measurement and which release it is) before the share goes.
+
+### The host policy (`sev-snp`; design §2.4)
+
+The release's `hostPolicy` is the only thing the chip is checked against:
+
+```json
+{ "platform": "sev-snp", "signer": "vcek", "hosts": [ {
+    "profile": "servury", "product": "Milan",
+    "launches": [ { "ukiSha256": "<vault.efi>", "firmwareSha256": "<OVMF.amdsev.fd>", "measurement": "<48 bytes hex>", "source": "computed" } ],
+    "policies": [ "0000030000000000" ],
+    "minTcb": { "bootloader": 4, "tee": 0, "snp": 29, "microcode": 222 },
+    "requireAliasCheck": true,
+    "chipIds": [] } ] }
+```
+
+- `launches`: one per UKI and firmware. The image build writes the first (`host-policy.json`, `source: computed`:
+  `sev-snp-measure` on the profile's pinned firmware, this `vault.efi`, the profile's vCPU count, model and guest
+  features, an empty host command line). A release whose image waits for its restart keeps the running image's launch
+  in the list beside the new one, until the restart; then the next release drops it. `release propose --image` on a
+  `sev-snp` vault therefore takes `--host-policy` with both launches (the tool refuses one without the new UKI's).
+- `firmwareSha256` is the host's firmware the measurement was computed with, pinned in the profile and in the host's
+  own published `RELEASE.json`. The hash says "the same file as before"; only a rebuild from the host's public recipe
+  says "this source" (design §2.6, test T4: Servury's `blackbox-images-<release>.tar.gz`, `build/build-firmware.sh`,
+  edk2 `edk2-stable202505` AmdSevX64 in a Debian snapshot chroot). That rebuild is not automated yet: do it once per
+  firmware version, before two custodians sign a release that lists it.
+- `source: observed` is for a measurement read off the server's own report because ours did not match it (design §6
+  T3). The tool accepts it, and says at every unlock that it was not computed from our build. A release should carry it
+  only while the mismatch is being found.
+- `policies` are the report's own 8 bytes (little-endian): `0000030000000000` is `0x30000`. A policy allowing debug or
+  a migration agent does not parse.
+- `chipIds` starts empty: the first unlock on a new host needs `--accept-new-machine`. The next release lists the chip
+  (the full 64 bytes, from the boot console's report or the tool's output), so later unlocks need no flag.
+- `product` picks the pinned AMD root. Only Milan is pinned; a release naming another family still parses, and the tool
+  refuses to send under it until it pins that family's root.
+
+**Raising the floor** (`minTcb`). It is decided by a release, not the image, and two custodians sign it. Today it is
+SNP **29**: Servury's level on 26 Nov 2026 (Marty, 26 Nov: "minimum SNP TCB = 29 today", since Servury was not yet
+patched). AMD-SB-3059 (Mior CVE-2026-0462, Skyfall CVE-2026-40671) is fixed on Milan at SEV firmware 1.3A.03, TCB SNP
+`0x1F` = **31**. When Servury's report shows SNP 31 (the boot console's `snp: reported TCB` line, or the tool's
+`firmware` line): set `minTcb.snp` to 31 in `image/host-profiles/servury.json` and in the policy, propose a release
+with `--same-image --host-policy <file>` (without the flag the policy in force goes forward unchanged), and have two
+custodians sign it. From then on a report below 31 is refused.
+Do it the day the host patches.
+
+**The first unlock on a new host.** The first checked command (`settings send`, `restore` or `unlock`) is refused with
+the chip's first 8 characters. Compare them with the boot console's `snp: chip` line, then run the same command again
+with `--accept-new-machine <those 8>`. Every other check still runs and still refuses.
 
 ## The custodians' restart for a new image (D3)
 

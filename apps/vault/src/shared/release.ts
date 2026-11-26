@@ -71,18 +71,110 @@ export interface HostPolicyTdx {
     debug: false;
 }
 
-/** AMD SEV-SNP (V8): the launch digest computed from this release's UKI, and the minimum firmware. */
+/**
+ * AMD SEV-SNP (vault comeback design §2.4): the hosts the vault may run on. A chip's report must satisfy one entry
+ * whole (no mixing); the custodian's tool checks it (custodian/snp-checker.ts) before anything is sent.
+ */
 export interface HostPolicySevSnp {
     platform: 'sev-snp';
-    /** 48 bytes. */
+    /** The chip's own key signs (VCEK). A cloud's key (VLEK) is not accepted. */
+    signer: 'vcek';
+    hosts: SnpHost[];
+}
+
+export interface SnpHost {
+    /** The host profile the image was built for (`apps/vault/image/host-profiles/<profile>.json`), e.g. "servury". */
+    profile: string;
+    /** AMD's name for the chip family (Milan, Genoa, Turin): picks the AMD root the tool pins. */
+    product: string;
+    /** Launch measurements: one per UKI and firmware; old and new overlap while a new image waits for its restart. */
+    launches: SnpLaunch[];
+    /** Guest policies accepted, each the report's own 8 bytes in hex. Never debug (bit 19) or a migration agent (bit 18). */
+    policies: string[];
+    /** Each firmware level (reported, committed and launch TCB) at or above this, part by part. Raising it is a release. */
+    minTcb: SnpTcbFloor;
+    /** The firmware's alias check (BadRAM, AMD-SB-3015) must have run: platform info bit 5. */
+    requireAliasCheck: boolean;
+    /** Chips this vault has run on (64 bytes each). Any other needs the custodian's --accept-new-machine. */
+    chipIds: string[];
+}
+
+export interface SnpLaunch {
+    /** SHA-256 of the UKI this measurement launches: it names the release(s) whose image that is. */
+    ukiSha256: string;
+    /** SHA-256 of the host's firmware the measurement was computed with (the host profile's pinned file). */
+    firmwareSha256: string;
+    /** The launch digest (48 bytes). */
     measurement: string;
-    /** REPORTED_TCB at or above this (8 bytes). */
-    minReportedTcb: string;
-    /** The guest policy the report must carry (8 bytes). */
-    policy: string;
-    signer: 'vcek' | 'vlek';
-    /** When set, only these chips (64 bytes each). */
-    chipIds?: string[];
+    /**
+     * `computed`: by our build from the pinned firmware, the UKI and the host profile's launch values (design §2.5).
+     * `observed`: read off the server's own report, because we could not compute it; the tool says so at every unlock.
+     */
+    source: 'computed' | 'observed';
+}
+
+export interface SnpTcbFloor {
+    bootloader: number;
+    tee: number;
+    snp: number;
+    microcode: number;
+}
+
+const SNP_MAX_HOSTS = 8;
+const SNP_MAX_LAUNCHES = 16;
+const SNP_MAX_CHIPS = 64;
+
+function parseSnpHost(raw: unknown, i: number): SnpHost {
+    const what = `sev-snp hosts[${i}]`;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('malformed', `${what} is not an object.`);
+    const h = raw as Record<string, unknown>;
+    const keys = ['profile', 'product', 'launches', 'policies', 'minTcb', 'requireAliasCheck', 'chipIds'];
+    exactKeys(h, keys, what);
+    const missing = keys.filter(k => !(k in h));
+    if (missing.length) fail('malformed', `${what} lacks ${missing.join(', ')}.`);
+    if (typeof h.profile !== 'string' || !/^[a-z0-9][a-z0-9-]{0,31}$/.test(h.profile)) fail('malformed', `${what}.profile is a profile name.`);
+    // Any AMD family name parses, so a later release naming a family this tool lacks still walks the chain; the
+    // custodian's tool refuses to send under it (it has no pinned root for it).
+    if (typeof h.product !== 'string' || !/^[A-Z][A-Za-z]{1,15}$/.test(h.product)) fail('malformed', `${what}.product is an AMD chip family name.`);
+    const list = (v: unknown, max: number, name: string): unknown[] => {
+        if (!Array.isArray(v) || v.length > max) fail('malformed', `${what}.${name} is a list of at most ${max}.`);
+        return v;
+    };
+    const launches = list(h.launches, SNP_MAX_LAUNCHES, 'launches');
+    if (!launches.length) fail('malformed', `${what}.launches is empty.`);
+    for (const l of launches) {
+        if (!l || typeof l !== 'object' || Array.isArray(l)) fail('malformed', `${what}.launches holds a non-object.`);
+        const o = l as Record<string, unknown>;
+        exactKeys(o, ['ukiSha256', 'firmwareSha256', 'measurement', 'source'], `${what} launch`);
+        if (!hexOf(32)(o.ukiSha256) || !hexOf(32)(o.firmwareSha256)) fail('malformed', `${what} launch ukiSha256 and firmwareSha256 are SHA-256s.`);
+        if (!hexOf(48)(o.measurement)) fail('malformed', `${what} launch measurement is 48 bytes of hex.`);
+        if (o.source !== 'computed' && o.source !== 'observed') fail('malformed', `${what} launch source is computed or observed.`);
+    }
+    const measurements = launches.map(l => (l as SnpLaunch).measurement);
+    if (new Set(measurements).size !== measurements.length) fail('malformed', `${what} lists a measurement twice.`);
+    const policies = list(h.policies, 8, 'policies');
+    if (!policies.length || !policies.every(hexOf(8))) fail('malformed', `${what}.policies is a list of 8-byte hex values.`);
+    for (const p of policies as string[]) {
+        const v = Buffer.from(p, 'hex').readBigUInt64LE(0);
+        if ((v >> 19n) & 1n) fail('malformed', `${what} allows debug (policy bit 19): never.`);
+        if ((v >> 18n) & 1n) fail('malformed', `${what} allows a migration agent (policy bit 18): never.`);
+    }
+    const t = h.minTcb as Record<string, unknown> | undefined;
+    if (!t || typeof t !== 'object' || Array.isArray(t)) fail('malformed', `${what}.minTcb is {bootloader, tee, snp, microcode}.`);
+    exactKeys(t, ['bootloader', 'tee', 'snp', 'microcode'], `${what}.minTcb`);
+    for (const part of ['bootloader', 'tee', 'snp', 'microcode']) {
+        const v = t[part];
+        if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > 255) fail('malformed', `${what}.minTcb.${part} is 0 to 255.`);
+    }
+    if (typeof h.requireAliasCheck !== 'boolean') fail('malformed', `${what}.requireAliasCheck is true or false.`);
+    const chips = list(h.chipIds, SNP_MAX_CHIPS, 'chipIds');
+    if (!chips.every(hexOf(64))) fail('malformed', `${what}.chipIds are 64-byte hex values.`);
+    if (new Set(chips).size !== chips.length) fail('malformed', `${what} lists a chip twice.`);
+    return {
+        profile: h.profile, product: h.product, launches: launches as SnpLaunch[], policies: policies as string[],
+        minTcb: { bootloader: t.bootloader as number, tee: t.tee as number, snp: t.snp as number, microcode: t.microcode as number },
+        requireAliasCheck: h.requireAliasCheck, chipIds: chips as string[],
+    };
 }
 
 /**
@@ -127,12 +219,12 @@ export function parseHostPolicy(raw: unknown): HostPolicy | HostPolicyUnknown {
         return o as unknown as HostPolicyTdx;
     }
     if (o.platform === 'sev-snp') {
-        exactKeys(o, ['platform', 'measurement', 'minReportedTcb', 'policy', 'signer', 'chipIds'], 'A sev-snp host policy');
-        if (!h48(o.measurement)) fail('malformed', 'sev-snp measurement is 48 bytes of hex.');
-        if (!hexOf(8)(o.minReportedTcb) || !hexOf(8)(o.policy)) fail('malformed', 'sev-snp minReportedTcb and policy are 8 bytes of hex.');
-        if (o.signer !== 'vcek' && o.signer !== 'vlek') fail('malformed', 'sev-snp signer is vcek or vlek.');
-        if (o.chipIds !== undefined && (!Array.isArray(o.chipIds) || !o.chipIds.every(hexOf(64)))) fail('malformed', 'sev-snp chipIds are 64-byte hex values.');
-        return o as unknown as HostPolicySevSnp;
+        exactKeys(o, ['platform', 'signer', 'hosts'], 'A sev-snp host policy');
+        if (o.signer !== 'vcek') fail('malformed', 'sev-snp signer is vcek (the chip\'s own key).');
+        if (!Array.isArray(o.hosts) || !o.hosts.length || o.hosts.length > SNP_MAX_HOSTS) fail('malformed', `sev-snp hosts is a list of 1 to ${SNP_MAX_HOSTS}.`);
+        const hosts = o.hosts.map(parseSnpHost);
+        if (new Set(hosts.map(h => h.profile)).size !== hosts.length) fail('malformed', 'sev-snp hosts name a profile twice.');
+        return { platform: 'sev-snp', signer: 'vcek', hosts };
     }
     return { ...o } as HostPolicyUnknown;
 }

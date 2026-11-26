@@ -695,6 +695,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setNewPostReach('local');
         setNewPostReachPeers([]);
         setNewPostPhotos(openDraft.photos ?? []);
+        notePhotosLeftOut(0, 0); // a list put in whole is no pick: no 'left out' line (review of #3391)
         setAudienceScope('public');
         setTargetGroupId('');
         setPostLat(null);
@@ -2091,6 +2092,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setNewPostTitle(form.title);
             setNewPostDescription(form.description);
             setNewPostPhotos(form.photos);
+            notePhotosLeftOut(0, 0);
             setEventStart(form.start);
             setEventEnd(form.end);
             setEventRepeat(form.repeat ?? 'never');

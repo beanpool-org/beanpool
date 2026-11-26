@@ -3296,6 +3296,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             }).finally(() => setEditItemLoading(false));
                                         }
                                         setEditPhotos(selectedPost.photos || []);
+                                        noteEditPhotosLeftOut(0, 0); // a list put in whole is no pick (review of #3391)
                                         editTagsFrom.current = postTagsOf(selectedPost.tags);
                                         setEditTags(editTagsFrom.current);
                                         editFreeTagsFrom.current = freeTagsOf(selectedPost.freeTags);

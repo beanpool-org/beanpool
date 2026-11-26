@@ -270,6 +270,70 @@ describe('what may pass', () => {
         await expect(run(bad)).rejects.toMatchObject({ code: 'vcek_chain' });
     });
 
+    describe('a host\'s certificate table whose VCEK does not fit the report: AMD\'s key server is asked instead', () => {
+        // Servury patches to SNP 31 (AMD-SB-3059) but its certificate table still holds the SNP 29 VCEK.
+        const SNP31 = tcb({ snp: 31 });
+        const patched = (table: Buffer, change: (c: Case) => void = () => {}) => makeCase(x => {
+            x.spec.reportedTcb = SNP31;
+            x.aux = certTable(table);
+            x.vcek = amd.vcek(CHIP, SNP31);
+            change(x);
+        });
+        const runCounting = async (c: Case) => {
+            const collateral = fixedCollateral(c.collateral ?? { vcek: c.vcek, crl: c.crl });
+            const result = await verifySnpEvidence(c.policy, evidenceOf(c.report, c.aux), c.bind, c.ctx, { collateral, now: () => c.now, roots: amd.roots })
+                .then(pass => ({ pass, err: null }), (err: unknown) => ({ pass: null, err: err as SnpRefused }));
+            return { ...result, calls: collateral.calls };
+        };
+
+        it.each([
+            ['AMD\'s VCEK for this chip at the old firmware levels (SNP 29; the report says 31)', 'vcek_tcb', () => amd.vcek(CHIP, PROBE_TCB)],
+            ['another chip\'s VCEK', 'vcek_chip', () => amd.vcek(crypto.randomBytes(64), SNP31)],
+            ['a VCEK past its dates', 'vcek_expired', () => amd.vcek(CHIP, SNP31, { notBefore: NOW - 400 * DAY, notAfter: NOW - DAY })],
+        ])('the table holds %s: AMD\'s VCEK at the reported levels verifies, and the check passes saying so', async (_what, tableCode, table) => {
+            const { pass, err, calls } = await runCounting(patched(table()));
+            expect(err).toBeNull();
+            expect(calls).toEqual([`vcek Milan ${CHIP.toString('hex').slice(0, 8)} 31`, 'crl Milan']);
+            const certificates = pass?.lines.find(l => l.trimStart().startsWith('certificates')) ?? '';
+            expect(certificates).toMatch(/VCEK from AMD's key server \(the host's certificate table holds one that does not fit: /);
+            expect(certificates).toMatch(/chained to AMD's Milan root pinned in this tool/);
+            // The same table alone (AMD unreachable) is refused for exactly what is wrong with it.
+            const offline = await runCounting(patched(table(), x => { x.collateral = { vcek: new Error('offline'), crl: x.crl }; }));
+            expect(offline.err).toBeInstanceOf(SnpRefused);
+            expect(offline.err?.code).toBe(tableCode);
+            expect(offline.err?.message).toMatch(/host's certificate table, and the chip's certificate \(VCEK\) could not be had from AMD's key server \(offline\): connect to the internet/);
+        });
+
+        it('AMD\'s answer that does not fit either is refused with its own reason, and the table\'s beside it', async () => {
+            const stale = amd.vcek(CHIP, PROBE_TCB);
+            const same = await runCounting(patched(stale, x => { x.vcek = amd.vcek(CHIP, PROBE_TCB); }));
+            expect(same.err?.code).toBe('vcek_tcb');
+            expect(same.err?.message).toMatch(/from AMD's key server; the host's certificate table's did not fit either: the chip's certificate is for other firmware levels/);
+            const otherChip = await runCounting(patched(stale, x => { x.vcek = amd.vcek(crypto.randomBytes(64), SNP31); }));
+            expect(otherChip.err?.code).toBe('vcek_chip');
+        });
+
+        it('never a VCEK that does not chain to the pinned root, from either place', async () => {
+            // AMD's "answer" (a hostile network, a tampered cache) is signed by another root: refused, never accepted.
+            const forgedAnswer = await runCounting(patched(amd.vcek(CHIP, PROBE_TCB), x => { x.vcek = testAmd().vcek(CHIP, SNP31); }));
+            expect(forgedAnswer.err?.code).toBe('vcek_chain');
+            // A table whose VCEK is not AMD's at all is a refusal by itself: the table is no reason to ask AMD.
+            const forgedTable = await runCounting(patched(testAmd().vcek(CHIP, SNP31)));
+            expect(forgedTable.err?.code).toBe('vcek_chain');
+            expect(forgedTable.calls).toEqual([]);
+            // A table VCEK that fits is used as it is: AMD is not asked.
+            const fits = await runCounting(patched(amd.vcek(CHIP, SNP31), x => { x.collateral = { vcek: new Error('must not be asked'), crl: x.crl }; }));
+            expect(fits.err).toBeNull();
+            expect(fits.calls).toEqual(['crl Milan']);
+        });
+
+        it('AMD\'s VCEK that verifies is no pass for a report it did not sign', async () => {
+            const other = crypto.generateKeyPairSync('ec', { namedCurve: 'secp384r1' }).privateKey;
+            const { err } = await runCounting(patched(amd.vcek(CHIP, PROBE_TCB), x => { x.report = signReport(reportBytes(x.spec), other); }));
+            expect(err?.code).toBe('report_signature');
+        });
+    });
+
     it('an older release\'s launch passes when the vault runs that release (the overlap while a new image waits)', async () => {
         const OLD_UKI = 'ef'.repeat(32);
         const c = makeCase(x => {

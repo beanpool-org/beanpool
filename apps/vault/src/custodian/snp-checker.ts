@@ -44,9 +44,10 @@ import { certExtensions, certSubject, certValidity, derSmallUint, DerError, oidB
  *   11  the measurement is the launch of the UKI of the release the vault's hello names (the newest, or the one named
  *       with --accept-release)
  *
- * The VCEK comes from the host's certificate table when it has one, or from AMD's key server by chip ID and firmware
- * level ({@link amdKds}, cached); either way only the pinned root is trusted. The revocation list comes from AMD, the
- * cached copy only while it is in date and when AMD can't be reached.
+ * The VCEK comes from the host's certificate table when it has one that fits this report, or from AMD's key server by
+ * chip ID and firmware level ({@link amdKds}, cached): also when the table's is AMD's for older firmware levels, another
+ * chip or past its dates (a table not refreshed after a firmware update). Either way only the pinned root is trusted.
+ * The revocation list comes from AMD, the cached copy only while it is in date and when AMD can't be reached.
  */
 
 export class SnpRefused extends Error {
@@ -304,6 +305,47 @@ export interface SnpPass {
     lines: string[];
 }
 
+/**
+ * A genuine AMD VCEK the host's table can hold that still does not fit this report: AMD's certificate for this chip at
+ * older firmware levels (a table not refreshed after the host's firmware update: SNP 29 to 31, "Raising the floor"),
+ * another chip's, or one past its dates. AMD's own for this chip at the reported levels is asked for instead. Anything
+ * else wrong with the table's certificate (not signed by the pinned ASK, not a VCEK, malformed) is a refusal.
+ */
+const TABLE_VCEK_STALE = new Set(['vcek_tcb', 'vcek_chip', 'vcek_expired']);
+
+/**
+ * Row 8's certificate: the host's table's when it fits this report, otherwise AMD's key server's for this chip at the
+ * reported levels. Either one passes {@link checkVcek} against the pinned ASK and ARK or is refused: the table is only
+ * a shortcut past a download, never a source of trust.
+ */
+async function chipCertificate(product: string, root: LoadedRoot, r: SnpReport, auxblob: Buffer, now: number, opts: SnpCheckOptions): Promise<{ vcek: X509Certificate; from: string }> {
+    const tableDer = vcekFromTable(auxblob);
+    let stale: SnpRefused | null = null;
+    if (tableDer) {
+        try {
+            return { vcek: checkVcek(tableDer, root, r, product, now), from: 'the host\'s certificate table' };
+        } catch (e) {
+            if (!(e instanceof SnpRefused) || !TABLE_VCEK_STALE.has(e.code)) throw e;
+            stale = e;
+        }
+    }
+    let fetched: Buffer;
+    try {
+        fetched = await opts.collateral.vcek(product, r.chipId, r.reportedTcb);
+    } catch (e) {
+        const offline = `the chip's certificate (VCEK) could not be had from AMD's key server (${(e as Error).message}): connect to the internet and try again`;
+        if (stale) refuse(stale.code, `${stale.message}: that one is in the host's certificate table, and ${offline}`);
+        refuse('vcek_unavailable', offline);
+    }
+    if (!stale) return { vcek: checkVcek(fetched, root, r, product, now), from: 'AMD\'s key server' };
+    try {
+        return { vcek: checkVcek(fetched, root, r, product, now), from: `AMD's key server (the host's certificate table holds one that does not fit: ${stale.message})` };
+    } catch (e) {
+        if (!(e instanceof SnpRefused)) throw e;
+        refuse(e.code, `${e.message} (from AMD's key server; the host's certificate table's did not fit either: ${stale.message})`);
+    }
+}
+
 /** Rows 1 to 11. Throws {@link SnpRefused}. */
 export async function verifySnpEvidence(policy: HostPolicySevSnp, evidence: Uint8Array, bind: Uint8Array, ctx: CheckContext, opts: SnpCheckOptions): Promise<SnpPass> {
     // 1
@@ -369,16 +411,7 @@ async function checkHostEntry(host: SnpHost, r: SnpReport, report: Buffer, auxbl
     }
     // 8
     const root = loadRoot(host.product, opts.roots);
-    let vcekDer = vcekFromTable(auxblob);
-    const vcekFrom = vcekDer ? 'the host\'s certificate table' : 'AMD\'s key server';
-    if (!vcekDer) {
-        try {
-            vcekDer = await opts.collateral.vcek(host.product, r.chipId, r.reportedTcb);
-        } catch (e) {
-            refuse('vcek_unavailable', `the chip's certificate (VCEK) could not be had from AMD's key server (${(e as Error).message}): connect to the internet and try again`);
-        }
-    }
-    const vcek = checkVcek(vcekDer, root, r, host.product, now);
+    const { vcek, from: vcekFrom } = await chipCertificate(host.product, root, r, auxblob, now, opts);
     const sig = Buffer.concat([Buffer.from(r.sigR.subarray(0, 48)).reverse(), Buffer.from(r.sigS.subarray(0, 48)).reverse()]);
     if (!crypto.verify('sha384', report.subarray(0, SNP_SIGNED_BYTES), { key: vcek.publicKey, dsaEncoding: 'ieee-p1363' }, sig)) {
         refuse('report_signature', 'the report\'s signature does not verify under the chip\'s certificate: it was changed, or not made by this chip');

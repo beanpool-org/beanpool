@@ -45,7 +45,10 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 import { EnterpriseTakeUp } from '../../components/EnterpriseTakeUp';
 import { readNodeProfile } from '../node-profile';
-import { enterpriseTakeUpOffered, feeOf, formatHundredths, takeUpButtons, type TakeUpButton } from '@beanpool/core';
+import {
+    busyError, enterpriseTakeUpOffered, feeOf, formatHundredths, takeUpButtons, takeUpListingMoved, takeUpOutcomeOf, takeUpRefusalText,
+    takeUpUnansweredBook, type TakeUpButton,
+} from '@beanpool/core';
 import { lightColors, darkColors } from '../../constants/colors';
 
 const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
@@ -84,6 +87,11 @@ describe('the phone hears the node say it has the door', () => {
             expect(takeUpButtons({ features: p.features, listing: APPLES, me: 'kim-key', keeperOf: [STALL], enterprises: [{ publicKey: STALL, name: 'Riverside stall' }] })).toEqual([]);
         }
     });
+    it('another community\'s pulled listing (the row\'s origin_node): no button, as on the web (r1 review finding 2; the door always refuses it)', () => {
+        const args = { features: { enterpriseTakeUp: true }, me: 'kim-key', keeperOf: [STALL], enterprises: [{ publicKey: STALL, name: 'Riverside stall' }] };
+        expect(takeUpButtons({ ...args, listing: APPLES }).map((b) => b.label)).toEqual(['Buy for Riverside stall']);
+        expect(takeUpButtons({ ...args, listing: { ...APPLES, origin_node: 'riverside.example' } })).toEqual([]);
+    });
 });
 
 describe('components/EnterpriseTakeUp.tsx: the button, the count picker, the sheet', () => {
@@ -119,15 +127,13 @@ describe('components/EnterpriseTakeUp.tsx: the button, the count picker, the she
         expect(q('take-up-sheet')).toBeNull();
     });
 
-    it('a lost answer, then Confirm again on the same sale: the same id (red if a retry could sell twice); another count: a new id', async () => {
-        const send = vi.fn()
-            .mockRejectedValueOnce(Object.assign(new Error('Network request failed. You must be connected to a node.'), { status: 0 }))
-            .mockRejectedValueOnce(Object.assign(new Error('Network request failed. You must be connected to a node.'), { status: 0 }))
-            .mockResolvedValue({ success: true, released: true, replay: true });
-        draw({ send });
+    it('the node\'s own refusal, then Confirm again on the same sale: the same id; another count: a new id', async () => {
+        const refused = () => Object.assign(new Error('You are not a keeper of this enterprise'), { status: 403, nodeAnswered: true });
+        const send = vi.fn().mockRejectedValueOnce(refused()).mockRejectedValueOnce(refused()).mockResolvedValue({ success: true, released: true });
+        draw({ send, unanswered: takeUpUnansweredBook() });
         await tap(`take-up-${STALL}`);
         await tap('take-up-confirm');
-        expect(q('take-up-refusal')!.textContent).toBe('Network request failed. You must be connected to a node.');
+        expect(q('take-up-refusal')!.textContent).toBe('You are not a keeper of this enterprise');
         await tap('take-up-confirm');
         const ids = send.mock.calls.map((c: any[]) => c[1].requestId);
         expect(ids[1]).toBe(ids[0]);
@@ -169,6 +175,110 @@ describe('components/EnterpriseTakeUp.tsx: the button, the count picker, the she
             expect(style.color).toBe(colors.text.body);
             expect(JSON.parse(q('take-up-sheet')!.getAttribute('data-style')!).backgroundColor).toBe(colors.surface.app);
             act(() => root?.unmount()); host?.remove(); root = null; host = null;
+        }
+    });
+});
+
+describe('an answer that never came: the stall may have paid, and Confirm sends the same sale again (r1 review finding 1)', () => {
+    const LOST_LINE = 'Your community’s server didn’t answer, so Riverside stall may have paid Alice already. Press Confirm again to find out: it is never paid twice.';
+    const err = (message: string, extra: Record<string, unknown> = {}) => Object.assign(new Error(message), extra);
+    const unmount = () => { act(() => root?.unmount()); host?.remove(); root = null; host = null; };
+    // Every shape utils/db.ts _signedRequest throws for a take-up. What the sheet does is core takeUpOutcomeOf's (its table
+    // pins the outcome of each); this checks the phone's sheet does exactly that: says the line or the refusal, reads the
+    // listing again, and keeps the sale through Cancel (the same id on reopening) only when it may have gone through.
+    const SHAPES: Array<[string, () => unknown]> = [
+        ['the 12-second abort', () => err('Aborted')],
+        ['a dropped signal', () => err('Network request failed')],
+        ['a gateway 502', () => err('Server returned 502', { status: 502, nodeAnswered: false })],
+        ['a gateway 504', () => err('Server returned 504', { status: 504, nodeAnswered: false })],
+        ['the busy network\'s 429', () => busyError(null)],
+        ['a proxy\'s 403 page', () => err('Server returned 403', { status: 403, nodeAnswered: false })],
+        ['deal_open', () => err('You already have a deal under way.', { status: 409, code: 'deal_open', nodeAnswered: true })],
+        ['units_gone', () => err('Only 1 left.', { status: 409, code: 'units_gone', unitsLeft: 1, nodeAnswered: true })],
+        ['post_gone', () => err('Post not found or not active', { status: 400, code: 'post_gone', nodeAnswered: true })],
+        ['TWO_PERSON_RULE', () => err('Cannot accept your own post', { status: 403, code: 'TWO_PERSON_RULE', nodeAnswered: true })],
+    ];
+    for (const [name, thrown] of SHAPES) {
+        const outcome = takeUpOutcomeOf(thrown());
+        it(`${name} (${outcome}): the sheet does what core says, and Cancel then Confirm ${outcome === 'lost' ? 'sends the SAME sale' : 'is a sale of its own'}`, async () => {
+            const send = vi.fn().mockRejectedValueOnce(thrown()).mockResolvedValue({ success: true, released: true, replay: true });
+            const { onListingMoved, onDone } = draw({ send, unanswered: takeUpUnansweredBook() });
+            await tap(`take-up-${STALL}`);
+            await tap('each-more');
+            await tap('take-up-confirm');
+            const first = send.mock.calls[0][1];
+            expect(q('take-up-lost')?.textContent ?? null).toBe(outcome === 'lost' ? LOST_LINE : null);
+            expect(q('take-up-refusal')?.textContent ?? null).toBe(outcome === 'lost' ? null : takeUpRefusalText(thrown()));
+            expect(onListingMoved).toHaveBeenCalledTimes(outcome === 'lost' || (outcome === 'refused' && takeUpListingMoved(thrown())) ? 1 : 0);
+            expect(onDone).not.toHaveBeenCalled();
+            // Cancel, then "Buy for …" again, and Confirm straight away (the picker starts at 1 again).
+            await tap('take-up-cancel');
+            await tap(`take-up-${STALL}`);
+            expect(q('each-take-up') === null).toBe(outcome === 'lost'); // the picker waits on a kept sale
+            await tap('take-up-confirm');
+            const second = send.mock.calls[1][1];
+            if (outcome === 'lost') expect(second).toEqual(first);
+            else expect([second.requestId === first.requestId, second.hours]).toEqual([false, 1]);
+            expect(onDone).toHaveBeenCalledWith(BUTTON, { released: true, held: null });
+        });
+    }
+
+    it('the review\'s scenario: 2 of “Apples” lost, Cancel, the listing read again with 1 left, reopen, Confirm: the same 2, the same id', async () => {
+        const book = takeUpUnansweredBook();
+        const send = vi.fn().mockRejectedValueOnce(err('Aborted')).mockResolvedValue({ success: true, released: true, replay: true });
+        const { onListingMoved, onDone } = draw({ send, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        await tap('each-more');
+        await tap('take-up-confirm');
+        expect(onListingMoved).toHaveBeenCalledTimes(1);
+        await tap('take-up-cancel');
+        // The first sale went through: the page reads the listing again, 1 left.
+        act(() => root!.render(createElement(EnterpriseTakeUp, {
+            listing: { ...APPLES, units_left: 1 }, postId: 'p1', title: 'Apples', sellerName: 'Alice', buttons: [BUTTON], send, onDone, onListingMoved, unanswered: book,
+        } as Parameters<typeof EnterpriseTakeUp>[0]) as any));
+        await tap(`take-up-${STALL}`);
+        expect(q('take-up-sentence')!.textContent).toContain('pays Alice 40 Beans for 2 of “Apples”');
+        expect(q('take-up-lost')!.textContent).toBe(LOST_LINE);
+        await tap('take-up-confirm');
+        expect(send.mock.calls[1][1]).toEqual(send.mock.calls[0][1]);
+        expect(book.get(STALL, 'p1')).toBeNull(); // the node answered: forgotten
+    });
+
+    it('the page left and opened again (the sheet unmounted): the kept sale is still sent again, not a new one', async () => {
+        const book = takeUpUnansweredBook();
+        const send = vi.fn().mockRejectedValueOnce(err('Network request failed')).mockResolvedValue({ success: true, released: true, replay: true });
+        draw({ send, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        await tap('take-up-confirm');
+        unmount();
+        draw({ send, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        expect(q('take-up-lost')!.textContent).toBe(LOST_LINE);
+        await tap('take-up-confirm');
+        expect(send.mock.calls[1][1].requestId).toBe(send.mock.calls[0][1].requestId);
+    });
+
+    it('left while still on its way (no answer yet): opened again, Confirm sends that same sale, never a second one', async () => {
+        const book = takeUpUnansweredBook();
+        const send = vi.fn().mockReturnValueOnce(new Promise(() => {})).mockResolvedValue({ success: true, released: true, replay: true });
+        draw({ send, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        await tap('take-up-confirm');
+        unmount();
+        draw({ send, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        await tap('take-up-confirm');
+        expect(send.mock.calls[1][1]).toEqual(send.mock.calls[0][1]);
+    });
+
+    it('light and dark: the line is drawn in the theme\'s warning ink (an answer that never came is not a refusal)', async () => {
+        for (const dark of [false, true]) {
+            theme.dark = dark;
+            draw({ send: vi.fn().mockRejectedValue(err('Aborted')), unanswered: takeUpUnansweredBook() });
+            await tap(`take-up-${STALL}`);
+            await tap('take-up-confirm');
+            expect(JSON.parse(q('take-up-lost')!.getAttribute('data-style')!).color).toBe((dark ? darkColors : lightColors).feedback.warning.fg);
+            unmount();
         }
     });
 });

@@ -1827,9 +1827,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // A keeper of the enterprise that listed it may edit or pause/resume it, as on the phone (app/post/[id].tsx isOperatorOfAuthor):
         // the node takes the mutation signed with the keeper's own key (apps/server engine/posts.ts updatePost, pausePost, resumePost),
         // for a listing here for everyone. Deleting it stays the author's alone on this page.
-        // "Buy for {enterprise}" (stall slice 2): one per enterprise the reader keeps, by core's one rule (the phone's too). Never
-        // on another community's listing: the door takes up a listing here.
-        const takeUps = isRemotePost ? [] : takeUpButtons({ features: communityInfo?.features, listing: selectedPost, me: identity?.publicKey, keeperOf, enterprises: enterpriseNames });
+        // "Buy for {enterprise}" (stall slice 2): one per enterprise the reader keeps, by core's one rule (the phone's too), which
+        // also keeps it off another community's listing (`_remoteNode`, `originNode`): the door takes up a listing here only.
+        const takeUps = takeUpButtons({ features: communityInfo?.features, listing: selectedPost, me: identity?.publicKey, keeperOf, enterprises: enterpriseNames });
         const keepsAuthor = !!identity && !isOwnPost && !isRemotePost && keeperOf.includes(selectedPost.authorPublicKey)
             && (selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.targetGroupId && !selectedPost.targetPubkey;
 

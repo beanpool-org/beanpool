@@ -5,12 +5,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    TAKE_UP_REFUSALS, TAKE_UP_WORDS, enterpriseTakeUpOffered, releaseAsksHours, takeUpAnswerOf, takeUpBody, takeUpButtons,
-    takeUpListingMoved, takeUpRefusalText, takeUpRequestFor, takeUpSheet, type TakeUpEnterprise,
+    TAKE_UP_REFUSALS, TAKE_UP_WORDS, enterpriseTakeUpOffered, releaseAsksHours, takeUpAnswerOf, takeUpBody, takeUpButtons, takeUpConfirm,
+    takeUpListingMoved, takeUpLostLine, takeUpOutcomeOf, takeUpRefusalText, takeUpRequestFor, takeUpSettle, takeUpSheet, takeUpUnansweredBook,
+    type TakeUpEnterprise, type TakeUpOutcome, type TakeUpRequest,
 } from '../enterprise-take-up';
-import { ITEM_BOX_START, itemTakeUpBox } from '../per-item-deal';
+import { ITEM_BOX_START, itemTakeUpBox, type ItemBoxState } from '../per-item-deal';
 import { EACH, ITEM_TAKE_UP_REFUSALS, itemTakeUpRefusalText } from '../per-item';
 import { feeOf, formatHundredths } from '../hundredths';
+import { billAnswerLost } from '../bills';
+import { busyError } from '../busy-answer';
 import { t } from '../words';
 
 const c = (beans: number) => Math.round(beans * 100);
@@ -53,6 +56,12 @@ describe('who sees "Buy for {enterprise}" (§6 slice 2: only where the node has 
         ['an enterprise the node does not list by name: no button (never "Buy for undefined")', { enterprises: [] }, []],
         ['a blank name: no button', { enterprises: [{ ...ENTERPRISES[0], name: '  ' }] }, []],
         ['nobody signed in: no button', { me: '' }, []],
+        // Another community's pulled copy: the door takes up a listing here only (acceptPost's assertTradableHere refuses it
+        // with no code). Red if either app's shape of a copy shows the button (finding 2 of the r1 review: the phone did).
+        ['another community\'s copy, the phone\'s row (origin_node): no button', { listing: apples({ origin_node: 'riverside.example' }) }, []],
+        ['another community\'s copy, the web\'s post (originNode): no button', { listing: apples({ originNode: 'riverside.example' }) }, []],
+        ['a listing the web read from another community (_remoteNode): no button', { listing: apples({ _remoteNode: 'https://riverside.example' }) }, []],
+        ['a listing here (origin_node null, originNode empty): the button shows', { listing: apples({ origin_node: null, originNode: '' }) }, ['Buy for Riverside stall']],
     ];
     for (const [name, over, want] of rows) {
         it(name, () => expect(buttons(over).map((b) => b.label)).toEqual(want));
@@ -232,4 +241,170 @@ describe('a held leftover in the console: Release asks no hours for a deal price
     for (const [unit, asks] of [['each', false], ['fixed', false], [null, false], ['hourly', true], ['daily', true], ['weekly', true], ['monthly', true]] as const) {
         it(`${unit ?? 'none'} -> ${asks}`, () => expect(releaseAsksHours(unit)).toBe(asks));
     }
+});
+
+describe('an answer that never came: kept, said, and sent again exactly, so a stall never pays twice (r1 review finding 1)', () => {
+    /**
+     * THE CLASS: a Confirm's answer can be the node's (a sale, held or released; its own refusal), lost (no answer, a gateway,
+     * a server error), or the network's in front of it (busy, a proxy's page). Only the node's answer may forget a sale sent;
+     * a lost one must say it may have gone through and send the SAME sale again (the same id), whatever happens to the sheet,
+     * the page or the listing meanwhile. Every error shape either app's request helper throws (apps/native/utils/db.ts
+     * _signedRequest, apps/pwa/src/lib/api.ts request + refusalError) is a row; both apps' component tests run these shapes
+     * through their sheet and check it does what takeUpOutcomeOf says.
+     */
+    const err = (message: string, extra: Record<string, unknown> = {}) => Object.assign(new Error(message), extra);
+    // [case, error thrown, outcome]
+    const ROWS: Array<[string, unknown, TakeUpOutcome]> = [
+        // Lost: the stall may have paid.
+        ['phone: the 12-second abort (Aborted, no status)', err('Aborted'), 'lost'],
+        ['phone: a dropped signal (Network request failed, no status)', err('Network request failed'), 'lost'],
+        ['phone: off-grid before sending (no status: never sure, so the same sale again)', err('You are off-grid. Please connect to a BeanPool Node to perform this action.'), 'lost'],
+        ['phone: a gateway 502 (nodeAnswered false)', err('Server returned 502', { status: 502, nodeAnswered: false }), 'lost'],
+        ['phone: a gateway 504', err('Server returned 504', { status: 504, nodeAnswered: false }), 'lost'],
+        ['phone: the node\'s own 500', err('Something went wrong on the server.', { status: 500, nodeAnswered: true }), 'lost'],
+        ['web: Failed to fetch (Chrome, no status)', new TypeError('Failed to fetch'), 'lost'],
+        ['web: Load failed (Safari, no status)', new TypeError('Load failed'), 'lost'],
+        ['web: an abort (AbortError)', Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' }), 'lost'],
+        ['web: a gateway 502 with no JSON (unsaid)', err('Bad Gateway', { status: 502, unsaid: true }), 'lost'],
+        ['web: a gateway 504', err('Gateway Timeout', { status: 504, unsaid: true }), 'lost'],
+        ['a 503 (a node restarting, a proxy): lost', err('Service Unavailable', { status: 503, unsaid: true }), 'lost'],
+        ['status 0', err('x', { status: 0 }), 'lost'],
+        ['nothing at all thrown', undefined, 'lost'],
+        // Unsent: the network in front of the node answered; the node never saw it.
+        ['either app: the busy network\'s 429 (busyError)', busyError('5'), 'unsent'],
+        ['phone: a proxy\'s 403 page (nodeAnswered false)', err('Server returned 403', { status: 403, nodeAnswered: false }), 'unsent'],
+        ['web: a proxy\'s 403 page (unsaid)', err('Forbidden', { status: 403, unsaid: true }), 'unsent'],
+        // Refused: the node's own words; nothing was paid on this id and the node recorded none.
+        ['the node: deal_open', err('You already have a deal under way.', { status: 409, code: 'deal_open', nodeAnswered: true }), 'refused'],
+        ['the node: units_gone, with how many are left', err('Only 1 left.', { status: 409, code: 'units_gone', unitsLeft: 1 }), 'refused'],
+        ['the node: price_changed', err('The price changed.', { status: 409, code: 'price_changed' }), 'refused'],
+        ['the node: post_gone', err('Post not found or not active', { status: 400, code: 'post_gone' }), 'refused'],
+        ['the node: take_up_cancelled', err('That sale was cancelled.', { status: 409, code: 'take_up_cancelled' }), 'refused'],
+        ['the node: TWO_PERSON_RULE', err('Cannot accept your own post', { status: 403, code: 'TWO_PERSON_RULE' }), 'refused'],
+        ['the node: not a keeper (403, no code)', err('You are not a keeper of this enterprise', { status: 403, nodeAnswered: true }), 'refused'],
+        ['the node: a daily money limit (429 with its code)', err('Daily limit reached.', { status: 429, code: 'money_payments_day' }), 'refused'],
+        ['the node: standby (409, routes/standby-ledger-gate.ts)', err('This server is a standby.', { status: 409, code: 'standby', nodeAnswered: true }), 'refused'],
+    ];
+
+    for (const [name, e, outcome] of ROWS) {
+        it(`${name} -> ${outcome} (red if a lost answer reads as a refusal, or the node's refusal as lost)`, () => {
+            expect(takeUpOutcomeOf(e)).toBe(outcome);
+            // Lost is exactly bills' rule (billAnswerLost), so the two money sheets can never disagree on it.
+            expect(takeUpOutcomeOf(e) === 'lost').toBe(billAnswerLost(e));
+        });
+    }
+
+    const send2 = { hours: 2, itemOption: 'each' as const, expect_c: 4000 };
+    const sentence = 'Riverside stall pays Alice 40 Beans for 2 of “Apples”.';
+    // (outcome, sent again?) -> kept afterwards. Red if any path that is not the node's own answer forgets a sale that may
+    // have gone through, or a path that is the node's answer keeps one (the next sale would then be answered as the old one).
+    const SETTLE: Array<[TakeUpOutcome | 'answered', boolean, boolean]> = [
+        ['answered', false, false], ['answered', true, false],
+        ['refused', false, false], ['refused', true, false],
+        ['lost', false, true], ['lost', true, true],
+        ['unsent', false, false], ['unsent', true, true],
+    ];
+    for (const [outcome, resent, kept] of SETTLE) {
+        it(`a Confirm ${resent ? 'sending a kept sale again' : 'sending a new sale'} that comes back ${outcome}: ${kept ? 'kept' : 'forgotten'}`, () => {
+            const book = takeUpUnansweredBook();
+            const sale = { enterprise: STALL, postId: 'p1', body: takeUpBody('p1', send2, { key: 'k', requestId: 'first-id-1' }), sentence };
+            book.keep(sale); // both apps keep it the moment it goes
+            takeUpSettle(book, { sale, resent }, outcome);
+            expect(book.get(STALL, 'p1')).toEqual(kept ? sale : null);
+        });
+    }
+
+    it('the book keeps one sale per enterprise and listing; another enterprise or listing is its own', () => {
+        const book = takeUpUnansweredBook();
+        const sale = (enterprise: string, postId: string) => ({ enterprise, postId, body: takeUpBody(postId, send2, { key: 'k', requestId: `${enterprise}-${postId}-id` }), sentence });
+        book.keep(sale(STALL, 'p1'));
+        book.keep(sale(CAFE, 'p1'));
+        book.keep(sale(STALL, 'p2'));
+        expect(book.get(STALL, 'p1')!.body.requestId).toBe('stall-key-p1-id');
+        expect(book.get(CAFE, 'p1')!.body.requestId).toBe('cafe-key-p1-id');
+        book.forget(STALL, 'p1');
+        expect(book.get(STALL, 'p1')).toBeNull();
+        expect(book.get(CAFE, 'p1')).not.toBeNull();
+        expect(book.get(STALL, 'p2')).not.toBeNull();
+    });
+
+    it('the line says the stall may have paid and Confirm finds out: never "nothing was paid", never a raw network error', () => {
+        const line = takeUpLostLine({ stall: 'Riverside stall', seller: 'Alice' });
+        expect(line).toBe('Your community’s server didn’t answer, so Riverside stall may have paid Alice already. Press Confirm again to find out: it is never paid twice.');
+        expect(line).not.toMatch(/nothing was paid|Aborted|Failed to fetch/);
+    });
+
+    /**
+     * The review's scenario, step by step through the same calls both components make: Kim taps "Buy for Riverside stall",
+     * picks 2 of "Apples" at 20 Beans and Confirms; the node sells and releases, but the answer is lost. Kim taps Cancel (the
+     * sheet's own request is dropped), the listing is read again (1 left now, sold out, or unchanged), Kim reopens and
+     * Confirms. The same sale goes again with the same id and count, so the node answers it with the first sale. Red if any
+     * step makes a new id or a different body.
+     */
+    for (const [after, unitsLeft] of [['1 left now', 1], ['sold out', 0], ['unchanged', 3]] as const) {
+        it(`lost, Cancel, the listing read again (${after}), reopen, Confirm: the very same sale and id`, () => {
+            const book = takeUpUnansweredBook();
+            let made = 0;
+            const make = () => `take-up-try-${++made}`;
+            const names = { stall: 'Riverside stall', seller: 'Alice', title: 'Apples' };
+            const open = (listing: unknown, state: ItemBoxState, request: TakeUpRequest | null) => {
+                const box = book.get(STALL, 'p1') ? null : itemTakeUpBox(listing, state, 'Alice');
+                const sheet = takeUpSheet(box?.send, names);
+                return takeUpConfirm({ book, request, enterprise: STALL, postId: 'p1', send: box?.send, sentence: sheet?.sentence, make });
+            };
+            const first = open(apples(), { option: 'each', count: '2' }, null)!;
+            expect(first.resent).toBe(false);
+            expect(first.sale.body).toEqual({ postId: 'p1', hours: 2, itemOption: 'each', expect_c: 4000, requestId: 'take-up-try-1' });
+            book.keep(first.sale);
+            takeUpSettle(book, first, takeUpOutcomeOf(new Error('Aborted')));
+            // Cancel: the sheet forgets its own request; the book keeps the sale. The listing is read again.
+            const reread = apples({ unitsLeft, status: unitsLeft === 0 ? 'completed' : 'active' });
+            const again = open(reread, ITEM_BOX_START, null)!;
+            expect(again.resent).toBe(true);
+            expect(again.sale.body).toBe(first.sale.body);
+            expect(again.sale.sentence).toBe(first.sale.sentence);
+            expect(made).toBe(1);
+            // The node answers it (the first sale, replayed): forgotten, and the next sale is a new one with a new id.
+            book.keep(again.sale);
+            takeUpSettle(book, again, 'answered');
+            expect(book.get(STALL, 'p1')).toBeNull();
+            if (unitsLeft > 0) {
+                const next = open(reread, { option: 'each', count: '1' }, null)!;
+                expect(next.resent).toBe(false);
+                expect(next.sale.body.requestId).toBe('take-up-try-2');
+            } else {
+                expect(open(reread, ITEM_BOX_START, null)).toBeNull(); // sold out: nothing more to send
+            }
+        });
+    }
+
+    it('a busy answer to the kept sale sent again leaves it kept; the node\'s refusal of it forgets it (it never went through)', () => {
+        const book = takeUpUnansweredBook();
+        const first = takeUpConfirm({ book, request: null, enterprise: STALL, postId: 'p1', send: send2, sentence })!;
+        book.keep(first.sale);
+        takeUpSettle(book, first, 'lost');
+        const busy = takeUpConfirm({ book, request: null, enterprise: STALL, postId: 'p1', send: send2, sentence })!;
+        expect(busy.resent).toBe(true);
+        takeUpSettle(book, busy, takeUpOutcomeOf(busyError(null)));
+        expect(book.get(STALL, 'p1')).toBe(first.sale);
+        const refused = takeUpConfirm({ book, request: null, enterprise: STALL, postId: 'p1', send: { ...send2, hours: 1, expect_c: 2000 }, sentence })!;
+        expect(refused.sale).toBe(first.sale); // a changed count still sends the kept sale first
+        takeUpSettle(book, refused, takeUpOutcomeOf(Object.assign(new Error('Only 1 left.'), { status: 409, code: 'units_gone', unitsLeft: 1 })));
+        expect(book.get(STALL, 'p1')).toBeNull();
+    });
+
+    it('a new sale met by the busy network is not kept (it never got there), but the sheet\'s own id is, for the same tap again', () => {
+        const book = takeUpUnansweredBook();
+        const first = takeUpConfirm({ book, request: null, enterprise: STALL, postId: 'p1', send: send2, sentence })!;
+        book.keep(first.sale);
+        takeUpSettle(book, first, takeUpOutcomeOf(busyError(null)));
+        expect(book.get(STALL, 'p1')).toBeNull();
+        const again = takeUpConfirm({ book, request: first.request, enterprise: STALL, postId: 'p1', send: send2, sentence })!;
+        expect(again.sale.body.requestId).toBe(first.sale.body.requestId);
+    });
+
+    it('nothing to send and nothing kept: no Confirm', () => {
+        expect(takeUpConfirm({ book: takeUpUnansweredBook(), request: null, enterprise: STALL, postId: 'p1', send: null, sentence: null })).toBeNull();
+        expect(takeUpConfirm({ book: takeUpUnansweredBook(), request: null, enterprise: STALL, postId: 'p1', send: send2, sentence: null })).toBeNull();
+    });
 });

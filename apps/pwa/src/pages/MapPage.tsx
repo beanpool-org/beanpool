@@ -14,6 +14,7 @@ import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, POLL_DAYS_DE
 import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
 import { photoFocusList, storedPhotoFocus, type PhotoFocus } from '@beanpool/core';
 import { PhotoFocusDialog } from '../components/PhotoFocusDialog';
+import { cardObjectPosition } from '../lib/photo-focus';
 import { carryTotalToEach, perItemCreateFields, perItemFeeLine, perItemLines, priceUnitsOffered, type PerItemField } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
 import { CashAlsoNeededField, ListingReachField, RepeatableField } from '../components/ListingFormFields';
@@ -2736,6 +2737,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                     photo={previewPost.photos?.[0]}
                                     fallback={<span className={LIST_PHOTO_FILL}><CategoryTile category={previewPost.category} kind="listing" size="thumb" /></span>}
                                     alt="" className={`${LIST_PHOTO_FILL} object-cover`}
+                                    style={cardObjectPosition(previewPost, previewPost.photos?.[0])}
                                 />
                             </div>
                             <div className={LIST_TEXT}>

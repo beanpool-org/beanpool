@@ -183,6 +183,7 @@ export function photoFocusOnEdit(
     const carried = keptFrom.slice(0, count).map((slot) => (slot === null ? null : existing?.[slot] ?? null));
     return storedPhotoFocus(carried);
 }
+
 export const POST_ID_TAKEN_ERROR = 'A new post needs an id nothing else has. Send it without one and this community makes one.';
 export const POST_ID_SHAPE_ERROR = 'A post id is up to 128 lowercase letters, digits, dots, dashes and underscores. Send it without one and this community makes one.';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';

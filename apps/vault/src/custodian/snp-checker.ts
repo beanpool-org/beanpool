@@ -32,7 +32,7 @@ import { certExtensions, certSubject, certValidity, derSmallUint, DerError, oidB
  *    1  the evidence: BeanPool's wrapper, a 1,184-byte report, a version this tool reads, signed with ECDSA P-384
  *    2  REPORT_DATA is the bind the tool computed from its own nonce (constant time): fresh and for this session
  *    4  the guest policy never allows debug (bit 19) or a migration agent (bit 18), whatever a release says
- *    5  VMPL 0; signed by the chip's own key (VCEK, not a cloud's VLEK); chip ID not masked
+ *    5  VMPL 0; signed by the chip's own key (VCEK, not a cloud's VLEK, not masked); chip ID not zeroed
  *    3  the measurement is one the release lists (a host entry's launches); that entry must then pass whole:
  *    4  the guest policy is one that entry lists
  *    6  platform info says the alias check ran, where the entry asks for it
@@ -221,7 +221,9 @@ type FetchFn = (url: string, init?: { signal?: AbortSignal }) => Promise<{ ok: b
  * cached copy (kept only when signed by the pinned ARK) is used when AMD can't be reached. The checker checks both
  * again, whatever their source, so a tampered cache can only make the tool refuse.
  */
-export function amdKds(opts: { cacheDir: string; fetch?: FetchFn; base?: string; timeoutMs?: number; roots?: Readonly<Record<string, AmdRoot>> }): SnpCollateral {
+export function amdKds(opts: {
+    cacheDir: string; fetch?: FetchFn; base?: string; timeoutMs?: number; now?: () => number; roots?: Readonly<Record<string, AmdRoot>>;
+}): SnpCollateral {
     const base = (opts.base ?? AMD_KDS).replace(/\/$/, '');
     const fetchFn: FetchFn = opts.fetch ?? ((url, init) => globalThis.fetch(url, init));
     const get = async (url: string, max: number): Promise<Buffer> => {
@@ -244,7 +246,15 @@ export function amdKds(opts: { cacheDir: string; fetch?: FetchFn; base?: string;
         async vcek(product, chipId, tcb) {
             const id = chipId.toString('hex');
             const file = path.join(productDir(product), `vcek-${id}-${TCB_PARTS.map(p => tcb[p]).join('-')}.der`);
-            if (existsSync(file)) return readFileSync(file);
+            if (existsSync(file)) {
+                // A cached certificate past its dates is asked for again (AMD reissues them), never served for ever.
+                const cached = readFileSync(file);
+                try {
+                    if (inDate(cached, opts.now?.() ?? Date.now())) return cached;
+                } catch {
+                    // Unreadable: fetch a fresh one.
+                }
+            }
             const two = (n: number) => String(n).padStart(2, '0');
             const der = await get(`${base}/vcek/v1/${product}/${id}?blSPL=${two(tcb.bootloader)}&teeSPL=${two(tcb.tee)}&snpSPL=${two(tcb.snp)}&ucodeSPL=${two(tcb.microcode)}`, VCEK_MAX_BYTES);
             const root = loadRoot(product, opts.roots);
@@ -318,7 +328,8 @@ export async function verifySnpEvidence(policy: HostPolicySevSnp, evidence: Uint
     // 5
     if (r.vmpl !== 0) refuse('vmpl', `the report was asked for at VMPL ${r.vmpl}, not 0 (not by the vault's own kernel)`);
     if (r.signingKey !== SNP_SIGNING_KEY_VCEK) refuse('not_vcek', `the report is not signed by the chip's own key (VCEK) but by key type ${r.signingKey} (1 is a cloud's VLEK)`);
-    if (r.maskChipKey) refuse('chip_masked', 'the report hides which chip made it (MASK_CHIP_KEY)');
+    if (r.maskChipKey) refuse('chip_key_masked', 'the chip did not sign the report with its own key (MASK_CHIP_KEY)');
+    if (r.chipId.every(b => b === 0)) refuse('chip_id_masked', 'the report hides which chip made it (its chip ID is zeroed: MASK_CHIP_ID)');
     // 3
     const measurement = r.measurement.toString('hex');
     const candidates = policy.hosts.filter(h => h.launches.some(l => l.measurement === measurement));

@@ -7,6 +7,7 @@ reports from the test-only chain in `snp-kit.ts`. Nothing here is ours or secret
 |---|---|---|
 | `milan-report.hex` | A real SEV-SNP attestation report (version 2, guest policy 0x30000, VMPL 0) from an AMD Milan chip, as hex | virtee/sev `tests/certs_data/report_milan.hex` (Apache-2.0), read 26 Nov 2026 |
 | `milan-vcek.der` | That chip's VCEK, signed by AMD's SEV-Milan key | virtee/sev `tests/certs_data/vcek_milan.der` (Apache-2.0), read 26 Nov 2026 |
+| `milan-vcek-reissued-2026-11-25.der` | AMD's current VCEK for the same chip and firmware levels: the same key, reissued 25 Nov 2026 (serial 7B9CA2FA…, valid to 2033). It shows the URL the tool asks works | `https://kdsintf.amd.com/vcek/v1/Milan/d49554ec…41eb6?blSPL=03&teeSPL=00&snpSPL=08&ucodeSPL=115`, fetched once by hand 26 Nov 2026 |
 | `milan-crl-2026-11-24.der` | AMD's revocation list for Milan, issued 24 Nov 2026, next update 9 Jan 2027, CRL number 14, no entries | `https://kdsintf.amd.com/vcek/v1/Milan/crl`, fetched 26 Nov 2026 |
 
 Checked before use: the VCEK verifies under the pinned ASK (`custodian/amd-roots.ts`), the report's signature verifies

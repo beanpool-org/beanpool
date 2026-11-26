@@ -87,6 +87,13 @@ describe('AMD\'s pinned keys and a real Milan report', () => {
         expect(pass.lines.join('\n')).toMatch(/chip check passed[\s\S]*Milan, chip d49554ec…[\s\S]*computed from our own build/);
     });
 
+    it('... and with AMD\'s current certificate for that chip (reissued 25 Nov 2026: same key, new serial and dates)', async () => {
+        const current = readFileSync(path.join(fixtures, 'milan-vcek-reissued-2026-11-25.der'));
+        expect(new X509Certificate(current).publicKey.export({ format: 'jwk' })).toEqual(new X509Certificate(realVcek).publicKey.export({ format: 'jwk' }));
+        await expect(verifySnpEvidence(policyOf(realHost()), evidenceOf(realReport), real.reportData, ctx(), realOpts({ collateral: fixedCollateral({ vcek: current, crl: realCrl }) })))
+            .resolves.toMatchObject({ profile: 'servury' });
+    });
+
     it('refuses the same real report the moment one thing about it is wrong', async () => {
         const v = (o: { report?: Buffer; bind?: Buffer; host?: Partial<SnpHost>; opts?: Partial<SnpCheckOptions>; ctx?: Partial<CheckContext> }) =>
             verifySnpEvidence(policyOf(realHost(o.host)), evidenceOf(o.report ?? realReport), o.bind ?? real.reportData, ctx(o.ctx), realOpts(o.opts));
@@ -169,7 +176,8 @@ const ROWS: [string, string, (c: Case) => void][] = [
     ['a migration agent allowed (policy bit 18)', 'migration_agent', c => { c.spec.policy = 0x30000n | (1n << 18n); }],
     ['VMPL 1', 'vmpl', c => { c.spec.vmpl = 1; }],
     ['a cloud\'s key (VLEK) signs', 'not_vcek', c => { c.spec.signer = 1 << 2; }],
-    ['the chip key masked', 'chip_masked', c => { c.spec.signer = 0x2; }],
+    ['the chip key masked (MASK_CHIP_KEY)', 'chip_key_masked', c => { c.spec.signer = 0x2; }],
+    ['the chip ID zeroed (MASK_CHIP_ID)', 'chip_id_masked', c => { c.spec.chipId = Buffer.alloc(64); }],
     // 3: our software
     ['a measurement the release does not list', 'measurement', c => { c.spec.measurement = crypto.randomBytes(48); }],
     ['the release\'s measurement listed for another host only', 'measurement', c => {
@@ -304,7 +312,7 @@ describe('what may pass', () => {
 // ─── The release's policy ────────────────────────────────────────────────────────────────────
 
 describe('the sev-snp host policy in a release (design §2.4)', () => {
-    const good = () => ({ platform: 'sev-snp', signer: 'vcek', hosts: [hostEntry({ measurement: MEASUREMENT, chipId: CHIP })] }) as Record<string, unknown> & { hosts: Record<string, unknown>[] };
+    const good = () => ({ platform: 'sev-snp', signer: 'vcek', hosts: [hostEntry({ measurement: MEASUREMENT, chipId: CHIP })] }) as unknown as Record<string, unknown> & { hosts: Record<string, unknown>[] };
     it('parses the day-zero shape', () => {
         expect(parseHostPolicy(good())).toEqual(good());
     });
@@ -367,6 +375,16 @@ describe('amdKds: AMD\'s key server, cached (no real AMD call)', () => {
         const offline = fakeAmd({});
         expect(await amdKds({ cacheDir, fetch: offline.fetch, roots: amd.roots }).vcek('Milan', CHIP, PROBE_TCB)).toEqual(vcek);
         expect(offline.asked).toEqual([]);
+    });
+
+    it('asks again for a cached VCEK that is past its dates (AMD reissues them)', async () => {
+        const cacheDir = mkdtempSync(path.join(dir, 'c-'));
+        const old = amd.vcek(CHIP, PROBE_TCB, { notBefore: NOW - 400 * DAY, notAfter: NOW + DAY });
+        const fresh = amd.vcek(CHIP, PROBE_TCB);
+        await amdKds({ cacheDir, fetch: fakeAmd({ '/vcek/v1/Milan/': old }).fetch, roots: amd.roots, now: () => NOW }).vcek('Milan', CHIP, PROBE_TCB);
+        const later = fakeAmd({ '/vcek/v1/Milan/': fresh });
+        expect(await amdKds({ cacheDir, fetch: later.fetch, roots: amd.roots, now: () => NOW + 2 * DAY }).vcek('Milan', CHIP, PROBE_TCB)).toEqual(fresh);
+        expect(later.asked.length).toBe(1);
     });
 
     it('does not cache a VCEK that is not signed by the pinned ASK', async () => {

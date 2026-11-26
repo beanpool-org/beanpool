@@ -528,7 +528,7 @@ report in the vault's hello (`src/custodian/snp-checker.ts`). In order, so the r
 2. the report's REPORT_DATA is the `bind` the tool computed from its own fresh nonce (constant time): the report was
    made for this hello, at this boot, for this hello key. A report has no clock in it; the nonce is the freshness;
 3. the guest policy never allows debug (bit 19) or a migration agent (bit 18), whatever a release says;
-4. VMPL 0; signed by the chip's own key (VCEK, not a cloud's VLEK); the chip ID not masked;
+4. VMPL 0; signed by the chip's own key (VCEK, not a cloud's VLEK, not masked); the chip ID not zeroed;
 5. the measurement is one the release lists. The host entry that lists it must then pass whole: its guest policy, its
    alias check (platform info bit 5, the BadRAM fix) if it asks for it, and the reported, committed and launch firmware
    levels each at or above its floor, part by part;

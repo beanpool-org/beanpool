@@ -14,6 +14,7 @@ import { PollCard } from './PollCard';
 import { CategoryTile } from './CategoryTile';
 import { copyCardLine, copyFromLine, copyPriceLine, eventCopyOf, t } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
+import { cardObjectPosition } from '../lib/photo-focus';
 import { EventCopyDoor } from './EventCopyDoor';
 import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
 
@@ -75,6 +76,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
                     photo={photo}
                     fallback={<CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="thumb" />}
                     alt="" className="w-full h-full object-cover"
+                    style={cardObjectPosition(post, photo)}
                 />
             </span>
             <span className="flex-1 min-w-0 flex flex-col gap-1">

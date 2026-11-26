@@ -725,6 +725,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                             src={photo}
                             alt={p.title}
                             className="object-cover rounded-xl bg-nature-100 dark:bg-nature-900 w-full h-[110px] mb-1"
+                            style={cardObjectPosition(p, photo)}
                         />
                     ) : (
                         <div className="overflow-hidden rounded-xl w-full h-[110px] mb-1">

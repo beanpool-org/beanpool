@@ -59,6 +59,9 @@ const measurementOf = (ukiSha256: string) => crypto.createHash('sha384').update(
 
 const SUB = '111122223333444455556';
 
+/** The options presentShare takes: a call's, and a reshare's purpose and new custodians. */
+type ShareCall = CallOptions & { purpose?: 'unlock' | 'reshare'; newCustodians?: string[] };
+
 function run(args: string[], o: { pass?: string } = {}): Promise<{ code: number | null; stdout: string; stderr: string }> {
     return new Promise(resolve => {
         const child = spawn(process.execPath, args, {
@@ -198,7 +201,7 @@ describe('the comeback with the same custodian keys (runbook DECIDED 27 Nov)', (
         const b = await startVault({ stub: providers, clock, custodians: G, attestor, releaseHash: imageHash });
         open.push(b);
         const lines: string[] = [];
-        const snpCall = (extra: Partial<CallOptions> = {}): CallOptions => ({
+        const snpCall = (extra: Partial<ShareCall> = {}): ShareCall => ({
             now: b.clock.now,
             trust: { feed: new LocalDirectoryFeed(feedDir), rootKeys: PUBS },
             checkers: { 'sev-snp': snpChecker({ collateral: fixedCollateral({ vcek: amd.vcek(CHIP, PROBE_TCB), crl: amd.crl() }), now: () => NOW, roots: amd.roots }) },
@@ -233,8 +236,8 @@ describe('the comeback with the same custodian keys (runbook DECIDED 27 Nov)', (
         const listed = await listBackups(b.baseUrl, G[0], snpCall());
         expect(listed.body).toMatchObject({ local: [], offsite: [backupName] });
         expect((await restoreFromBackup(b.baseUrl, G[0], backupName, snpCall())).body).toMatchObject({ state: 'locked' });
-        const named: (string | undefined)[] = [];
-        const confirmRestore = async (rp: { backup?: string }) => { named.push(rp.backup); return true; };
+        const named: (string | null)[] = [];
+        const confirmRestore = async (rp: { backup: string | null }) => { named.push(rp.backup); return true; };
         expect((await presentShare(b.baseUrl, G[0], shareOf(g.shares, G[0]), snpCall({ confirmRestore }))).body).toMatchObject({ sharesPresent: 1 });
         expect((await presentShare(b.baseUrl, G[1], shareOf(g.shares, G[1]), snpCall({ confirmRestore }))).body).toMatchObject({ state: 'open' });
         expect(named).toEqual([backupName, backupName]);

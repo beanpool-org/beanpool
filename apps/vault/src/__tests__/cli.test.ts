@@ -341,11 +341,14 @@ describe('vault-custodian release', () => {
         const custodians = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
         const keys = custodians.map((c, i) => keyFile(`d${i}.json`, c));
         const image = { ukiSha256: crypto.randomBytes(32).toString('hex'), roothash: crypto.randomBytes(32).toString('hex') };
+        // Signed with its keys in another order than the tool's parser keeps them: carried as signed, and not "changed".
         const hostPolicy = {
-            platform: 'sev-snp' as const, signer: 'vcek' as const, hosts: [{
-                profile: 'servury', product: 'Milan', launches: [{ ukiSha256: image.ukiSha256, firmwareSha256: 'ef'.repeat(32), measurement: 'cd'.repeat(48), source: 'computed' as const }],
-                policies: ['0000030000000000'], minTcb: { bootloader: 4, tee: 0, snp: 29, microcode: 222 }, requireAliasCheck: true, chipIds: ['ab'.repeat(64)],
+            hosts: [{
+                chipIds: ['ab'.repeat(64)], requireAliasCheck: true, minTcb: { snp: 29, bootloader: 4, tee: 0, microcode: 222 }, policies: ['0000030000000000'],
+                launches: [{ source: 'computed' as const, measurement: 'cd'.repeat(48), firmwareSha256: 'ef'.repeat(32), ukiSha256: image.ukiSha256 }],
+                product: 'Milan', profile: 'servury',
             }],
+            signer: 'vcek' as const, platform: 'sev-snp' as const,
         };
         const feedDir = path.join(dir, 'snp-release-feed');
         const r1 = makeRelease({ version: '1.0.0', previous: null, custodianKeys: custodians, signers: custodians.slice(0, 2), image, hostPolicy });

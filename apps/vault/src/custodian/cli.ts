@@ -429,11 +429,12 @@ async function release(sub: string, trust: ReleaseTrust): Promise<void> {
             apiBundleHash: sha256Hex(bundle), custodianKeys, hostPolicy, ...(arg('--notes') ? { notes: arg('--notes') as string } : {}),
         };
         const text = formatManifest(m);
-        parseManifest(text);
+        // Shown as sign and verify will read it back (a policy carried as signed compares field for field, not by order).
+        const shown = parseManifest(text);
         mkdirSync(out, { recursive: true });
         writeFileSync(path.join(out, MANIFEST_ASSET), text);
         copyFileSync(arg('--api-bundle') as string, path.join(out, API_BUNDLE_ASSET));
-        console.log(describeRelease(m, newest));
+        console.log(describeRelease(shown, newest));
         console.log(`\nwritten to ${out}; each signer runs: vault-custodian release sign --dir ${out} --key <their key file>`);
         return;
     }

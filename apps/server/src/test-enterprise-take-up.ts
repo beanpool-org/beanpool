@@ -373,9 +373,9 @@ async function main(): Promise<void> {
     await refused('Kay takes up Kim\'s honey with gifted Beans only', kay, creekside, each(honey, 1, 10), { status: 403, error: /insufficient earned surplus/ });
     assert(claims(creekside) === 0, 'and still no deferred wage claim');
     const big = (db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND title = 'Creekside stall big preserves 1'").get(creekside) as { id: string }).id;
-    const danaBuys = await post(bob, '/api/marketplace/posts/accept', { postId: big, buyerPublicKey: bob.pk });
-    const danaReleases = await post(bob, '/api/marketplace/transactions/complete', { transactionId: danaBuys.body?.transaction?.id, confirmerPublicKey: bob.pk });
-    assert(danaReleases.status === 200 && surplus(creekside) === hc(50) && bal(creekside) === hc(30) + hc(50) - feeOf(hc(50)),
+    const bobBuys = await post(bob, '/api/marketplace/posts/accept', { postId: big, buyerPublicKey: bob.pk });
+    const bobReleases = await post(bob, '/api/marketplace/transactions/complete', { transactionId: bobBuys.body?.transaction?.id, confirmerPublicKey: bob.pk });
+    assert(bobReleases.status === 200 && surplus(creekside) === hc(50) && bal(creekside) === hc(30) + hc(50) - feeOf(hc(50)),
         `Bob buys Creekside stall's own preserves for 50: earned surplus 50 (${surplus(creekside)}, balance ${bal(creekside)})`);
     conserved('the stall\'s own sale');
     const kimBefore = bal(kim.pk);

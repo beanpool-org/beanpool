@@ -37,6 +37,11 @@ export const TAKE_UP_WORDS = {
      * Confirm sends the same sale again with the same id, and the node answers that with the first sale if it went through.
      */
     lost: word('Your community’s server didn’t answer, so {stall} may have paid {seller} already. Press Confirm again to find out: it is never paid twice.'),
+    /**
+     * A sale whose answer never came, past TAKE_UP_RESEND_HOURS (takeUpUnansweredBook `aged`): it is never sent again, so
+     * Confirm is a new sale, and the stall may still have paid for the old one: its deals say (never "nothing was paid").
+     */
+    aged: word('An earlier sale from here got no answer, so {stall} may have paid {seller} for it already: the enterprise’s deals show whether it did. Confirm makes a new sale.'),
 } as const;
 
 const W = TAKE_UP_WORDS;
@@ -142,7 +147,8 @@ export interface TakeUpRequest {
  * The id a Confirm goes with: the same one again only for exactly the same sale (a retry after the node's own refusal, which
  * recorded nothing), a new one the moment anything in it changes, so a changed count is never refused as the first one's
  * retry. Both apps forget it when the sheet closes; a sale whose answer never came is kept apart, whole, in the book of
- * unanswered sales (takeUpUnansweredBook), which outlives the sheet and the page.
+ * unanswered sales (takeUpUnansweredBook), which outlives the sheet and the page; once that sale has aged, its id is never
+ * used again (takeUpConfirm).
  */
 export function takeUpRequestFor(prev: TakeUpRequest | null | undefined, enterprise: string, postId: string, send: ItemTakeUpSend,
     make: () => string = () => billNewId()): TakeUpRequest {
@@ -162,35 +168,72 @@ export function takeUpBody(postId: string, send: ItemTakeUpSend, request: TakeUp
 
 // ── A sale whose answer never came ───────────────────────────────────────────────────────────────────────────────
 
-/** A sale sent whose answer hasn't come back: exactly what was sent (its id with it), and the sheet's sentence for it. */
+/**
+ * How long a sale whose answer never came is sent again, counted from its FIRST sending: a day. The node keeps a take-up's
+ * request id for REQUEST_ID_KEPT_DAYS (7: apps/server/src/engine/money-requests.ts, pruned daily) from the moment it made
+ * the sale, which is never before the first sending; after that it no longer knows the id, so the same sale sent again
+ * would be a second sale, paid twice. A day is plenty for "the answer was lost just now" and leaves days to spare for a
+ * device clock that is out. The node's suite (apps/server/src/test-enterprise-take-up.ts) reads both and pins this inside.
+ */
+export const TAKE_UP_RESEND_HOURS = 24;
+const RESEND_MS = TAKE_UP_RESEND_HOURS * 3_600_000;
+/** A clock set back a little since the stamp (a network time fix) still reads as just sent; set back further, the age is unknown. */
+const CLOCK_SLACK_MS = 10 * 60_000;
+
+/** A sale sent whose answer hasn't come back: exactly what was sent (its id with it), the sheet's sentence, and when. */
 export interface TakeUpUnanswered {
     enterprise: string;
     postId: string;
     body: TakeUpBody;
     sentence: string;
+    /**
+     * When it was FIRST sent (ms, the book's clock). Sending it again keeps this stamp, as the node's record of the sale
+     * keeps its first time: the age that matters is how long the node may have known the id.
+     */
+    sentAt: number;
 }
 
 /**
  * Every sale sent whose answer hasn't come back, one per enterprise and listing, for as long as the app runs (each app's
  * components/EnterpriseTakeUp.tsx holds one for the whole app). A sale is kept from the moment it is sent, so a sheet
  * closed, or a page left and opened again, while it is on its way or after its answer was lost still finds it; it is
- * forgotten only when the node itself answers (takeUpSettle). While one is kept, Confirm on that enterprise and listing
- * sends it again exactly (takeUpConfirm): the node answers a retry of a sale it made with that sale, before it reads the
- * listing, so it is never paid twice, even once the listing has sold out or its count moved.
+ * forgotten when the node itself answers (takeUpSettle). For TAKE_UP_RESEND_HOURS from its first sending, Confirm on that
+ * enterprise and listing sends it again exactly (`get`, takeUpConfirm): the node answers a retry of a sale it made with that
+ * sale, before it reads the listing, so it is never paid twice, even once the listing has sold out or its count moved.
+ * After that it is `aged`: never sent again (the node may have forgotten its id), never in the way of a new sale, and the
+ * sheet says the stall may have paid for it (takeUpAgedLine).
  */
 export interface TakeUpUnansweredBook {
+    /** The kept sale Confirm sends again: first sent less than TAKE_UP_RESEND_HOURS ago. */
     get(enterprise: string, postId: string): TakeUpUnanswered | null;
+    /** A kept sale past that age, or of an age the clock can no longer tell: never sent again. */
+    aged(enterprise: string, postId: string): TakeUpUnanswered | null;
     keep(sale: TakeUpUnanswered): void;
     forget(enterprise: string, postId: string): void;
+    /** The book's clock (ms): a new sale is stamped with it. */
+    now(): number;
 }
 
-export function takeUpUnansweredBook(): TakeUpUnansweredBook {
+/** `now` is the device's clock unless a test hands one in (read at each call, so a test's fake clock is the one read). */
+export function takeUpUnansweredBook(now: () => number = () => Date.now()): TakeUpUnansweredBook {
     const sales = new Map<string, TakeUpUnanswered>();
     const at = (enterprise: string, postId: string) => JSON.stringify([enterprise, postId]);
+    const sendable = (sale: TakeUpUnanswered) => {
+        const age = now() - sale.sentAt;
+        return Number.isFinite(age) && age >= -CLOCK_SLACK_MS && age < RESEND_MS;
+    };
     return {
-        get: (enterprise, postId) => sales.get(at(enterprise, postId)) ?? null,
+        get: (enterprise, postId) => {
+            const sale = sales.get(at(enterprise, postId));
+            return sale && sendable(sale) ? sale : null;
+        },
+        aged: (enterprise, postId) => {
+            const sale = sales.get(at(enterprise, postId));
+            return sale && !sendable(sale) ? sale : null;
+        },
         keep: (sale) => { sales.set(at(sale.enterprise, sale.postId), sale); },
         forget: (enterprise, postId) => { sales.delete(at(enterprise, postId)); },
+        now,
     };
 }
 
@@ -204,8 +247,10 @@ export interface TakeUpConfirm {
 
 /**
  * What Confirm sends: a sale kept in the book for this enterprise and listing, again exactly as it went (the same id, count,
- * way and total, whatever the box or the listing reads now); else the sale the box shows, with its retry id (takeUpRequestFor)
- * and the sheet's sentence. Null when there is nothing to send.
+ * way, total and first sending, whatever the box or the listing reads now); else the sale the box shows, with its retry id
+ * (takeUpRequestFor), the sheet's sentence and the book's time. A sale `aged` in the book is never sent again, under the
+ * sheet's own id either: the same count at the same price once it has aged is a new sale with a new id, so the node's
+ * answer to it is never the old sale replayed and read as this one paid. Null when there is nothing to send.
  */
 export function takeUpConfirm(args: {
     book: TakeUpUnansweredBook;
@@ -219,8 +264,11 @@ export function takeUpConfirm(args: {
     const kept = args.book.get(args.enterprise, args.postId);
     if (kept) return { sale: kept, resent: true, request: args.request ?? null };
     if (!args.send || !args.sentence) return null;
-    const request = takeUpRequestFor(args.request, args.enterprise, args.postId, args.send, args.make);
-    return { sale: { enterprise: args.enterprise, postId: args.postId, body: takeUpBody(args.postId, args.send, request), sentence: args.sentence }, resent: false, request };
+    const aged = args.book.aged(args.enterprise, args.postId);
+    const prev = aged && args.request?.requestId === aged.body.requestId ? null : args.request;
+    const request = takeUpRequestFor(prev, args.enterprise, args.postId, args.send, args.make);
+    const body = takeUpBody(args.postId, args.send, request);
+    return { sale: { enterprise: args.enterprise, postId: args.postId, body, sentence: args.sentence, sentAt: args.book.now() }, resent: false, request };
 }
 
 /**
@@ -256,6 +304,11 @@ export function takeUpSettle(book: TakeUpUnansweredBook, go: Pick<TakeUpConfirm,
 /** The sheet's line while a sale is kept unanswered: the stall may have paid already, and Confirm finds out (never "failed"). */
 export function takeUpLostLine(names: { stall: string; seller: string }): string {
     return t(W.lost, { stall: names.stall, seller: names.seller });
+}
+
+/** The sheet's line over the count picker once a kept sale has aged: the stall may have paid for it, and Confirm is a new sale. */
+export function takeUpAgedLine(names: { stall: string; seller: string }): string {
+    return t(W.aged, { stall: names.stall, seller: names.seller });
 }
 
 // ── The answer, and every refusal ────────────────────────────────────────────────────────────────────────────────

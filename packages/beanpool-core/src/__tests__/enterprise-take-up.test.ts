@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    TAKE_UP_REFUSALS, TAKE_UP_WORDS, enterpriseTakeUpOffered, releaseAsksHours, takeUpAnswerOf, takeUpBody, takeUpButtons, takeUpConfirm,
-    takeUpListingMoved, takeUpLostLine, takeUpOutcomeOf, takeUpRefusalText, takeUpRequestFor, takeUpSettle, takeUpSheet, takeUpUnansweredBook,
+    TAKE_UP_REFUSALS, TAKE_UP_RESEND_HOURS, TAKE_UP_WORDS, enterpriseTakeUpOffered, releaseAsksHours, takeUpAgedLine, takeUpAnswerOf, takeUpBody,
+    takeUpButtons, takeUpConfirm, takeUpListingMoved, takeUpLostLine, takeUpOutcomeOf, takeUpRefusalText, takeUpRequestFor, takeUpSettle, takeUpSheet, takeUpUnansweredBook,
     type TakeUpEnterprise, type TakeUpOutcome, type TakeUpRequest,
 } from '../enterprise-take-up';
 import { ITEM_BOX_START, itemTakeUpBox, type ItemBoxState } from '../per-item-deal';
@@ -307,7 +307,7 @@ describe('an answer that never came: kept, said, and sent again exactly, so a st
     for (const [outcome, resent, kept] of SETTLE) {
         it(`a Confirm ${resent ? 'sending a kept sale again' : 'sending a new sale'} that comes back ${outcome}: ${kept ? 'kept' : 'forgotten'}`, () => {
             const book = takeUpUnansweredBook();
-            const sale = { enterprise: STALL, postId: 'p1', body: takeUpBody('p1', send2, { key: 'k', requestId: 'first-id-1' }), sentence };
+            const sale = { enterprise: STALL, postId: 'p1', body: takeUpBody('p1', send2, { key: 'k', requestId: 'first-id-1' }), sentence, sentAt: book.now() };
             book.keep(sale); // both apps keep it the moment it goes
             takeUpSettle(book, { sale, resent }, outcome);
             expect(book.get(STALL, 'p1')).toEqual(kept ? sale : null);
@@ -316,7 +316,7 @@ describe('an answer that never came: kept, said, and sent again exactly, so a st
 
     it('the book keeps one sale per enterprise and listing; another enterprise or listing is its own', () => {
         const book = takeUpUnansweredBook();
-        const sale = (enterprise: string, postId: string) => ({ enterprise, postId, body: takeUpBody(postId, send2, { key: 'k', requestId: `${enterprise}-${postId}-id` }), sentence });
+        const sale = (enterprise: string, postId: string) => ({ enterprise, postId, body: takeUpBody(postId, send2, { key: 'k', requestId: `${enterprise}-${postId}-id` }), sentence, sentAt: book.now() });
         book.keep(sale(STALL, 'p1'));
         book.keep(sale(CAFE, 'p1'));
         book.keep(sale(STALL, 'p2'));
@@ -406,5 +406,147 @@ describe('an answer that never came: kept, said, and sent again exactly, so a st
     it('nothing to send and nothing kept: no Confirm', () => {
         expect(takeUpConfirm({ book: takeUpUnansweredBook(), request: null, enterprise: STALL, postId: 'p1', send: null, sentence: null })).toBeNull();
         expect(takeUpConfirm({ book: takeUpUnansweredBook(), request: null, enterprise: STALL, postId: 'p1', send: send2, sentence: null })).toBeNull();
+    });
+});
+
+describe('a kept sale ages: sent again for TAKE_UP_RESEND_HOURS from its FIRST sending, never after (r2 review: the node forgets the id)', () => {
+    /**
+     * THE CLASS: the node keeps a take-up's request id for REQUEST_ID_KEPT_DAYS (7) and prunes it daily. A sale the book sends
+     * again after that is a second sale, paid twice, under a line that promised "never paid twice". So a kept sale is stamped
+     * with its first sending (a resend keeps the stamp, as the node's record keeps its first time), sent again only while it is
+     * younger than TAKE_UP_RESEND_HOURS (a day), and after that is `aged`: never sent again, under the book's copy or the
+     * sheet's own id, never in the way of a new sale. The node's suite (apps/server/src/test-enterprise-take-up.ts) reads
+     * REQUEST_ID_KEPT_DAYS and pins the day strictly inside it.
+     */
+    const H = 3_600_000;
+    const T0 = Date.UTC(2026, 10, 21, 9, 0); // a Saturday market, 9 am
+    const send2 = { hours: 2, itemOption: 'each' as const, expect_c: 4000 };
+    const sentence = 'Riverside stall pays Alice 40 Beans for 2 of “Eggs”.';
+    const withClock = () => {
+        const clock = { now: T0 };
+        return { clock, book: takeUpUnansweredBook(() => clock.now) };
+    };
+    const lostAt = (book: ReturnType<typeof takeUpUnansweredBook>, request: TakeUpRequest | null = null, make?: () => string) => {
+        const go = takeUpConfirm({ book, request, enterprise: STALL, postId: 'p1', send: send2, sentence, make })!;
+        book.keep(go.sale);
+        takeUpSettle(book, go, takeUpOutcomeOf(new TypeError('Failed to fetch')));
+        return go;
+    };
+
+    it('the limit is a day, a whole number of hours above 0 (red if it is moved here without the node\'s suite seeing it)', () => {
+        expect(TAKE_UP_RESEND_HOURS).toBe(24);
+    });
+
+    // (age since the FIRST sending, in ms) -> sent again? Red if a sale is sent again at or past the day, or not before it.
+    const AGES: Array<[string, number, boolean]> = [
+        ['just sent', 0, true],
+        ['a minute on', 60_000, true],
+        ['an hour on', H, true],
+        ['the last millisecond of the day', TAKE_UP_RESEND_HOURS * H - 1, true],
+        ['the day exactly', TAKE_UP_RESEND_HOURS * H, false],
+        ['a day and an hour', 25 * H, false],
+        ['six days (still inside the node\'s seven, but past the day)', 6 * 24 * H, false],
+        ['seven days (the node\'s id may be gone)', 7 * 24 * H, false],
+        ['eight days (the node\'s prune has run)', 8 * 24 * H, false],
+        ['the clock set back 5 minutes since (a network time fix)', -5 * 60_000, true],
+        ['the clock set back 11 minutes since: its age unknown', -11 * 60_000, false],
+        ['the clock set back a week since: its age unknown', -7 * 24 * H, false],
+    ];
+    for (const [name, age, sendable] of AGES) {
+        it(`${name}: ${sendable ? 'Confirm sends the same sale again' : 'aged, never sent again; Confirm is a new sale'}`, () => {
+            const { clock, book } = withClock();
+            const first = lostAt(book);
+            clock.now = T0 + age;
+            expect(book.get(STALL, 'p1')).toBe(sendable ? first.sale : null);
+            expect(book.aged(STALL, 'p1')).toBe(sendable ? null : first.sale);
+            const next = takeUpConfirm({ book, request: null, enterprise: STALL, postId: 'p1', send: send2, sentence })!;
+            expect(next.resent).toBe(sendable);
+            expect(next.sale.body.requestId === first.sale.body.requestId).toBe(sendable);
+        });
+    }
+
+    it('a sale with no readable stamp is aged, never sent again (red if NaN reads as young)', () => {
+        const { book } = withClock();
+        const sale = { enterprise: STALL, postId: 'p1', body: takeUpBody('p1', send2, { key: 'k', requestId: 'stampless-1' }), sentence, sentAt: Number.NaN };
+        book.keep(sale);
+        expect(book.get(STALL, 'p1')).toBeNull();
+        expect(book.aged(STALL, 'p1')).toBe(sale);
+    });
+
+    it('stamped at the first sending; sent again at 23 hours and lost again, it keeps the first stamp and ages at 24 (red if a resend renews it)', () => {
+        const { clock, book } = withClock();
+        const first = lostAt(book);
+        expect(first.sale.sentAt).toBe(T0);
+        clock.now = T0 + 23 * H;
+        const again = takeUpConfirm({ book, request: null, enterprise: STALL, postId: 'p1', send: send2, sentence })!;
+        expect(again.resent).toBe(true);
+        book.keep(again.sale);
+        takeUpSettle(book, again, takeUpOutcomeOf(Object.assign(new Error('Gateway Timeout'), { status: 504, unsaid: true })));
+        expect(book.get(STALL, 'p1')!.sentAt).toBe(T0);
+        // Sent again in the last minute of the day and its answer lost after it: kept, but aged, so never sent a third time.
+        clock.now = T0 + 24 * H - 60_000;
+        const last = takeUpConfirm({ book, request: null, enterprise: STALL, postId: 'p1', send: send2, sentence })!;
+        expect(last.resent).toBe(true);
+        book.keep(last.sale);
+        clock.now = T0 + 24 * H + 60_000;
+        takeUpSettle(book, last, 'lost');
+        expect(book.get(STALL, 'p1')).toBeNull();
+        expect(book.aged(STALL, 'p1')!.sentAt).toBe(T0);
+    });
+
+    it('a new sale is stamped with the book\'s clock when Confirm makes it, not when the sheet opened', () => {
+        const { clock, book } = withClock();
+        clock.now = T0 + 5 * H;
+        expect(takeUpConfirm({ book, request: null, enterprise: STALL, postId: 'p1', send: send2, sentence })!.sale.sentAt).toBe(T0 + 5 * H);
+    });
+
+    /**
+     * The review's scenario, step by step through the calls both components make. Saturday: Kim taps "Buy for Riverside
+     * stall" on Alice's "Eggs", picks 2 at 20 Beans, Confirms; the node sells and releases, the answer is lost. Kim checks the
+     * console and moves on. The tablet keeps the app open all week; Alice restocks. Next Saturday Kim taps "Buy for Riverside
+     * stall" for this week's eggs, the same 2 at the same price. Red if last week's sale blocks the picker, if Confirm sends
+     * last week's id (within 7 days the node would answer "released" for last week's sale, read as this week's paid; after 7
+     * it would pay a second time under "never paid twice"), or if the aged line promises anything about the old sale.
+     */
+    for (const [when, request] of [['the sheet closed between', 'closed'], ['the sheet left open all week', 'open']] as const) {
+        it(`a week on (${when}): the picker shows the listing, a line says the stall may have paid, and Confirm is a new sale with a new id`, () => {
+            const { clock, book } = withClock();
+            let made = 0;
+            const make = () => `take-up-try-${++made}`;
+            const first = lostAt(book, null, make);
+            expect(first.sale.body.requestId).toBe('take-up-try-1');
+            clock.now = T0 + 7 * 24 * H;
+            // The components draw the picker whenever `get` finds nothing, and the aged line whenever `aged` finds the old one.
+            expect(book.get(STALL, 'p1')).toBeNull();
+            const box = itemTakeUpBox(apples({ title: 'Eggs', unitsLeft: 6 }), { option: 'each', count: '2' }, 'Alice');
+            expect(box.send).toEqual(send2);
+            const line = takeUpAgedLine({ stall: 'Riverside stall', seller: 'Alice' });
+            expect(book.aged(STALL, 'p1')).not.toBeNull();
+            expect(line).toBe('An earlier sale from here got no answer, so Riverside stall may have paid Alice for it already: the enterprise’s deals show whether it did. Confirm makes a new sale.');
+            expect(line).not.toMatch(/nothing was paid|never paid twice|find out/);
+            // The sheet left open keeps its own request for the same count and price: an aged sale's id is never reused.
+            const sheetRequest = request === 'open' ? first.request : null;
+            const week2 = takeUpConfirm({ book, request: sheetRequest, enterprise: STALL, postId: 'p1', send: box.send, sentence, make })!;
+            expect(week2.resent).toBe(false);
+            expect(week2.sale.body).toEqual({ postId: 'p1', hours: 2, itemOption: 'each', expect_c: 4000, requestId: 'take-up-try-2' });
+            expect(week2.sale.sentAt).toBe(T0 + 7 * 24 * H);
+            // Kept fresh while it goes; the node's answer forgets it, and the aged one with it.
+            book.keep(week2.sale);
+            expect(book.get(STALL, 'p1')).toBe(week2.sale);
+            takeUpSettle(book, week2, 'answered');
+            expect([book.get(STALL, 'p1'), book.aged(STALL, 'p1')]).toEqual([null, null]);
+        });
+    }
+
+    it('an aged sale on another listing or enterprise leaves this one alone (red if the age is read across the book)', () => {
+        const { clock, book } = withClock();
+        lostAt(book);
+        clock.now = T0 + 2 * 24 * H;
+        const cafe = takeUpConfirm({ book, request: null, enterprise: CAFE, postId: 'p1', send: send2, sentence })!;
+        book.keep(cafe.sale);
+        takeUpSettle(book, cafe, 'lost');
+        expect(book.get(CAFE, 'p1')).toBe(cafe.sale);
+        expect(book.aged(STALL, 'p1')).not.toBeNull();
+        expect(book.get(STALL, 'p1')).toBeNull();
     });
 });

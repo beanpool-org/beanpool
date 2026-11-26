@@ -8,8 +8,14 @@
  *
  * A real dialog, as the picture crop's (PictureCropDialog.tsx): labelled by its heading, drawn over everything, the keys heard
  * before the page's. Every colour is a class of the theme's, Light and Dark; at 320 px and 130% text the words wrap.
+ *
+ * Portalled to the page's body, as the crop is: the map's post composer (MapPage's map-new-post-panel) is a scrolling panel
+ * with a backdrop blur, and a `backdrop-filter` ancestor is the containing block of a `position: fixed` box inside it, so
+ * drawn in place the dialog was laid out against the panel, clipped by it and scrolled out of sight (review of 200e812d,
+ * measured in Chromium and WebKit).
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { DEFAULT_PHOTO_FOCUS, MARKET_CARD_SHELL, photoFocusObjectPosition, photoFocusToward, photoFocusWindow, t, type PhotoFocus } from '@beanpool/core';
 
 const CARD_ASPECT = MARKET_CARD_SHELL.photo.grid.aspectWidth / MARKET_CARD_SHELL.photo.grid.aspectHeight;
@@ -68,8 +74,8 @@ export function PhotoFocusDialog({ src, focus, onDone, onCancel }: {
         });
     };
 
-    return (
-        <div className="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4 bg-black/60" style={{ zIndex: 1200 }}>
+    return createPortal(
+        <div data-testid="photo-focus-backdrop" className="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4 bg-black/60" style={{ zIndex: 1200 }}>
             <div
                 role="dialog"
                 aria-modal="true"
@@ -122,6 +128,7 @@ export function PhotoFocusDialog({ src, focus, onDone, onCancel }: {
                     <button type="button" data-testid="photo-focus-done" onClick={() => onDone(picked)} className={primary}>{t('Done')}</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

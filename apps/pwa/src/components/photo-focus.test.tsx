@@ -70,6 +70,24 @@ describe('cards crop at the photo\'s focus', () => {
         fireEvent.load(slot.querySelector('img')!);
         expect(within(slot).getByRole('img').style.objectPosition).toBe('50% 10%');
     });
+
+    it('the event list card (the Market\'s List view, the map\'s event pop-up) crops at the focus, centred with none', () => {
+        const event: any = {
+            id: 'ev-2', type: 'event', category: 'community', title: 'Seed swap', description: '', priceType: 'fixed',
+            authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: new Date().toISOString(), active: true, status: 'active',
+            eventStartAt: new Date(Date.now() + 86400000).toISOString(), eventState: 'scheduled', photos: ['/uploads/swap.jpg'],
+        };
+        const identity: any = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me' };
+        for (const [extra, want] of [[{}, ''], [{ photoFocus: [{ x: 0.3, y: 0.95 }] }, '30% 95%']] as const) {
+            for (const popUp of [false, true]) {
+                const drawn = at320(<EventCard post={{ ...event, ...extra }} identity={identity} viewMode="list" popUp={popUp} />);
+                const slot = screen.getByTestId('event-list-photo');
+                fireEvent.load(slot.querySelector('img')!);
+                expect({ popUp, at: within(slot).getByRole('img').style.objectPosition }).toEqual({ popUp, at: want });
+                drawn.unmount();
+            }
+        }
+    });
 });
 
 describe('PhotoFocusDialog', () => {
@@ -110,6 +128,20 @@ describe('PhotoFocusDialog', () => {
         fireEvent.click(screen.getByText('Reset'));
         fireEvent.click(screen.getByTestId('photo-focus-done'));
         expect(onDone).toHaveBeenCalledWith(null);
+    });
+
+    it('is drawn on the page\'s body, never inside its opener: a blurred, scrolling composer panel cannot hold or clip it', () => {
+        // The map's post composer is `fixed … overflow-y-auto … backdrop-blur-xl`: a backdrop-filter ancestor is the containing
+        // block of a fixed box inside it, so a dialog drawn in place was laid out against the panel (review of 200e812d).
+        render(
+            <div data-testid="composer" className="fixed max-h-[60vh] overflow-y-auto backdrop-blur-xl">
+                <PhotoFocusDialog src="data:image/jpeg;base64,AAAA" focus={null} onDone={vi.fn()} onCancel={vi.fn()} />
+            </div>,
+        );
+        const backdrop = screen.getByTestId('photo-focus-backdrop');
+        expect(backdrop.parentElement).toBe(document.body);
+        expect(screen.getByTestId('composer').contains(screen.getByRole('dialog'))).toBe(false);
+        expect(backdrop.className).toContain('fixed inset-0');
     });
 
     it('Escape and Cancel keep nothing', () => {

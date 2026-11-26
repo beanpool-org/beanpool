@@ -448,6 +448,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                             photo={firstPhoto}
                             alt={p.title}
                             className={`${LIST_PHOTO_FILL} object-cover`}
+                            style={cardObjectPosition(p, firstPhoto)}
                             fallback={<span className={LIST_PHOTO_FILL}><CategoryTile kind="event" size="thumb" /></span>}
                         />
                     </span>

@@ -746,9 +746,22 @@ async function main(): Promise<void> {
     const doorsHere = new Set<string>();
     const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
         e.isDirectory() ? walk(path.join(dir, e.name)) : e.name.endsWith('.ts') && !e.name.startsWith('test-') ? [path.join(dir, e.name)] : []);
+    // The route a call names: its second argument, read past nested brackets, so a call written any way is counted (one that
+    // cannot be read is listed by its file, and so is unlisted: red).
+    const secondArg = (src: string, from: number): string | null => {
+        let depth = 0, arg = 0, start = from;
+        for (let i = from; i < src.length; i++) {
+            const ch = src[i];
+            if ('([{'.includes(ch)) depth++;
+            else if (')]}'.includes(ch)) { if (depth === 0) return arg === 1 ? src.slice(start, i).trim() : null; depth--; }
+            else if (ch === ',' && depth === 0) { if (arg === 1) return src.slice(start, i).trim(); arg++; start = i + 1; }
+        }
+        return null;
+    };
     for (const file of walk(SRC)) {
         if (file.endsWith(path.join('engine', 'money-requests.ts'))) continue;
-        for (const m of fs.readFileSync(file, 'utf-8').matchAll(/moneyRequestOf\(\s*[^,()]+,\s*([A-Z_]+)\s*,/g)) doorsHere.add(m[1]);
+        const src = fs.readFileSync(file, 'utf-8');
+        for (const m of src.matchAll(/\bmoneyRequestOf\(/g)) doorsHere.add(secondArg(src, m.index! + m[0].length) ?? `a call in ${path.relative(SRC, file)}`);
     }
     const unlisted = [...doorsHere].filter((d) => !(d in RETRY_STORES));
     const gone = Object.keys(RETRY_STORES).filter((d) => !doorsHere.has(d));

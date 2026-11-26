@@ -9,12 +9,15 @@
  * in (the repayment's debtId) unless they typed in the field; a payment without it is said, before and after, not to come
  * off the debt, with its reference for an admin to count. A settle is promised only when the node's answer says
  * the payment covers what is left. Asked first; one payment at a time; the node's refusals in its own words. Each confirmed
- * payment has one id (lib/payment-request.ts): a lost answer keeps it here for Try again with the same id, never paid twice. The banner says nothing when the node answers nothing (an older node, no signal). Wraps at 320px and 130% text: no fixed widths, every control at least 48px tall.
+ * payment has one id (lib/payment-request.ts): a lost answer keeps it here for Try again with the same id, never paid twice.
+ * For a day from its first sending only (core money-retry.ts): the node forgets an id after its 7 days, so past a day Try
+ * again is no longer offered for it, the card says the Ledger shows whether it went through (payAgedLine), and Pay the
+ * Commons makes a new payment, asked again, with a new id. The banner says nothing when the node answers nothing (an older node, no signal). Wraps at 320px and 130% text: no fixed widths, every control at least 48px tall.
  * One repayment for both places (review of #3137): the page reads it once with useMyRepayment and hands it to both cards,
  * and a payment from either re-reads it there, so the notice at the top never shows a debt the Wallet's row has just paid.
  */
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { hundredthsAsDecimalText, t } from '@beanpool/core';
+import { useCallback, useEffect, useId, useReducer, useRef, useState } from 'react';
+import { firstSending, heldAfterChange, heldAged, heldAgesInMs, heldResend, hundredthsAsDecimalText, payAgedLine, t, type HeldPayment } from '@beanpool/core';
 import { getMyRepayment, payTheCommons, confirmCommonsPayment, unansweredPayment, parseBeans, debtCodeOk, payFailureWords, PAY_WORDS, REPAYMENT_WORDS, type Repayment, type CommonsPayment } from '../lib/debts';
 import type { ConfirmedPayment } from '../lib/payment-request';
 
@@ -63,8 +66,19 @@ export function RepaymentCard({ repayment, onPaid, place = 'top' }: { repayment:
     const [error, setError] = useState<string | null>(null);
     const [paid, setPaid] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    // The payment the member confirmed whose answer was lost: Try again sends it with the same id. Changing it drops it.
-    const [held, setHeld] = useState<ConfirmedPayment<CommonsPayment> | null>(null);
+    // The payment the member confirmed whose answer was lost, stamped with its FIRST sending (core money-retry.ts): Try again
+    // sends it with the same id for a day from then, never after. Changing it drops it; an aged one is never sent, and stays
+    // only to keep its line up until the next payment goes.
+    const [held, setHeld] = useState<HeldPayment<ConfirmedPayment<CommonsPayment>> | null>(null);
+    const changed = () => setHeld((h) => heldAfterChange(h, Date.now()));
+    // Drawn again the moment a held payment ages, so a card left open stops offering Try again (pay() reads the age too).
+    const [, redraw] = useReducer((n: number) => n + 1, 0);
+    useEffect(() => {
+        const left = heldAgesInMs(held, Date.now());
+        if (left === null) return;
+        const timer = setTimeout(redraw, Math.min(left, 2 ** 31 - 1));
+        return () => clearTimeout(timer);
+    }, [held]);
     const linkFor = (debt: string) => (debt && debt.toLowerCase() === link.code.trim().toLowerCase() ? link.left : null);
 
     // Whether the member typed in the code field: their own code goes in only while they haven't.
@@ -85,16 +99,18 @@ export function RepaymentCard({ repayment, onPaid, place = 'top' }: { repayment:
     const pay = async () => {
         if (inFlight.current) return;
         setError(null);
-        let payment = held;
-        if (!payment) {
+        // Sent again only while it is less than a day old, its first stamp kept; an aged one is never sent: a new payment.
+        let going = heldResend(held, Date.now());
+        if (!going) {
             // Whole hundredths (the body's amount_c).
             const beans = parseBeans(amount);
             if (beans === null) { setError(t(REPAYMENT_WORDS.badAmount)); return; }
             const debt = code.trim();
             if (debt && !debtCodeOk(debt)) { setError(t(REPAYMENT_WORDS.badCode)); return; }
             if (!window.confirm(REPAYMENT_WORDS.payConfirm(beans, !!debt, linkFor(debt), !debt && !!repayment))) return;
-            payment = confirmCommonsPayment(beans, debt || undefined);
+            going = firstSending(confirmCommonsPayment(beans, debt || undefined), Date.now());
         }
+        const payment = going.payment;
         inFlight.current = true;
         setBusy(true);
         try {
@@ -105,13 +121,20 @@ export function RepaymentCard({ repayment, onPaid, place = 'top' }: { repayment:
             onPaid();
         } catch (e) {
             const lost = unansweredPayment(e);
-            setHeld(lost ? payment : null);
+            setHeld(lost ? going : null);
             setError(lost ? t(PAY_WORDS.unansweredRetry) : payFailureWords(e));
         } finally {
             inFlight.current = false;
             setBusy(false);
         }
     };
+
+    // Read as drawn: Try again only while the held payment may still be sent again. Once it has aged, its lost-answer line
+    // (which offers Try again) gives way to the aged line, so it never reads as this payment done or as safe to send again.
+    const now = Date.now();
+    const tryAgain = heldResend(held, now) !== null;
+    const aged = heldAged(held, now) !== null;
+    const shownError = aged && error === t(PAY_WORDS.unansweredRetry) ? null : error;
 
     const input = 'w-full min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-950 dark:text-white';
     // At the top, nothing about the Commons unless they work a debt off or a pay-back link opened the form.
@@ -155,18 +178,23 @@ export function RepaymentCard({ repayment, onPaid, place = 'top' }: { repayment:
                             <p className="text-sm leading-relaxed text-nature-700 dark:text-nature-300">{t(REPAYMENT_WORDS.payIntro)}</p>
                             {linkFor(code.trim()) !== null && <p className="text-sm leading-relaxed text-nature-700 dark:text-nature-300">{REPAYMENT_WORDS.linkLeft(link.left!)}</p>}
                             <label className="text-xs font-bold tracking-wide text-nature-600 dark:text-nature-400">{t('BEANS')}
-                                <input className={input} inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setHeld(null); }} placeholder={t('For example 12.50')} maxLength={12} disabled={busy} />
+                                <input className={input} inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); changed(); }} placeholder={t('For example 12.50')} maxLength={12} disabled={busy} />
                             </label>
                             <label className="text-xs font-bold tracking-wide text-nature-600 dark:text-nature-400">{t('PAY-BACK CODE (IF YOU HAVE ONE)')}
-                                <input className={input} value={code} onChange={(e) => { codeTyped.current = true; setCode(e.target.value); setHeld(null); }} placeholder={t('From an admin')} autoCapitalize="none" autoCorrect="off" maxLength={64} disabled={busy} />
+                                <input className={input} value={code} onChange={(e) => { codeTyped.current = true; setCode(e.target.value); changed(); }} placeholder={t('From an admin')} autoCapitalize="none" autoCorrect="off" maxLength={64} disabled={busy} />
                             </label>
-                            {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
+                            {aged && (
+                                <p role="status" data-testid="pay-commons-aged" className="m-0 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm leading-relaxed text-amber-800 dark:text-amber-200 break-words">
+                                    {payAgedLine()}
+                                </p>
+                            )}
+                            {shownError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{shownError}</p>}
                         </>
                     )}
                     <div className="flex flex-wrap gap-2">
                         {!paid && (
                             <button type="button" onClick={pay} disabled={busy} className="flex-1 min-h-[48px] px-4 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold disabled:opacity-50">
-                                {held ? t('Try again') : t(REPAYMENT_WORDS.payTitle)}
+                                {tryAgain ? t('Try again') : t(REPAYMENT_WORDS.payTitle)}
                             </button>
                         )}
                         <button type="button" onClick={() => { setOpen(false); setPaid(null); setError(null); setHeld(null); }} className="flex-1 min-h-[48px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-semibold">

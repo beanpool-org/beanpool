@@ -7,10 +7,13 @@
  * /api/commons/repayment) finds their own code filled in, however they came here; a payment without it is said, before and
  * after, not to come off the debt (the node never links one by itself). Asked first; the node's refusals in its
  * own words. Each confirmed payment has one id (utils/payment-request.ts): a lost answer keeps that payment here for Try
- * again with the same id, so it is never paid twice. One payment at a time (busy before anything is awaited).
+ * again with the same id, so it is never paid twice. For a day from its first sending only (core money-retry.ts): the node
+ * forgets an id after its 7 days, so past a day Try again is no longer offered for it, the screen says the Ledger shows
+ * whether it went through (payAgedLine), and Pay the Commons makes a new payment, asked again, with a new id. One payment
+ * at a time (busy before anything is awaited).
  * Styles: the names list's (utils/names-list-style.ts), held to 48dp targets and wrapping at 320dp and 1.3× text.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Share, DeviceEventEmitter } from 'react-native';
 import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -24,7 +27,7 @@ import { anchorUrl } from '../utils/node-post';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import { payTheCommons, fetchMyRepayment, confirmCommonsPayment, unanswered, parseBeans, debtCodeOk, oneAtATime, REPAYMENT_COPY, DEBT_UNREACHABLE, PAY_UNANSWERED_RETRY, type CommonsPayment, type Repayment } from '../utils/names-debts';
 import { REPAYMENT_LINES, linkLeftWords, paidWords, payConfirmWords, repaymentLineWords } from '../components/repayment-lines';
-import { formatHundredths, hundredthsAsDecimalText, t } from '@beanpool/core';
+import { firstSending, formatHundredths, heldAfterChange, heldAged, heldAgesInMs, heldResend, hundredthsAsDecimalText, payAgedLine, t, type HeldPayment } from '@beanpool/core';
 import type { ConfirmedPayment } from '../utils/payment-request';
 
 export { ErrorBoundary };
@@ -44,9 +47,19 @@ export default function PayCommonsScreen() {
     const [paid, setPaid] = useState<{ words: string; ref: string | null } | null>(null);
     const [busy, setBusy] = useState(false);
     const once = useRef(oneAtATime(setBusy)).current;
-    // The payment the member confirmed whose answer was lost: Try again sends it with the same id. Changing it drops it.
-    const [held, setHeld] = useState<ConfirmedPayment<CommonsPayment> | null>(null);
-    const edit = (set: (v: string) => void) => (v: string) => { set(v); setHeld(null); };
+    // The payment the member confirmed whose answer was lost, stamped with its FIRST sending (core money-retry.ts): Try again
+    // sends it with the same id for a day from then, never after. Changing it drops it; an aged one is never sent, and stays
+    // only to keep its line up until the next payment goes.
+    const [held, setHeld] = useState<HeldPayment<ConfirmedPayment<CommonsPayment>> | null>(null);
+    const edit = (set: (v: string) => void) => (v: string) => { set(v); setHeld((h) => heldAfterChange(h, Date.now())); };
+    // Drawn again the moment a held payment ages, so a screen left open stops offering Try again (pay() reads the age too).
+    const [, redraw] = useReducer((n: number) => n + 1, 0);
+    useEffect(() => {
+        const left = heldAgesInMs(held, Date.now());
+        if (left === null) return;
+        const timer = setTimeout(redraw, Math.min(left, 2 ** 31 - 1));
+        return () => clearTimeout(timer);
+    }, [held]);
     // The debt this member works off (their own, from the node), and whether they typed in the code field: their code goes
     // in only while they haven't, so one they cleared stays cleared.
     const [myDebt, setMyDebt] = useState<Repayment | null>(null);
@@ -65,12 +78,14 @@ export default function PayCommonsScreen() {
         return () => { live = false; };
     }, [identity]);
 
-    const send = (payment: ConfirmedPayment<CommonsPayment>) => once(async () => {
+    // `going` is the payment and its first sending's stamp: a fresh one (firstSending) or the held one, stamp kept (heldResend).
+    const send = (going: HeldPayment<ConfirmedPayment<CommonsPayment>>) => once(async () => {
         setError(null);
         const node = await anchorUrl();
-        if (!node || !identity) { setHeld(payment); setError(DEBT_UNREACHABLE); return; }
+        if (!node || !identity) { setHeld(going); setError(DEBT_UNREACHABLE); return; }
+        const payment = going.payment;
         const r = await payTheCommons(node, identity, payment);
-        if (!r.ok && unanswered(r)) { setHeld(payment); setError(PAY_UNANSWERED_RETRY); return; }
+        if (!r.ok && unanswered(r)) { setHeld(going); setError(PAY_UNANSWERED_RETRY); return; }
         setHeld(null);
         if (!r.ok) { setError(r.message); return; }
         DeviceEventEmitter.emit('transaction_completed');
@@ -80,7 +95,9 @@ export default function PayCommonsScreen() {
     });
 
     const pay = () => {
-        if (held) { send(held); return; }
+        // Sent again only while it is less than a day old; an aged one is never sent: this is a new payment, asked again.
+        const again = heldResend(held, Date.now());
+        if (again) { send(again); return; }
         setError(null);
         // Whole hundredths of a Bean, read as typed in the member's language (core parseHundredths): "12.50" is 1250.
         const amount_c = parseBeans(amount);
@@ -90,9 +107,16 @@ export default function PayCommonsScreen() {
         const shared = debt && debt.toLowerCase() === linkCode ? linkLeft : null;
         Alert.alert(t(REPAYMENT_LINES.payTitle), payConfirmWords(amount_c, !!debt, shared, !debt && !!myDebt), [
             { text: t('Cancel'), style: 'cancel' },
-            { text: t('Pay'), onPress: () => send(confirmCommonsPayment(amount_c, debt || undefined)) },
+            { text: t('Pay'), onPress: () => send(firstSending(confirmCommonsPayment(amount_c, debt || undefined), Date.now())) },
         ]);
     };
+
+    // Read as drawn: Try again only while the held payment may still be sent again. Once it has aged, its lost-answer line
+    // (which offers Try again) gives way to the aged line, so it never reads as this payment done or as safe to send again.
+    const now = Date.now();
+    const tryAgain = heldResend(held, now) !== null;
+    const aged = heldAged(held, now) !== null;
+    const shownError = aged && (error === PAY_UNANSWERED_RETRY || error === DEBT_UNREACHABLE) ? null : error;
 
     return (
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
@@ -132,10 +156,11 @@ export default function PayCommonsScreen() {
                             style={styles.input} value={code} onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })} placeholder={t('From an admin')} autoCapitalize="none" autoCorrect={false}
                             placeholderTextColor={colors.text.muted} accessibilityLabel={t('The pay-back code an admin gave you')} maxLength={64} editable={!busy}
                         />
-                        {error ? <View style={styles.error}><Text style={styles.errorText}>{repaymentLineWords(error)}</Text></View> : null}
+                        {aged ? <View style={styles.warn} accessibilityLiveRegion="polite"><Text style={styles.warnText}>{payAgedLine()}</Text></View> : null}
+                        {shownError ? <View style={styles.error}><Text style={styles.errorText}>{repaymentLineWords(shownError)}</Text></View> : null}
                         <View style={styles.buttonRow}>
                             <Pressable style={[styles.primaryBtn, busy && styles.disabled]} onPress={pay} disabled={busy} accessibilityRole="button" accessibilityState={{ disabled: busy, busy }}>
-                                <Text style={styles.primaryBtnText}>{held ? t('Try again') : t(REPAYMENT_LINES.payTitle)}</Text>
+                                <Text style={styles.primaryBtnText}>{tryAgain ? t('Try again') : t(REPAYMENT_LINES.payTitle)}</Text>
                             </Pressable>
                         </View>
                     </>

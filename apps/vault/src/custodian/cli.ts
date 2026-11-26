@@ -48,6 +48,7 @@ import {
     type CustodianKey,
     type ReleaseTrust,
 } from './lib.js';
+import { hostPolicyDowngrade, proposedHostPolicy, ProposeRefused } from './release-propose.js';
 import { amdKds, snpChecker } from './snp-checker.js';
 import { VaultWatcher } from './watch.js';
 
@@ -70,7 +71,8 @@ import { VaultWatcher } from './watch.js';
  *   vault-custodian watch         --url <vault> --ticket-key <hex> [--alerts <alerts.json>] [--every <seconds>] [--once]
  *   vault-custodian release status                                                  [feed]
  *   vault-custodian release propose --version <x.y.z> (--image <image.json> | --same-image) --api-bundle <file>
- *                                   (--custodian-keys <a,b,c> | --same-custodians) [--host-policy <file>] [--notes <text>]
+ *                                   (--custodian-keys <a,b,c> | --same-custodians) [--host-policy <file> | --host-policy-none]
+ *                                   [--notes <text>]
  *                                   --out <dir>                                    [feed]
  *   vault-custodian release sign    --dir <dir> --key <keyfile> [--yes]              [feed]
  *   vault-custodian release verify  --dir <dir>                                      [feed]
@@ -91,6 +93,11 @@ import { VaultWatcher } from './watch.js';
  * The chip's certificate and AMD's revocation list come from AMD's key server (kdsintf.amd.com) and are cached in
  * `--amd-cache` (default ~/.cache/beanpool-vault/amd); with a cached certificate and a list still in date it works offline.
  * A refused check sends nothing.
+ *
+ * `release propose` carries the newest release's host policy forward unchanged unless told otherwise
+ * (release-propose.ts): `--host-policy <file>` changes it (raising the chip check's floor, listing a new image's launch
+ * or a chip), and dropping the hardware check (`none` after `sev-snp`) takes `--host-policy-none`, which every screen
+ * that shows the release calls a DOWNGRADE. A file naming `none` is refused then.
  *
  * `settings` are the vault's operator settings (shared/settings.ts: the off-box backup store, the alert channels): they
  * take effect when two custodians have sent the same file. `settings hash` prints the hash the vault answers and
@@ -137,7 +144,7 @@ const COMMANDS: Record<string, { required: string[]; optional?: string[] }> = {
     restart: { required: ['--url', '--key'], optional: FEED_FLAGS },
     watch: { required: ['--url', '--ticket-key'], optional: ['--alerts', '--every'] },
     'release status': { required: [], optional: FEED_FLAGS },
-    'release propose': { required: ['--version', '--api-bundle', '--out'], optional: [...FEED_FLAGS, '--image', '--custodian-keys', '--host-policy', '--notes'] },
+    'release propose': { required: ['--version', '--api-bundle', '--out'], optional: [...FEED_FLAGS, '--image', '--custodian-keys', '--host-policy', '--host-policy-none', '--notes'] },
     'release sign': { required: ['--dir', '--key'], optional: FEED_FLAGS },
     'release verify': { required: ['--dir'], optional: FEED_FLAGS },
 };
@@ -368,6 +375,7 @@ function describeRelease(m: ReleaseManifest, previous: ReleaseManifest | null): 
         `API bundle     ${m.apiBundleHash}${changed(m.apiBundleHash, previous?.apiBundleHash)}`,
         `next signers   ${m.custodianKeys.join('\n               ')}${changed(m.custodianKeys, previous?.custodianKeys)}`,
         `host policy    ${JSON.stringify(m.hostPolicy)}${changed(m.hostPolicy, previous?.hostPolicy)}`,
+        ...hostPolicyDowngrade(m, previous),
         ...(m.notes ? [`notes          ${m.notes}`] : []),
     ].join('\n');
 }
@@ -404,7 +412,18 @@ async function release(sub: string, trust: ReleaseTrust): Promise<void> {
         }
         const custodianKeys = flag('--same-custodians') ? [...(newest?.custodianKeys ?? trust.rootKeys)]
             : arg('--custodian-keys') ? keyList(arg('--custodian-keys') as string, '--custodian-keys') : stop('missing --custodian-keys or --same-custodians');
-        const hostPolicy = arg('--host-policy') ? parseHostPolicy(JSON.parse(readFileSync(arg('--host-policy') as string, 'utf8'))) : { platform: 'none' as const };
+        if (flag('--host-policy') && !arg('--host-policy')) stop('--host-policy is a file (the host policy as JSON); to drop the hardware check, --host-policy-none');
+        let hostPolicy: ReleaseManifest['hostPolicy'];
+        try {
+            hostPolicy = proposedHostPolicy({
+                newest: chain.newest, image,
+                file: arg('--host-policy') ? parseHostPolicy(JSON.parse(readFileSync(arg('--host-policy') as string, 'utf8'))) : undefined,
+                none: flag('--host-policy-none'),
+            });
+        } catch (e) {
+            if (e instanceof ProposeRefused) stop(e.message);
+            throw e;
+        }
         const m: ReleaseManifest = {
             v: 1, version: arg('--version') as string, previous: chain.newest?.hash ?? null, imageHash: imageHashOf(image), image,
             apiBundleHash: sha256Hex(bundle), custodianKeys, hostPolicy, ...(arg('--notes') ? { notes: arg('--notes') as string } : {}),

@@ -337,6 +337,55 @@ describe('vault-custodian release', () => {
         expect(stale.out).toContain('it follows 1.0.0, but the newest release is 1.0.1');
     });
 
+    it('the README\'s routine API release on a chip-checked vault keeps the chip check; dropping it takes its own flag and signs as a DOWNGRADE', async () => {
+        const custodians = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+        const keys = custodians.map((c, i) => keyFile(`d${i}.json`, c));
+        const image = { ukiSha256: crypto.randomBytes(32).toString('hex'), roothash: crypto.randomBytes(32).toString('hex') };
+        const hostPolicy = {
+            platform: 'sev-snp' as const, signer: 'vcek' as const, hosts: [{
+                profile: 'servury', product: 'Milan', launches: [{ ukiSha256: image.ukiSha256, firmwareSha256: 'ef'.repeat(32), measurement: 'cd'.repeat(48), source: 'computed' as const }],
+                policies: ['0000030000000000'], minTcb: { bootloader: 4, tee: 0, snp: 29, microcode: 222 }, requireAliasCheck: true, chipIds: ['ab'.repeat(64)],
+            }],
+        };
+        const feedDir = path.join(dir, 'snp-release-feed');
+        const r1 = makeRelease({ version: '1.0.0', previous: null, custodianKeys: custodians, signers: custodians.slice(0, 2), image, hostPolicy });
+        publish(feedDir, r1);
+        const feed = ['--feed-dir', feedDir, '--root-keys', rootKeysFile('d-root.json', custodians)];
+        const bundle = path.join(dir, 'api-snp.mjs');
+        writeFileSync(bundle, 'console.log("an API update");\n');
+        const policyOf = (out: string) => (JSON.parse(readFileSync(path.join(out, MANIFEST_ASSET), 'utf8')) as { hostPolicy: unknown }).hostPolicy;
+
+        // README "Making one", as written: no host-policy flag. The chip check goes forward unchanged.
+        const routine = path.join(dir, 'p-routine');
+        const proposed = await cli(['release', 'propose', '--version', '1.0.1', '--same-image', '--same-custodians', '--api-bundle', bundle, '--out', routine, ...feed]);
+        expect(proposed.code).toBe(0);
+        expect(JSON.stringify(policyOf(routine))).toBe(JSON.stringify((JSON.parse(r1.manifestText) as { hostPolicy: unknown }).hostPolicy));
+        expect(proposed.out).not.toMatch(/host policy .*\(changed\)/);
+        expect(proposed.out).not.toContain('DOWNGRADE');
+
+        // A file naming none is refused, and nothing is written.
+        const noneFile = path.join(dir, 'none-policy.json');
+        writeFileSync(noneFile, JSON.stringify({ platform: 'none' }));
+        const byFile = path.join(dir, 'p-none-file');
+        const refused = await cli(['release', 'propose', '--version', '1.0.1', '--same-image', '--same-custodians', '--api-bundle', bundle, '--host-policy', noneFile, '--out', byFile, ...feed]);
+        expect(refused.code).not.toBe(0);
+        expect(refused.out).toContain('drops the sev-snp hardware check that 1.0.0 requires');
+        expect(existsSync(path.join(byFile, MANIFEST_ASSET))).toBe(false);
+
+        // --host-policy-none drops it, and propose, sign and verify each show it as a downgrade.
+        const drop = path.join(dir, 'p-drop');
+        const dropped = await cli(['release', 'propose', '--version', '1.0.1', '--same-image', '--same-custodians', '--api-bundle', bundle, '--host-policy-none', '--out', drop, ...feed]);
+        expect(dropped.code).toBe(0);
+        expect(policyOf(drop)).toEqual({ platform: 'none' });
+        expect(dropped.out).toMatch(/host policy +\{"platform":"none"\} +\(changed\)\n\n!!! DOWNGRADE: 1\.0\.0 requires the sev-snp hardware check/);
+        const declined = await cli(['release', 'sign', '--dir', drop, '--key', keys[0], ...feed], { input: 'no\n' });
+        expect(declined.code).toBe(1);
+        expect(declined.out).toContain('!!! DOWNGRADE: 1.0.0 requires the sev-snp hardware check before any share goes. This release has none.');
+        expect(declined.out.indexOf('DOWNGRADE')).toBeLessThan(declined.out.indexOf('You are signing exactly this release'));
+        expect(existsSync(path.join(drop, SIGNATURES_ASSET))).toBe(false);
+        expect((await cli(['release', 'verify', '--dir', drop, ...feed])).out).toContain('!!! DOWNGRADE');
+    });
+
     it('a release with a new image takes the image build\'s image.json, and only under the version the image was built as', async () => {
         const custodians = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
         const feedDir = path.join(dir, 'image-feed');

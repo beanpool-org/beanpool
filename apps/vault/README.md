@@ -219,7 +219,8 @@ A release is two files and their assets, published as a GitHub release whose tag
   `imageHash = SHA-256("beanpool-vault-image/1\n" ‖ ukiSha256 ‖ "\n" ‖ roothash ‖ "\n")` (hex): the boot file and
   the dm-verity root hash of the system partition it names. `apiBundleHash` is the SHA-256 of `vault-api.mjs`.
   `custodianKeys` are the three keys that sign the **next** release. `hostPolicy` is what custodians' tools check the
-  host against: `{platform: "none"}` on 1984. `previous` is the SHA-256 of the manifest before it (null for the first).
+  host against: `{platform: "none"}` on 1984, `sev-snp` on Servury (the chip check, below); `release propose` carries
+  it forward unchanged unless told otherwise. `previous` is the SHA-256 of the manifest before it (null for the first).
 - `vault-release.sigs.json`: Ed25519 signatures (RFC 8032, the custodians' ceremony keys) over
   `"beanpool-vault-release/1\n" ‖ hex(SHA-256(vault-release.json))`. Two are needed.
 - Assets: `vault-api.mjs`; for a release with a new image also `vault.efi` (the UKI), `vault-root.raw` and
@@ -239,10 +240,20 @@ vault-custodian release status                       # the chain as the vault wi
 vault-custodian release propose --version 1.1.0 --same-image --same-custodians \
     --api-bundle out/bundles/vault-api.mjs --out proposal/          # or --image out/image.json for a new image
                                                     # (built with --network static:…? add --notes "network static:…")
+                                                    # the host policy in force goes forward as it is (the chip check
+                                                    # stays); --host-policy <file> to change it: see below
 vault-custodian release sign --dir proposal/ --key my-key.json      # each of two custodians; shows every line first
 vault-custodian release verify --dir proposal/                      # "the vault would take it"
 gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-release.sigs.json proposal/vault-api.mjs
 ```
+
+**The host policy in a proposal.** With no flag, `release propose` copies the newest release's `hostPolicy` exactly as
+it was signed, so an API update on a chip-checked vault keeps the chip check. `--host-policy <file>` changes it: raising
+the floor, listing a chip, or a new image's launch (on `sev-snp` a new image needs it: the tool refuses a policy that
+lists no launch of the proposed release's UKI, since every unlock on that image would then be refused). The first
+release names one or the other. Dropping the hardware check (`none` after `sev-snp`) takes `--host-policy-none`, a
+flag of its own: a `--host-policy` file that says `none` is refused then. `propose`, `sign` and `verify` show such a
+release with `!!! DOWNGRADE` lines under the host policy; sign it only if every custodian agreed.
 
 ## Updates without anyone logging in (design §3)
 
@@ -542,10 +553,12 @@ report in the vault's hello (`src/custodian/snp-checker.ts`). In order, so the r
 9. the measurement is the launch of the UKI of the release the vault's hello names: the newest, or the one named with
    `--accept-release`. A vault that says it runs one release while the chip shows another is refused.
 
-The VCEK comes from the host's certificate table if it has one, otherwise from AMD's key server
+The VCEK comes from the host's certificate table if it has one that fits the report, otherwise from AMD's key server
 (`https://kdsintf.amd.com/vcek/v1/<product>/<chip>?blSPL=..&teeSPL=..&snpSPL=..&ucodeSPL=..`) once per chip and
 firmware level, cached in `--amd-cache` (default `~/.cache/beanpool-vault/amd`) once it checks out against the pinned
-ASK. The revocation list is fetched from AMD at every check; the cached copy is used only when AMD can't be reached,
+ASK. A table VCEK that is AMD's but for older firmware levels (a host that patched its firmware and kept its old
+table), another chip, or out of date is not a refusal by itself: the tool asks AMD for this chip's at the reported
+levels, and the `certificates` line says so. A table VCEK that is not signed by the pinned ASK is refused. The revocation list is fetched from AMD at every check; the cached copy is used only when AMD can't be reached,
 and only while it is in date. With a cached VCEK and a list in date the tool works offline; with no list in date it
 refuses. Whatever the source, both are checked against the pinned root every time, so a tampered cache can only make
 the tool refuse.
@@ -570,7 +583,8 @@ The release's `hostPolicy` is the only thing the chip is checked against:
 - `launches`: one per UKI and firmware. The image build writes the first (`host-policy.json`, `source: computed`:
   `sev-snp-measure` on the profile's pinned firmware, this `vault.efi`, the profile's vCPU count, model and guest
   features, an empty host command line). A release whose image waits for its restart keeps the running image's launch
-  in the list beside the new one, until the restart; then the next release drops it.
+  in the list beside the new one, until the restart; then the next release drops it. `release propose --image` on a
+  `sev-snp` vault therefore takes `--host-policy` with both launches (the tool refuses one without the new UKI's).
 - `firmwareSha256` is the host's firmware the measurement was computed with, pinned in the profile and in the host's
   own published `RELEASE.json`. The hash says "the same file as before"; only a rebuild from the host's public recipe
   says "this source" (design §2.6, test T4: Servury's `blackbox-images-<release>.tar.gz`, `build/build-firmware.sh`,
@@ -591,7 +605,8 @@ SNP **29**: Servury's level on 26 Nov 2026 (Marty, 26 Nov: "minimum SNP TCB = 29
 patched). AMD-SB-3059 (Mior CVE-2026-0462, Skyfall CVE-2026-40671) is fixed on Milan at SEV firmware 1.3A.03, TCB SNP
 `0x1F` = **31**. When Servury's report shows SNP 31 (the boot console's `snp: reported TCB` line, or the tool's
 `firmware` line): set `minTcb.snp` to 31 in `image/host-profiles/servury.json` and in the policy, propose a release
-with `--same-image --host-policy <file>`, and have two custodians sign it. From then on a report below 31 is refused.
+with `--same-image --host-policy <file>` (without the flag the policy in force goes forward unchanged), and have two
+custodians sign it. From then on a report below 31 is refused.
 Do it the day the host patches.
 
 **The first unlock on a new host.** The first checked command (`settings send`, `restore` or `unlock`) is refused with

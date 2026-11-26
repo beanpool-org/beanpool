@@ -8,7 +8,7 @@
  * the first that fit the room left are kept, in the order picked, and a line says how many were left out (core
  * photos-that-fit.ts, the phone's rule too).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { photosLeftOutLine, photosThatFit, t } from '@beanpool/core';
 import { resizePhotoFile } from '../lib/photo-resize';
 
@@ -39,6 +39,9 @@ export async function pickedPostPhotos(files: ArrayLike<File> | null | undefined
  */
 export function usePhotosLeftOut(count: number): readonly [number, (leftOut: number, countAfter: number) => void] {
     const [last, setLast] = useState<{ leftOut: number; countAfter: number } | null>(null);
+    // Forget the pick as soon as the count moves off what it left (review of #3391): a list later refilled to the same
+    // length (an edit form, a draft) must not bring the old line back with no pick made.
+    useEffect(() => { if (last && last.countAfter !== count) setLast(null); }, [count, last]);
     const shown = last && last.countAfter === count ? last.leftOut : 0;
     return [shown, (leftOut, countAfter) => setLast(leftOut > 0 ? { leftOut, countAfter } : null)] as const;
 }

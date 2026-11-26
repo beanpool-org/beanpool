@@ -82,6 +82,27 @@ describe('PostPhotoPicker: several photos in one go', () => {
         expect(screen.queryByTestId('photos-left-out')).toBeNull();
     });
 
+    it('the line stays gone when the list is later refilled to the same length (an edit form, a draft)', async () => {
+        const five = ['p1', 'p2', 'p3', 'p4', 'p5'].map(photo);
+        function Refill() {
+            const [photos, setPhotos] = useState<string[]>([photo('old.jpg'), photo('old2.jpg')]);
+            return (
+                <>
+                    <PostPhotoPicker photos={photos} onChange={(update) => setPhotos(update)} />
+                    <button type="button" onClick={() => setPhotos([])}>empty</button>
+                    <button type="button" onClick={() => setPhotos(five)}>refill</button>
+                </>
+            );
+        }
+        render(<Refill />);
+        await choose('a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg');
+        await waitFor(() => expect(screen.getByTestId('photos-left-out')).toBeTruthy());
+        await act(async () => { fireEvent.click(screen.getByText('empty')); });
+        expect(screen.queryByTestId('photos-left-out')).toBeNull();
+        await act(async () => { fireEvent.click(screen.getByText('refill')); });
+        expect(screen.queryByTestId('photos-left-out')).toBeNull();
+    });
+
     it('Local knowledge holds three: room is the form\'s own max', async () => {
         render(<Form max={3} />);
         await choose('a.jpg', 'b.jpg', 'c.jpg', 'd.jpg');

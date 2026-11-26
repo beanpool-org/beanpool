@@ -29,7 +29,7 @@ import { chatMoment, noteNotifyMoment, useScreenShowing } from '../../components
 import { PerItemTakeUp } from '../../components/PerItemTakeUp';
 // "Buy for {enterprise}": a keeper takes up a member's Offer priced for each one for the enterprise (stall slice 2).
 import { EnterpriseTakeUp } from '../../components/EnterpriseTakeUp';
-import { enterpriseTakeUpOffered, takeUpButtons, type TakeUpAnswer, type TakeUpButton, type TakeUpEnterprise } from '@beanpool/core';
+import { enterpriseTakeUpOffered, takeUpButtons, TAKE_UP_WORDS, type TakeUpAnswer, type TakeUpButton, type TakeUpEnterprise } from '@beanpool/core';
 import {
     carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
     perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
@@ -1299,7 +1299,8 @@ function PostDetailModal() {
             return;
         }
         hapticWarning();
-        Alert.alert(b.label, answer.held ?? '', [
+        // A short title the member knows from the console, the node's words in the message (utils/__tests__/alert-words-in-message).
+        Alert.alert(t('Release Payment'), answer.held ?? t(TAKE_UP_WORDS.fallback), [
             { text: t('OK'), style: 'cancel' },
             { text: t('Release Payment'), onPress: () => router.push({ pathname: '/treasury-manage', params: { publicKey: b.enterprise, name: b.name } }) },
         ]);

@@ -67,7 +67,7 @@ function draw(props: Partial<Parameters<typeof EnterpriseTakeUp>[0]> = {}) {
     const onListingMoved = props.onListingMoved ?? vi.fn();
     act(() => root!.render(createElement(EnterpriseTakeUp, {
         listing: APPLES, postId: 'p1', title: 'Apples', sellerName: 'Alice', buttons: [BUTTON], send, onDone, onListingMoved, ...props,
-    })));
+    } as Parameters<typeof EnterpriseTakeUp>[0]) as any));
     return { send, onDone, onListingMoved };
 }
 const q = (id: string) => host!.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
@@ -94,7 +94,7 @@ describe('components/EnterpriseTakeUp.tsx: the button, the count picker, the she
 
     it('a button per enterprise; a tap opens the count picker and the §5.6 sentence, whose figures are the fee function\'s', async () => {
         draw({ buttons: [BUTTON, { enterprise: 'cafe-key', name: 'Hill Cafe', label: 'Buy for Hill Cafe' }] });
-        expect([...host!.querySelectorAll('[data-testid="take-up-buttons"] [data-role="button"]')].map((b) => b.textContent)).toEqual(['Buy for Riverside stall', 'Buy for Hill Cafe']);
+        expect(Array.from(host!.querySelectorAll('[data-testid="take-up-buttons"] [data-role="button"]')).map((b) => b.textContent)).toEqual(['Buy for Riverside stall', 'Buy for Hill Cafe']);
         await tap(`take-up-${STALL}`);
         expect(q('each-take-up')).not.toBeNull();
         expect(q('each-trust')).toBeNull(); // the member's own "into trust … when you release" is not this sale's

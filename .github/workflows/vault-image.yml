@@ -248,8 +248,10 @@ jobs:
           files=(image.json SHA256SUMS vault.efi vault-root.raw vault-root-verity.raw "beanpool-vault_${VERSION}.qcow2"
             root-files.txt uki-sections.txt initrd-files.txt partitions.txt esp-files.txt)
           if [ "${HOST}" != none ]; then files+=(host-policy.json); fi
-          for f in "${files[@]}"; do ln "${one}/${f}" "${stage}/${f}"; done
-          ln "${one}"/bundles/* "${stage}/bundles/"
+          # Copied, not hard-linked: build.sh leaves some of these root-owned (made inside docker), and the runner's
+          # fs.protected_hardlinks=1 refuses a link to a file this user can't write (review of #3395). SHA256SUMS checks the copies.
+          for f in "${files[@]}"; do cp "${one}/${f}" "${stage}/${f}"; done
+          cp "${one}"/bundles/* "${stage}/bundles/"
           cp "${RUNNER_TEMP}/keys.json" "${stage}/custodian-keys.json"
           cd "${stage}" && sha256sum -c SHA256SUMS && ls -la . bundles
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

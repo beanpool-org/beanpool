@@ -7,9 +7,10 @@
 // It reads the inputs from the run's event file (default $GITHUB_EVENT_PATH), never from the command line or the
 // environment: a step's env: values are printed at the top of its log, and a refused value may be something that must
 // never be printed (a custodian's key file, a seed, a passphrase pasted by mistake). So a refusal says what is wrong and
-// never repeats the value. On success it prints the settings and the three public keys (public: anyone may rebuild the
-// image and compare) and, when $GITHUB_OUTPUT is set, writes them there for the build job: keys (the list as build.sh
-// reads it), version, host, network, network6 and artifact (vault-image-<version>-<host>).
+// never repeats the custodian list, nor another field's value unless it is plain setting text (letters, digits and
+// . : / , _ -, and no key's worth of hex). On success it prints the settings and the three public keys (public: anyone
+// may rebuild the image and compare) and, when $GITHUB_OUTPUT is set, writes them there for the build job: keys (the
+// list as build.sh reads it), version, host, network, network6 and artifact (vault-image-<version>-<host>).
 //
 // All five empty is the workflow's throwaway build, as it always was: the release jobs do not run at all. Anything
 // given needs custodian_keys and version; host is then `none` when empty, network `dhcp` and network6 `ra` (build.sh's
@@ -21,6 +22,7 @@ import { parseNetwork, parseNetwork6, readHostProfile } from './image-settings.m
 export const INPUTS = ['custodian_keys', 'version', 'host', 'network', 'network6'];
 const VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const PUBLIC_KEY = /^[0-9a-f]{64}$/;
+const PLAIN_SETTING = /^[A-Za-z0-9.:/,_-]{1,100}$/;
 const SHAPE = '{"genesisCustodians":["<64 hex>","<64 hex>","<64 hex>"]}';
 // A custodian key file (custodian/keyfile.ts: v, publicKey, kdf, nonce, ct; an old one: seed) or anything naming a
 // private half: refused by name, so the message can say to never paste one.
@@ -93,7 +95,7 @@ export function parseCustodianKeys(text) {
  * The release image's settings from the workflow's inputs ({custodian_keys, version, host, network, network6}, each
  * a string or absent), or null when every one is empty (the throwaway build). Throws, saying why, on anything else.
  */
-export function releaseInputs(inputs, { profilesDir } = {}) {
+export function releaseInputs(inputs) {
     const given = {};
     for (const name of INPUTS) {
         const value = inputs?.[name];
@@ -101,13 +103,21 @@ export function releaseInputs(inputs, { profilesDir } = {}) {
         given[name] = (value ?? '').trim();
     }
     if (INPUTS.every((name) => given[name] === '')) return null;
+    // The other fields are plain settings, and their own checks (below, and image-settings.mjs) repeat the value in a
+    // refusal. So first: anything else there (the list or a key file pasted into the wrong field, a key's worth of hex)
+    // is refused without repeating it.
+    for (const name of INPUTS.slice(1)) {
+        if (given[name] !== '' && (!PLAIN_SETTING.test(given[name]) || /[0-9a-fA-F]{32}/.test(given[name]))) {
+            throw new Error(`${name}: not a setting (letters, digits and . : / , _ - only, and never a key; the value is not repeated here)`);
+        }
+    }
     if (given.custodian_keys === '') {
         throw new Error('custodian_keys is empty but other settings are given: a release image needs the public custodian list (leave every field empty for the throwaway build)');
     }
     if (given.version === '') throw new Error('version is empty: a release image needs its version, e.g. 1.1.0');
     if (!VERSION.test(given.version)) throw new Error(`version ${JSON.stringify(given.version)} is not MAJOR.MINOR.PATCH, e.g. 1.1.0`);
     const keys = parseCustodianKeys(given.custodian_keys);
-    const profile = readHostProfile(given.host || 'none', ...(profilesDir ? [profilesDir] : []));
+    const profile = readHostProfile(given.host || 'none');
     const network = parseNetwork(given.network || 'dhcp');
     const network6 = parseNetwork6(given.network6 || 'ra');
     if (network.kind === 'dhcp' && network6.kind !== 'ra') throw new Error('network6 static needs network static (build.sh refuses it too)');
@@ -132,7 +142,7 @@ export function outputLines(r) {
 }
 
 // A workflow command's message: % and line breaks escaped, as the runner reads them.
-const commandText = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+export const commandText = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
 
 function isMain() {
     try {

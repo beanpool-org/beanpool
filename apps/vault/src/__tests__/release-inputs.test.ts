@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { afterAll, describe, expect, it } from 'vitest';
 // @ts-expect-error: a plain .mjs build script, no types
-import { isEd25519Point, outputLines, parseCustodianKeys, releaseInputs } from '../../image/release-inputs.mjs';
+import { commandText, isEd25519Point, outputLines, parseCustodianKeys, releaseInputs } from '../../image/release-inputs.mjs';
 
 /**
  * The vault-image workflow's inputs for a release image (image/release-inputs.mjs; .github/workflows/vault-image.yml,
@@ -77,8 +77,22 @@ describe('the release image\'s inputs', () => {
         expect(refusal(() => releaseInputs({ version: '1.1.0', host: 'servury' }))).toMatch(/custodian_keys is empty but other settings are given/);
         expect(refusal(() => releaseInputs({ network: 'static:192.0.2.10/23,192.0.2.1' }))).toMatch(/custodian_keys is empty/);
         expect(refusal(() => releaseInputs({ ...RELEASE, version: '' }))).toMatch(/version is empty/);
-        for (const v of ['1.1', 'v1.1.0', '01.1.0', '1.1.0-rc1', '1.1.0\n2']) expect(refusal(() => releaseInputs({ ...RELEASE, version: v })), v).toMatch(/not MAJOR\.MINOR\.PATCH/);
+        for (const v of ['1.1', 'v1.1.0', '01.1.0', '1.1.0-rc1']) expect(refusal(() => releaseInputs({ ...RELEASE, version: v })), v).toMatch(/not MAJOR\.MINOR\.PATCH/);
+        expect(refusal(() => releaseInputs({ ...RELEASE, version: '1.1.0\n2' }))).toMatch(/^version: not a setting/);
         expect(refusal(() => releaseInputs({ ...RELEASE, version: 110 }))).toMatch(/version: not text/);
+    });
+
+    it('the list, a key file or a key pasted into another field is refused there too, without repeating it', () => {
+        const seed = crypto.randomBytes(32).toString('hex');
+        const keyFile = JSON.stringify({ v: 2, publicKey: KEYS[0], ct: crypto.randomBytes(48).toString('base64url') });
+        for (const name of ['version', 'host', 'network', 'network6']) {
+            for (const value of [list(KEYS), keyFile, seed, seed.toUpperCase(), `static:${seed}`, 'correct horse battery staple', 'x'.repeat(101)]) {
+                const message = refusal(() => releaseInputs({ ...RELEASE, [name]: value }));
+                expect(message, `${name} = ${value.slice(0, 20)}`).toBe(`${name}: not a setting (letters, digits and . : / , _ - only, and never a key; the value is not repeated here)`);
+            }
+        }
+        // A plain setting is still checked, and named, by its own check.
+        expect(refusal(() => releaseInputs({ ...RELEASE, host: 'Servury' }))).toMatch(/--host "Servury"/);
     });
 
     it('a host, network or network6 the image build would refuse is refused here, by the same code (image-settings.mjs)', () => {
@@ -256,11 +270,11 @@ describe('release-inputs.mjs as the workflow runs it: inputs from the event file
     });
 
     it('an ::error:: message keeps to one line: % and line breaks are escaped as the runner reads them', () => {
-        const r = run({ ...RELEASE, host: 'a%b' });
+        expect(commandText('50% done\r\nnext')).toBe('50%25 done%0D%0Anext');
+        const r = run({ ...RELEASE, host: 'a%b\nc' });
         expect(r.status).toBe(2);
-        const line = r.stdout.split('\n')[0];
-        expect(line).toMatch(/^::error title=Release image inputs refused::/);
-        expect(line).toContain('a%25b');
+        expect(r.stdout.split('\n')[0]).toMatch(/^::error title=Release image inputs refused::host: not a setting/);
+        expect(r.stdout.split('\n')).toHaveLength(2); // the one line and the final newline
     });
 
     it('every output value is one line, or nothing is written', () => {

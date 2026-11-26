@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { identifyImage, readEfiString, roothashFromCmdline, withoutTries } from '../shared/image-identity.js';
+import { identifyImage, readEfiString, roothashFromCmdline, ukiCmdline, withoutTries } from '../shared/image-identity.js';
 import { imageHashOf } from '../shared/release.js';
 
 /**
@@ -56,5 +56,60 @@ describe('the image this machine booted', () => {
         expect(readEfiString(Buffer.concat([Buffer.from([6, 0, 0, 0]), Buffer.from('x.efi\0', 'utf16le')]))).toBe('x.efi');
         expect(roothashFromCmdline(`a usrhash=${'cd'.repeat(32)} b`)).toBe('cd'.repeat(32));
         expect(roothashFromCmdline(`roothash=${'cd'.repeat(31)}`)).toBeNull();
+    });
+
+    // Direct boot (vault comeback design §2.8): the SEV-SNP host's firmware loads the UKI, so no boot loader names it.
+    describe('when the host loaded the boot file itself (no LoaderEntrySelected)', () => {
+        /** A PE file with a `.linux` and a `.cmdline` section, as ukify lays a UKI out (only the section table matters). */
+        function fakeUki(cmd: string): Buffer {
+            const body = Buffer.concat([crypto.randomBytes(64), Buffer.from(`${cmd}\0\0`)]);
+            const head = Buffer.alloc(0x40 + 24 + 2 * 40);
+            head.write('MZ', 0, 'latin1');
+            head.writeUInt32LE(0x40, 0x3c);
+            head.write('PE\0\0', 0x40, 'latin1');
+            head.writeUInt16LE(0x8664, 0x44);
+            head.writeUInt16LE(2, 0x46);
+            head.writeUInt16LE(0, 0x54); // no optional header: the section table follows the COFF header
+            const section = (at: number, name: string, offset: number, size: number) => {
+                head.write(name, at, 'latin1');
+                head.writeUInt32LE(size, at + 8);
+                head.writeUInt32LE(size + 2, at + 16);
+                head.writeUInt32LE(offset, at + 20);
+            };
+            section(0x58, '.linux', head.length, 64);
+            section(0x58 + 40, '.cmdline', head.length + 64, Buffer.byteLength(cmd));
+            return Buffer.concat([head, body]);
+        }
+
+        function directBoot(name: string, ukis: Record<string, Buffer>) {
+            const root = path.join(dir, name);
+            mkdirSync(path.join(root, 'efivars'), { recursive: true });
+            mkdirSync(path.join(root, 'esp', 'EFI', 'Linux'), { recursive: true });
+            writeFileSync(path.join(root, 'cmdline'), cmdline);
+            for (const [f, b] of Object.entries(ukis)) writeFileSync(path.join(root, 'esp', 'EFI', 'Linux', f), b);
+            return { cmdline: path.join(root, 'cmdline'), efivars: path.join(root, 'efivars'), esp: path.join(root, 'esp') };
+        }
+
+        it('reads a UKI\'s own command line, and nothing from a file that is not one', () => {
+            expect(ukiCmdline(fakeUki(`console=ttyS0 roothash=${roothash}`))).toBe(`console=ttyS0 roothash=${roothash}`);
+            expect(ukiCmdline(crypto.randomBytes(500))).toBeNull();
+            expect(ukiCmdline(Buffer.from('MZ'))).toBeNull();
+        });
+
+        it('names the image by its roothash: the UKI on the ESP whose command line names it', () => {
+            const ours = fakeUki(cmdline.trim());
+            const paths = directBoot('direct', { 'beanpool-vault_1.0.0.efi': fakeUki(`roothash=${'cd'.repeat(32)}`), 'beanpool-vault_1.1.0.efi': ours, 'notes.txt': Buffer.from('x') });
+            const ukiSha256 = crypto.createHash('sha256').update(ours).digest('hex');
+            expect(identifyImage(paths)).toEqual({ ok: true, image: { ukiSha256, roothash, imageHash: imageHashOf({ ukiSha256, roothash }), ukiPath: path.join(paths.esp, 'EFI', 'Linux', 'beanpool-vault_1.1.0.efi') } });
+            // The same file twice (a copy) is still one answer.
+            expect(identifyImage(directBoot('direct-copy', { 'a.efi': ours, 'b.efi': ours })).ok).toBe(true);
+        });
+
+        it('two different boot files naming the roothash, or none, is no answer, and says why', () => {
+            expect(identifyImage(directBoot('direct-two', { 'a.efi': fakeUki(cmdline.trim()), 'b.efi': fakeUki(cmdline.trim()) })))
+                .toEqual({ ok: false, reason: `2 different boot files on the ESP name roothash ${roothash}` });
+            expect(identifyImage(directBoot('direct-none', { 'a.efi': fakeUki(`roothash=${'cd'.repeat(32)}`) })))
+                .toMatchObject({ ok: false, reason: expect.stringContaining(`no UKI in EFI/Linux on the ESP names roothash ${roothash}`) });
+        });
     });
 });

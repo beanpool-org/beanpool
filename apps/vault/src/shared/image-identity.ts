@@ -17,6 +17,14 @@ import { imageHashOf } from './release.js';
  * (beanpool-vault-identity.service, `vault-keyholder --identify`) and leaves the answer in a file they read
  * ({@link imageFromIdentityFile}): the keyholder and the API both.
  *
+ * **Direct boot** (vault comeback design §2.8): on an SEV-SNP host with measured boot the host's firmware loads the UKI
+ * itself, so there is no systemd-boot and no `LoaderEntrySelected`. The image is then named by its `roothash`: the UKI
+ * in the ESP's `EFI/Linux/` whose own command line (its `.cmdline` section) names the roothash this kernel booted with.
+ * The install image carries that UKI, and root's install step writes each new one there beside its system partition, so
+ * the keyholder, the API's updater and the install step find the same image either way. Two different boot files naming
+ * one roothash is not an answer. On SEV-SNP the chip's launch measurement is what proves which UKI started; this only
+ * names it.
+ *
  * What it proves: on platform `none`, nothing a hostile host couldn't fake (the host can change the ESP after boot, or
  * boot something else that answers the same). It catches mistakes: an image nobody signed, or an old one still running.
  */
@@ -57,6 +65,55 @@ export function withoutTries(entry: string): string {
     return entry.replace(/\+\d+(-\d+)?(?=\.efi$)/i, '');
 }
 
+/** A UKI's `.cmdline` section (PE/COFF: the section table after the optional header), or null when it has none. */
+export function ukiCmdline(file: Buffer): string | null {
+    try {
+        if (file.length < 0x40 || file.toString('latin1', 0, 2) !== 'MZ') return null;
+        const pe = file.readUInt32LE(0x3c);
+        if (file.toString('latin1', pe, pe + 4) !== 'PE\0\0') return null;
+        const sections = file.readUInt16LE(pe + 6);
+        const table = pe + 24 + file.readUInt16LE(pe + 20);
+        for (let i = 0; i < sections; i++) {
+            const at = table + i * 40;
+            if (file.toString('latin1', at, at + 8).replace(/\0+$/, '') !== '.cmdline') continue;
+            const size = Math.min(file.readUInt32LE(at + 8), file.readUInt32LE(at + 16));
+            const start = file.readUInt32LE(at + 20);
+            if (start + size > file.length) return null;
+            return file.toString('utf8', start, start + size).replace(/\0+$/, '');
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+/** The UKI on the ESP whose own command line names `roothash` (direct boot: no boot loader named it). */
+function imageByRoothash(roothash: string, espDirs: string[], efivars: string): { ok: true; image: ImageIdentity } | { ok: false; reason: string } {
+    const found = new Map<string, string>();
+    for (const esp of espDirs) {
+        const dir = path.join(esp, 'EFI', 'Linux');
+        if (!existsSync(dir)) continue;
+        for (const name of readdirSync(dir).filter(f => /\.efi$/i.test(f)).sort()) {
+            const ukiPath = path.join(dir, name);
+            let bytes: Buffer;
+            try {
+                bytes = readFileSync(ukiPath);
+            } catch {
+                continue;
+            }
+            const cmdline = ukiCmdline(bytes);
+            if (cmdline === null || roothashFromCmdline(cmdline) !== roothash) continue;
+            const sha = crypto.createHash('sha256').update(bytes).digest('hex');
+            if (!found.has(sha)) found.set(sha, ukiPath);
+        }
+    }
+    if (found.size > 1) return { ok: false, reason: `${found.size} different boot files on the ESP name roothash ${roothash}` };
+    const [entry] = [...found];
+    if (!entry) return { ok: false, reason: `no LoaderEntrySelected in ${efivars}, and no UKI in EFI/Linux on the ESP names roothash ${roothash}` };
+    const [ukiSha256, ukiPath] = entry;
+    return { ok: true, image: { ukiSha256, roothash, imageHash: imageHashOf({ ukiSha256, roothash }), ukiPath } };
+}
+
 export function identifyImage(paths: ImageIdentityPaths = {}): { ok: true; image: ImageIdentity } | { ok: false; reason: string } {
     const read = (p: string) => {
         try {
@@ -71,9 +128,11 @@ export function identifyImage(paths: ImageIdentityPaths = {}): { ok: true; image
     const efivars = paths.efivars ?? '/sys/firmware/efi/efivars';
     const entryVar = read(path.join(efivars, `LoaderEntrySelected-${LOADER_GUID}`));
     const entry = entryVar ? readEfiString(entryVar) : null;
-    if (!entry) return { ok: false, reason: `no LoaderEntrySelected in ${efivars}` };
+    const espDirs = paths.esp ? [paths.esp] : ['/efi', '/boot'];
+    // The host's firmware loaded the UKI (measured direct boot): name it by its roothash.
+    if (!entry) return imageByRoothash(roothash, espDirs, efivars);
     const base = withoutTries(entry).toLowerCase();
-    for (const esp of paths.esp ? [paths.esp] : ['/efi', '/boot']) {
+    for (const esp of espDirs) {
         const dir = path.join(esp, 'EFI', 'Linux');
         if (!existsSync(dir)) continue;
         // The file that booted, or the same one renamed since (its boot blessed, or a case the firmware changed).

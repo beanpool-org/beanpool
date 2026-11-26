@@ -181,8 +181,8 @@ describe('the helper\'s socket and the keyholder\'s attestor', () => {
         const hello = await kh.hello(vaultB64url(nonce));
         expect(hello.platform).toBe('sev-snp');
         expect(kh.status().platform).toBe('sev-snp');
-        const { report } = splitSnpEvidence(Buffer.from(vaultUnb64(hello.evidence!)));
-        const bind = unlockBind(vaultUnb64(hello.helloPub), vaultUnb64(hello.bootId), nonce);
+        const { report } = splitSnpEvidence(Buffer.from(unb64(hello.evidence!)));
+        const bind = unlockBind(unb64(hello.helloPub), unb64(hello.bootId), nonce);
         expect(readSnpReport(report).reportData.equals(Buffer.from(bind))).toBe(true);
         // Another nonce, another report.
         const again = await kh.hello(vaultB64url(crypto.randomBytes(32)));
@@ -223,6 +223,12 @@ describe('the helper\'s socket and the keyholder\'s attestor', () => {
         expect(() => attestorFrom({ attestor: 'sev-snp', attestSocket: 5 })).toThrow(/attestSocket/);
     });
 });
+
+function unb64(s: string): Uint8Array {
+    const b = vaultUnb64(s);
+    if (!b) throw new Error(`not base64url: ${s}`);
+    return b;
+}
 
 function vaultB64url(b: Uint8Array): string {
     return Buffer.from(b).toString('base64url');

@@ -148,8 +148,13 @@ describe('--host: the Servury profile and the release host policy', () => {
     });
 
     // One profile per row, each with one thing wrong.
-    const good = JSON.parse(readFileSync(path.join(image, 'host-profiles/servury.json'), 'utf8')) as Record<string, any>;
-    const rows: [string, (p: Record<string, any>) => void, RegExp][] = [
+    interface ProfileFile {
+        [field: string]: unknown;
+        profile: string; platform: string; product: string; guestPolicy: string; signer: string;
+        launch: { append: string; vcpus: number }; firmware: { url: string; sha256: string }; minTcb?: { snp: number };
+    }
+    const good = JSON.parse(readFileSync(path.join(image, 'host-profiles/servury.json'), 'utf8')) as ProfileFile;
+    const rows: [string, (p: ProfileFile) => void, RegExp][] = [
         ['debug allowed', p => { p.guestPolicy = '0xb0000'; }, /debug \(bit 19\)/],
         ['a migration agent allowed', p => { p.guestPolicy = '0x70000'; }, /migration agent \(bit 18\)/],
         ['a host command line', p => { p.launch.append = 'console=ttyS0'; }, /append is empty/],
@@ -158,7 +163,7 @@ describe('--host: the Servury profile and the release host policy', () => {
         ['another platform', p => { p.platform = 'tdx'; }, /platform is sev-snp/],
         ['an unknown field', p => { p.extra = 1; }, /does not know: extra/],
         ['a missing floor', p => { delete p.minTcb; }, /lacks minTcb/],
-        ['a TCB level over 255', p => { p.minTcb.snp = 256; }, /0 to 255/],
+        ['a TCB level over 255', p => { p.minTcb!.snp = 256; }, /0 to 255/],
         ['a firmware over plain http', p => { p.firmware.url = 'http://example.org/OVMF.fd'; }, /https address/],
         ['a firmware hash that is not one', p => { p.firmware.sha256 = 'abc'; }, /SHA-256/],
         ['no vCPU', p => { p.launch.vcpus = 0; }, /1 to 64/],

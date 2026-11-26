@@ -229,7 +229,9 @@ export function requestSnpEvidence(socketPath: string, reportData: Uint8Array, t
             try {
                 const a = JSON.parse(buf) as { evidence?: unknown; error?: unknown };
                 if (typeof a.evidence === 'string') {
-                    const evidence = Buffer.from(vaultUnb64(a.evidence));
+                    const raw = vaultUnb64(a.evidence);
+                    if (!raw) throw new Error('The SEV-SNP helper\'s evidence is not base64url.');
+                    const evidence = Buffer.from(raw);
                     // Belt and braces: the helper's answer carries our report data, or it is not ours.
                     const { report } = splitSnpEvidence(evidence);
                     if (!readSnpReport(report).reportData.equals(Buffer.from(reportData))) throw new Error('The helper\'s report is not over our report data.');

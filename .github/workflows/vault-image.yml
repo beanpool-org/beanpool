@@ -81,7 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/one"
-          for f in image.json vault.efi vault-root.raw vault-root-verity.raw beanpool-vault_0.0.1.raw bundles/*.mjs; do
+          for f in image.json vault.efi vault-root.raw vault-root-verity.raw beanpool-vault_0.0.1.raw beanpool-vault_0.0.1.qcow2 SHA256SUMS bundles/*.mjs; do
             cmp "$f" "${RUNNER_TEMP}/two/$f"
             echo "same: $f ($(sha256sum "$f" | cut -c1-16))"
           done
@@ -103,3 +103,15 @@ jobs:
       - name: The test image's serial log
         if: always()
         run: cat "${RUNNER_TEMP}/test/boot-test/serial.log" 2>/dev/null | tail -n 300 || true
+      # An image for the Servury SEV-SNP host profile (vault comeback design §3.2): every setting a real one takes, with
+      # documentation addresses and a test name. Built, not booted (no SEV-SNP on the runner: the real boot is test T1 on
+      # the server); the launch measurement is computed from Servury's pinned firmware, and image.json and host-policy.json
+      # must carry it.
+      - name: A Servury-profile image (built with every setting, its launch measurement computed; not booted)
+        run: |
+          set -euo pipefail
+          apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/snp" --cache "${RUNNER_TEMP}/image-cache" \
+            --host servury --network static:192.0.2.10/23,192.0.2.1 --network6 static:2001:db8:0:39c::1/64,fe80::1 --name vault.example.org
+          m="$(node -e 'const j=require(process.argv[1]); if (j.host.profile!=="servury"||!/^[0-9a-f]{96}$/.test(j.host.measurement)) process.exit(1); console.log(j.host.measurement)' "${RUNNER_TEMP}/snp/image.json")"
+          node -e 'const p=require(process.argv[1]); if (p.platform!=="sev-snp"||p.measurement!==process.argv[2]||p.minReportedTcb!=="0400000000001dde") process.exit(1)' "${RUNNER_TEMP}/snp/host-policy.json" "${m}"
+          cat "${RUNNER_TEMP}/snp/image.json" "${RUNNER_TEMP}/snp/host-policy.json" "${RUNNER_TEMP}/snp/SHA256SUMS"

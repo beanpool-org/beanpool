@@ -193,8 +193,9 @@ describe('the comeback with the same custodian keys (runbook DECIDED 27 Nov)', (
             async evidence(bind) {
                 const launched = tamper === 'measurement' ? measurementOf(randomImage().ukiSha256) : measurementOf(image.ukiSha256);
                 const report = signReport(reportBytes({ reportData: Buffer.from(bind), measurement: launched, chipId: CHIP }));
-                // One byte of the measurement changed after the chip signed.
-                if (tamper === 'signature') report[0x90] ^= 1;
+                // One byte only the signature covers changed after the chip signed (not the measurement at 0x90, which is
+                // refused first as 'measurement' and would never reach the signature check; review of #3394).
+                if (tamper === 'signature') report[0x140] ^= 0xff;
                 return evidenceOf(report);
             },
         };
@@ -218,10 +219,12 @@ describe('the comeback with the same custodian keys (runbook DECIDED 27 Nov)', (
         await expect(sendSettings(b.baseUrl, G[0], settings, firstSight)).rejects.toThrow(`--accept-new-machine ${CHIP8}`);
         expect(firstSight.outbox).toEqual([]);
         // Tampered reports: refused, nothing sent, even with the chip accepted.
-        for (const kind of ['signature', 'measurement'] as const) {
+        for (const [kind, why] of [['signature', /signature does not verify/], ['measurement', /not one the release lists/]] as const) {
             tamper = kind;
             const o = snpCall({ outbox: [] });
-            await expect(sendSettings(b.baseUrl, G[0], settings, o)).rejects.toMatchObject({ code: 'evidence_refused' });
+            const sent = sendSettings(b.baseUrl, G[0], settings, o);
+            await expect(sent).rejects.toMatchObject({ code: 'evidence_refused' });
+            await expect(sent).rejects.toThrow(why);
             expect(o.outbox).toEqual([]);
         }
         tamper = 'none';

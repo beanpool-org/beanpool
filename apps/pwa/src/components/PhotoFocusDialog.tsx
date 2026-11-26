@@ -74,7 +74,8 @@ export function PhotoFocusDialog({ src, focus, onDone, onCancel }: {
         });
     };
 
-    return createPortal(
+    // In a fragment, as PictureCropDialog's: the portal's own type is react-dom's copy of React's, which this file can't name.
+    return <>{createPortal(
         <div data-testid="photo-focus-backdrop" className="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4 bg-black/60" style={{ zIndex: 1200 }}>
             <div
                 role="dialog"
@@ -130,5 +131,5 @@ export function PhotoFocusDialog({ src, focus, onDone, onCancel }: {
             </div>
         </div>,
         document.body,
-    );
+    )}</>;
 }

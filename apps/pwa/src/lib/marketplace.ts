@@ -5,7 +5,7 @@
  * Each category's name is a word() key, shown through t(cat.label) where a member reads it (the phone's
  * constants/categories.ts keys where the words are the same: 'Services', 'Tools', …). The id is what the node stores.
  */
-import type { ShownFromLine } from '@beanpool/core';
+import type { PhotoFocus, ShownFromLine } from '@beanpool/core';
 import { t, word } from '@beanpool/core';
 
 export const MARKETPLACE_CATEGORIES = [
@@ -90,6 +90,8 @@ export interface MarketplacePost {
     location: { lat: number; lng: number } | null;
     createdAt: string;
     photos?: string[];
+    /** Each photo's focus, the part a card's crop keeps, beside `photos` (@beanpool/core photo-focus.ts). Only on a post with one. */
+    photoFocus?: Array<PhotoFocus | null>;
     status?: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
     pinnedUntil?: string | null;
     pinnedAt?: string | null;

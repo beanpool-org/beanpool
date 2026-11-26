@@ -12,6 +12,8 @@
 import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, POLL_DAYS_DEFAULT, pollOtherLines, pollWeekGroupNote, pollWeekNotice, type PollDays } from '@beanpool/core';
 import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
+import { photoFocusList, storedPhotoFocus, type PhotoFocus } from '@beanpool/core';
+import { PhotoFocusDialog } from '../components/PhotoFocusDialog';
 import { carryTotalToEach, perItemCreateFields, perItemFeeLine, perItemLines, priceUnitsOffered, type PerItemField } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
 import { CashAlsoNeededField, ListingReachField, RepeatableField } from '../components/ListingFormFields';
@@ -426,6 +428,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [newPostReachPeers, setNewPostReachPeers] = useState<string[]>([]);
     const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
+    // Each photo's focus, the part its card keeps (core photo-focus.ts): beside newPostPhotos, in the same order. The photo
+    // whose Adjust dialog is open, by its place; the focus an event edit opened with, to send only a change.
+    const [newPostFocus, setNewPostFocus] = useState<Array<PhotoFocus | null>>([]);
+    const [focusAdjusting, setFocusAdjusting] = useState<number | null>(null);
+    const eventFocusFrom = useRef<string | null>(null);
+    // The form's photos cleared (a post made, a form reset): their focus goes with them.
+    useEffect(() => { if (newPostPhotos.length === 0) setNewPostFocus([]); }, [newPostPhotos.length]);
     const [composerShop, setComposerShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [composerInShop, setComposerInShop] = useState(false);
     const cancelDraftShopRef = useRef<(() => void) | null>(null);
@@ -1261,7 +1270,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         if (errors.size > 0) return;
 
         const id = eventEdit.id;
-        const payload = eventEditPayload(eventEdit.before, currentEventForm());
+        const payload: Parameters<typeof updateMarketplacePost>[2] = eventEditPayload(eventEdit.before, currentEventForm());
+        // Its photo's focus, when the host changed it (or the photos, which carry their focus with them on the node).
+        const focusNow = photoFocusList(newPostFocus, newPostPhotos.length);
+        if (storedPhotoFocus(focusNow) !== eventFocusFrom.current) payload.photoFocus = focusNow;
         if (Object.keys(payload).length === 0) {
             closeEventForm();
             onNavigate?.('marketplace', id);
@@ -1325,6 +1337,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 description: newPostDescription.trim(),
                 ...(eventOnline ? { eventOnline: true } : { lat: postLat!, lng: postLng! }),
                 photos: newPostPhotos,
+                ...focusBody(),
                 audienceScope: eventAudienceScope,
                 ...(eventAudienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 ...eventClockBody(eventStart, eventEnd, eventOnline, zone),
@@ -1502,6 +1515,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 ...(audienceScope !== 'group' && newPostReach === 'peers' ? { reachPeers: newPostReachPeers } : {}),
                 ...(postLat != null && postLng != null ? { lat: postLat, lng: postLng } : {}),
                 photos: newPostPhotos,
+                ...focusBody(),
                 audienceScope,
                 ...(newPostTags.length > 0 ? { tags: newPostTags } : {}),
                 ...(newPostFreeTags.length > 0 ? { freeTags: newPostFreeTags } : {}),
@@ -2089,6 +2103,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setNewPostTitle(form.title);
             setNewPostDescription(form.description);
             setNewPostPhotos(form.photos);
+            setNewPostFocus(photoFocusList((source as { photoFocus?: unknown }).photoFocus, form.photos.length) ?? []);
+            eventFocusFrom.current = storedPhotoFocus(photoFocusList((source as { photoFocus?: unknown }).photoFocus, form.photos.length));
             setEventStart(form.start);
             setEventEnd(form.end);
             setEventRepeat(form.repeat ?? 'never');
@@ -2268,15 +2284,29 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         );
     }
 
+    /** The form's focus points for the post's body: named only when the member set one (core photo-focus.ts). */
+    function focusBody(): { photoFocus?: Array<PhotoFocus | null> } {
+        const list = photoFocusList(newPostFocus, newPostPhotos.length);
+        return list ? { photoFocus: list } : {};
+    }
+
     function renderPhotoPicker(required: boolean) {
         return (
             <div className="mb-5">
                 <div className="flex gap-2 flex-wrap items-center">
                     {newPostPhotos.map((photo, i) => (
                         <div key={i} className="relative">
-                            <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
                             <button
-                                onClick={() => setNewPostPhotos(prev => prev.filter((_, j) => j !== i))}
+                                type="button"
+                                data-testid={`photo-adjust-${i}`}
+                                onClick={() => setFocusAdjusting(i)}
+                                aria-label={t('Choose what the card shows')}
+                                className="block p-0 border-0 bg-transparent rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            >
+                                <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
+                            </button>
+                            <button
+                                onClick={() => { setNewPostPhotos(prev => prev.filter((_, j) => j !== i)); setNewPostFocus(prev => prev.filter((_, j) => j !== i)); }}
                                 aria-label={t('Remove photo')}
                                 className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-bp-danger-fill hover:bg-bp-danger-hover border-none rounded-full text-bp-danger-on text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md transition-colors transform hover:scale-110"
                             >
@@ -2322,6 +2352,21 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         ? (required ? t('0/5 photos (at least 1 required)') : t('0/5 photos (optional)'))
                         : t('{n}/5 photos', { n: newPostPhotos.length })}
                 </p>
+                {newPostPhotos.length > 0 && (
+                    <p className="m-0 mt-1 text-sm text-nature-600 dark:text-nature-300">{t('Tap a photo to choose what its card shows.')}</p>
+                )}
+                {focusAdjusting !== null && newPostPhotos[focusAdjusting] && (
+                    <PhotoFocusDialog
+                        src={newPostPhotos[focusAdjusting]}
+                        focus={newPostFocus[focusAdjusting] ?? null}
+                        onCancel={() => setFocusAdjusting(null)}
+                        onDone={(f) => {
+                            const at = focusAdjusting;
+                            setNewPostFocus(prev => { const next = prev.slice(); while (next.length <= at) next.push(null); next[at] = f; return next; });
+                            setFocusAdjusting(null);
+                        }}
+                    />
+                )}
                 {visitorNote && (
                     <p data-testid="composer-visitor-note" className="m-0 mt-2 text-sm text-nature-600 dark:text-nature-300">{visitorNote}</p>
                 )}

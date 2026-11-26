@@ -34,6 +34,7 @@
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { focusObjectPosition } from '../lib/photo-focus';
 import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord, restartTips, tipNow, tipOnLanding, tipText, tipsCaption, tipsFor, tipsNextLabel, type TipsRecord, ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, readDecideSettings, readSearchSettings, readToolsSettings, type CardHue, SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings, capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word, communityShapeSummary, type CommunityShapeFeatures, starterSheet, type PricingGuideItem, type StarterRow, formatHundredths } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { billDoor } from '../lib/bill-door';
@@ -145,6 +146,8 @@ export const HOME_DOORBELL_DEBOUNCE_MS = HOME_BELL_SETTLE_MS;
 
 /** Find your community's town links ("or type your town", "change", "Cancel"): the link and accent roles, light and dark. */
 /** The find card's buttons, as its Share my area. */
+/** A Home tile's crop with no focus: the Market grid's (core market-card-shell.ts photo.grid), 50% across, 33% down. */
+const HOME_TILE_CROP = { objectPosition: '50% 33%' } as const;
 const FIND_ACTION = 'w-full min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-900 dark:text-white cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 /** "Tell me when one starts here", in the phone's words where it has them (FindCommunityBody); t(WATCH_WORDS.…) where shown. */
 export const WATCH_WORDS = {
@@ -433,7 +436,7 @@ function MarketListingItem({
                         loading={photo ? nextImageLoading() : undefined}
                         decoding="async"
                         className="w-full h-full object-cover bg-bg-hover"
-                        style={{ objectPosition: '50% 33%' }}
+                        style={focusObjectPosition(item.photoUrl ? item.photoFocus : null, HOME_TILE_CROP)}
                         fallback={<CategoryTile category={item.category} size="grid" />}
                     />
                     {/* OFFER or NEED, whole, on one line, inside the photo in every language at 320 px and 130% text: 4 px in and
@@ -476,7 +479,7 @@ function MarketListingItem({
                         loading={photo ? nextImageLoading() : undefined}
                         decoding="async"
                         className="w-full h-full object-cover bg-bg-hover"
-                        style={{ objectPosition: '50% 33%' }}
+                        style={focusObjectPosition(item.photoUrl ? item.photoFocus : null, HOME_TILE_CROP)}
                         fallback={<CategoryTile category={item.category} size="grid" />}
                     />
                 </div>

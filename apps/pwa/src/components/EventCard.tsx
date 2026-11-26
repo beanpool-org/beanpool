@@ -23,6 +23,7 @@
  */
 
 import { Fragment, useEffect, useState } from 'react';
+import { cardObjectPosition } from '../lib/photo-focus';
 import { copyCardLine, copyFromLine, eventCopyOf, eventNoticesComing, notifyEventLineWords, pinLive, t, upperCase, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getConversations, getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import { onConversationRead } from '../lib/conversation-read';
@@ -631,7 +632,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                             photo={firstPhoto}
                             alt={p.title}
                             className="w-full h-full object-cover"
-                            style={GRID_PHOTO_CROP}
+                            style={cardObjectPosition(p, firstPhoto, GRID_PHOTO_CROP)}
                             fallback={<CategoryTile kind="event" size="grid" />}
                         />
                         <span className="absolute top-2 left-2">

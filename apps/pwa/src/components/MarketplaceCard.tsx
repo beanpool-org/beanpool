@@ -17,6 +17,7 @@ import { Sentence } from './Sentence';
 import { BeansText } from './BeansText';
 import { CategoryTile } from './CategoryTile';
 import { styleUntilDrawn, useListPhotoSteps } from '../lib/use-list-photo-steps';
+import { cardObjectPosition } from '../lib/photo-focus';
 import { CARD_INK, COMPACT_END, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_ROW, COMPACT_TEXT, COMPACT_TITLE, GRID_PHOTO, GRID_ROW, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard } from './market-card-shell';
 
 /** The grid's 4:3 frame anchors upright photos towards the top third (market-card-43). */
@@ -97,6 +98,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // the tile holds the slot until the picture has fired load, and one that neither loads nor fails in time counts as
     // failed (lib/use-list-photo-steps.ts), so no state leaves an empty box.
     const pictureUrl: string | null = firstPhoto || bannerUrl || null;
+    // Where the card crops it: the listing's own photo at the focus its author picked; none, or a banner, the card's own crop.
+    const focusCrop = cardObjectPosition(post, pictureUrl);
     const pictureSteps = useListPhotoSteps(pictureUrl);
     // What is drawn now: null is the tile.
     const displayImage = pictureSteps.shown;
@@ -285,7 +288,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 {/* The picture: the first thing in the card, so the card's own corners round it. */}
                 <div data-testid="listing-list-photo" className={LIST_PHOTO}>
                     {displayImage ? (
-                        cardPicture(<div className={LIST_PHOTO_FILL}><CategoryTile category={post.category} kind={tileKind} size="thumb" /></div>, undefined, `${LIST_PHOTO_FILL} object-cover`)
+                        cardPicture(<div className={LIST_PHOTO_FILL}><CategoryTile category={post.category} kind={tileKind} size="thumb" /></div>, focusCrop, `${LIST_PHOTO_FILL} object-cover`)
                     ) : (
                         <div className={LIST_PHOTO_FILL}><CategoryTile category={post.category} kind={tileKind} size="thumb" /></div>
                     )}
@@ -407,7 +410,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             {/* 4:3 Media Box at Card Top (edge to edge, radius 14) */}
             <div className={GRID_PHOTO}>
                 {displayImage ? (
-                    cardPicture(<CategoryTile category={post.category} kind={tileKind} size="grid" />, GRID_CROP)
+                    cardPicture(<CategoryTile category={post.category} kind={tileKind} size="grid" />, focusCrop ?? GRID_CROP)
                 ) : (
                     <CategoryTile category={post.category} kind={tileKind} size="grid" />
                 )}

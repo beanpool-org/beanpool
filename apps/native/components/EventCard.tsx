@@ -45,6 +45,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { copyCardLine, copyFromLine, eventCopyOf, t, upperCase } from '@beanpool/core';
 import { router } from 'expo-router';
 import { MARKET_GRID_CROP, MarketCardPicture } from './MarketCardPicture';
+import { cardContentPosition } from '../utils/photo-focus';
 import { CardChip, gridTextBlock, useCardShell } from './market-card-shell';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { isPostPinned } from '../utils/pins';
@@ -176,7 +177,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                         picture={photo}
                         kind="event"
                         size="grid"
-                        contentPosition={MARKET_GRID_CROP}
+                        contentPosition={cardContentPosition(post, photo, photo, MARKET_GRID_CROP)}
                         accessibilityLabel={post.title}
                         imageStyle={shell.gridImage}
                     />
@@ -309,6 +310,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                 picture={photo}
                 kind="event"
                 size="thumb"
+                contentPosition={cardContentPosition(post, photo, photo)}
                 accessibilityLabel={post.title}
                 imageStyle={shell.listPhoto}
                 tileBox={shell.listPhotoBox}

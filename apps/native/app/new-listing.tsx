@@ -44,6 +44,8 @@ import { createPost, getBalance, getReachablePeers } from '../utils/db';
 import { noteNotifyMoment, LISTING_MOMENT } from '../components/NotifyLine';
 import { hasUsableAvatar as sharedHasUsableAvatar } from '../utils/profile-status';
 import { askForPostPhoto } from '../utils/post-photo';
+import { usePhotoFocusList } from '../utils/use-photo-focus-list';
+import { PhotoFocusAdjust } from '../components/PhotoFocusAdjust';
 import { useIdentity } from './IdentityContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PricingInfoModal } from '../components/info-content/PricingInfoModal';
@@ -251,6 +253,7 @@ export default function NewListingScreen() {
         photoAdd: { width: 44, height: 44, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.border.strong, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.app },
         photoAddIcon: { fontSize: 20 },
         photoCount: { color: colors.text.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+        photoHint: { color: colors.text.secondary, fontSize: 12, marginBottom: 6 },
 
         // Submit
         submitBtn: { paddingVertical: 12, borderRadius: 14, alignItems: 'center', marginBottom: 8, marginTop: 4 },
@@ -318,6 +321,8 @@ export default function NewListingScreen() {
     const [postReachPeers, setPostReachPeers] = useState<string[]>([]);
     const [reachablePeerList, setReachablePeerList] = useState<{ peerId: string; callsign: string | null }[]>([]);
     const [postPhotos, setPostPhotos] = useState<string[]>([]);
+    // Each photo's focus, the part its card keeps (core photo-focus.ts): beside postPhotos, in the same order.
+    const photoFocus = usePhotoFocusList();
     const [postLat, setPostLat] = useState<number | null>(null);
     const [postLng, setPostLng] = useState<number | null>(null);
     const [pinDropMode, setPinDropMode] = useState(false);
@@ -423,7 +428,7 @@ export default function NewListingScreen() {
     const resetNewPost = () => {
         setAlsoOnGlobal(false);
         setPostType('offer'); setPostCategory(''); setPostTags([]); setPostFreeTags([]); setPostTitle(''); setPostDescription('');
-        setPostCredits(''); setPickedPriceType('fixed'); setPostItemCount(''); setPostItemLot(''); setItemRefusal(null); setPostRepeatable(false); setPostPhotos([]);
+        setPostCredits(''); setPickedPriceType('fixed'); setPostItemCount(''); setPostItemLot(''); setItemRefusal(null); setPostRepeatable(false); setPostPhotos([]); photoFocus.resetFrom(null);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
         setValidationToast(''); setPostReach('local'); setPostReachPeers([]);
     };
@@ -718,6 +723,7 @@ export default function NewListingScreen() {
                 lat: postLat,
                 lng: postLng,
                 photos: postPhotos.length > 0 ? JSON.stringify(postPhotos) : null,
+                photoFocus: photoFocus.forPhotos(postPhotos.length),
                 created_at: new Date().toISOString(),
                 // #143 step 4 — per-listing reach (fallback to 'local' if 'peers' selected without chosen targets)
                 reach: (postReach === 'peers' && postReachPeers.length === 0) ? 'local' : postReach,
@@ -985,8 +991,10 @@ export default function NewListingScreen() {
                                 {postPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                         <View key={i} style={styles.photoThumb}>
-                                            <RNImage source={{ uri }} style={styles.photoImg} />
-                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo')} style={styles.photoRemove} onPress={() => setPostPhotos(prev => prev.filter((_, j) => j !== i))}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Choose what the card shows')} testID={`photo-adjust-${i}`} onPress={() => photoFocus.open(i)}>
+                                                <RNImage source={{ uri }} style={styles.photoImg} />
+                                            </Pressable>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo')} style={styles.photoRemove} onPress={() => { setPostPhotos(prev => prev.filter((_, j) => j !== i)); photoFocus.removeAt(i); }}>
                                                 <Text style={styles.photoRemoveText}>✕</Text>
                                             </Pressable>
                                         </View>
@@ -999,6 +1007,13 @@ export default function NewListingScreen() {
                                 )}
                             </View>
                             <Text style={styles.photoCount}>{upperCase(photoRequired ? t('{n}/5 photos', { n: postPhotos.length }) : t('{n}/5 photos (optional)', { n: postPhotos.length }))}</Text>
+                            {postPhotos.length > 0 ? <Text style={styles.photoHint}>{t('Tap a photo to choose what its card shows.')}</Text> : null}
+                            <PhotoFocusAdjust
+                                uri={photoFocus.adjusting !== null ? postPhotos[photoFocus.adjusting] ?? null : null}
+                                focus={photoFocus.adjusting !== null ? photoFocus.at(photoFocus.adjusting) : null}
+                                onCancel={photoFocus.close}
+                                onDone={(f) => { if (photoFocus.adjusting !== null) photoFocus.setAt(photoFocus.adjusting, f); photoFocus.close(); }}
+                            />
 
                             {/* Location */}
                             <ListingLocationRow

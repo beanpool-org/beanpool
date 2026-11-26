@@ -35,6 +35,7 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
 import { MARKET_GRID_CROP, MarketCardPicture } from '../../components/MarketCardPicture';
+import { cardContentPosition } from '../../utils/photo-focus';
 import { CardChip, gridTextBlock, useCardShell } from '../../components/market-card-shell';
 import { gridRows, type GridRow } from '../../utils/market-grid-rows';
 import { NewEventModal } from '../../components/NewEventModal';
@@ -1785,7 +1786,7 @@ export default function MarketScreen() {
                             category={item.category}
                             kind={item.type === 'event' ? 'event' : 'listing'}
                             size="grid"
-                            contentPosition={MARKET_GRID_CROP}
+                            contentPosition={cardContentPosition(item, picture, coverImage, MARKET_GRID_CROP)}
                             accessibilityLabel={item.title}
                             imageStyle={shell.gridImage}
                         />
@@ -1939,6 +1940,7 @@ export default function MarketScreen() {
                         category={item.category}
                         kind={item.type === 'event' ? 'event' : 'listing'}
                         size="thumb"
+                        contentPosition={cardContentPosition(item, picture, coverImage)}
                         imageStyle={shell.listPhoto}
                         tileBox={shell.listPhotoBox}
                     />

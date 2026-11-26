@@ -46,6 +46,8 @@ import { ReviewModal } from '../../components/ReviewModal';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { BillsTab } from '../../components/Bills';
 import { askForPostPhoto } from '../../utils/post-photo';
+import { usePhotoFocusList } from '../../utils/use-photo-focus-list';
+import { PhotoFocusAdjust } from '../../components/PhotoFocusAdjust';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { BeansText } from '../../components/BeansText';
 import { AuthorCard } from '../../components/AuthorCard';
@@ -338,6 +340,7 @@ function PostDetailModal() {
         editPhotoLabel: { color: colors.text.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 8 },
         requiredStar: { color: colors.feedback.danger.fg },
         editPhotosRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+        editPhotoHint: { color: colors.text.secondary, fontSize: 12, marginTop: -10, marginBottom: 16 },
         editPhotoThumb: { width: 60, height: 60, borderRadius: 12, overflow: 'hidden', position: 'relative' },
         editPhotoImg: { width: 60, height: 60, borderRadius: 12 },
         editPhotoRemove: { position: 'absolute', top: -2, right: -2, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.feedback.danger.solid, justifyContent: 'center', alignItems: 'center' },
@@ -572,6 +575,8 @@ function PostDetailModal() {
     const [editItemLoading, setEditItemLoading] = useState(false);
     const editPriceRef = useRef<TextInput>(null);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
+    // Each photo's focus, the part its card keeps (core photo-focus.ts): beside editPhotos, in the same order.
+    const editFocus = usePhotoFocusList();
     // "Put this in your shop" (slice S4′): where the listing is now, as the node says, and where the edit puts it.
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [editInShop, setEditInShop] = useState(false);
@@ -1471,6 +1476,7 @@ function PostDetailModal() {
             }).finally(() => setEditItemLoading(false));
         }
         setEditPhotos(photos);
+        editFocus.resetFrom(post);
         setEditMode(true);
         // A member's own Offer for everyone here can go in their shop: the toggle starts where the node says it is now, and
         // shows nothing while that can't be read (an enterprise's shop is a later slice).
@@ -1545,6 +1551,8 @@ function PostDetailModal() {
                     ...(effectiveReach === 'peers' ? { reachPeers: editReachPeers } : {}),
                 } : {}),
                 photos: editPhotos.length > 0 ? JSON.stringify(editPhotos) : null,
+                // Each photo's focus as the form now has it: null clears it (core photo-focus.ts).
+                photoFocus: editFocus.forPhotos(editPhotos.length),
                 ...(shopId !== undefined ? { shopId } : {}),
             });
             // Refresh the post
@@ -2201,8 +2209,10 @@ function PostDetailModal() {
                                 {editPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                         <View key={i} style={styles.editPhotoThumb}>
-                                            <Image accessibilityLabel={t('Post photo')} source={{ uri }} style={styles.editPhotoImg} />
-                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo from the post')} style={styles.editPhotoRemove} onPress={() => setEditPhotos(prev => prev.filter((_, j) => j !== i))}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Choose what the card shows')} testID={`photo-adjust-${i}`} onPress={() => editFocus.open(i)}>
+                                                <Image accessibilityLabel={t('Post photo')} source={{ uri }} style={styles.editPhotoImg} />
+                                            </Pressable>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo from the post')} style={styles.editPhotoRemove} onPress={() => { setEditPhotos(prev => prev.filter((_, j) => j !== i)); editFocus.removeAt(i); }}>
                                                 <Text style={styles.editPhotoRemoveText}>✕</Text>
                                             </Pressable>
                                         </View>
@@ -2214,6 +2224,13 @@ function PostDetailModal() {
                                     </Pressable>
                                 )}
                             </View>
+                            {editPhotos.length > 0 ? <Text style={styles.editPhotoHint}>{t('Tap a photo to choose what its card shows.')}</Text> : null}
+                            <PhotoFocusAdjust
+                                uri={editFocus.adjusting !== null ? editPhotos[editFocus.adjusting] ?? null : null}
+                                focus={editFocus.adjusting !== null ? editFocus.at(editFocus.adjusting) : null}
+                                onCancel={editFocus.close}
+                                onDone={(f) => { if (editFocus.adjusting !== null) editFocus.setAt(editFocus.adjusting, f); editFocus.close(); }}
+                            />
 
                             {/* Location — same controls as Create (My location + Drop a pin modal) */}
                             <ListingLocationRow

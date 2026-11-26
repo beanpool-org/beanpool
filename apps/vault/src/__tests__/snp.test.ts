@@ -163,6 +163,7 @@ describe('the evidence bytes and the boot check\'s lines', () => {
         expect(lines[0]).toBe('report version 5, policy 0x30000 (debug off, migration agent off), VMPL 0');
         expect(lines[1]).toBe('signer VCEK (the chip\'s own key)');
         expect(lines[2]).toBe('reported TCB bootloader 4, tee 0, snp 29, microcode 222');
+        expect(lines[5]).toMatch(/^chip [0-9a-f]{8}…; CPUID family 0x[0-9a-f]+, model 0x[0-9a-f]+$/);
         const debug = probeShapedReport(Buffer.alloc(64));
         debug.writeBigUInt64LE(0x30000n | (1n << 19n) | (1n << 18n), 0x08);
         expect(describeSnpReport(readSnpReport(debug))[0]).toContain('debug ON, migration agent ON');

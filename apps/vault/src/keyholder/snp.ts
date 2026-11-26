@@ -219,5 +219,7 @@ export function describeSnpReport(r: SnpReport): string[] {
         `reported TCB ${tcb(r.reportedTcb)}`,
         `committed TCB ${tcb(r.committedTcb)}; launch TCB ${tcb(r.launchTcb)}`,
         `measurement ${r.measurement.toString('hex')}`,
+        // The custodian's tool names a chip it has not seen by these 8 characters (--accept-new-machine): compare them.
+        `chip ${r.chipId.toString('hex').slice(0, 8)}…; CPUID family 0x${r.cpuid.family.toString(16)}, model 0x${r.cpuid.model.toString(16)}`,
     ];
 }

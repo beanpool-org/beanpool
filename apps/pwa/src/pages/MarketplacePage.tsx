@@ -115,6 +115,7 @@ import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
+import { PhotosLeftOut, pickedPostPhotos, usePhotosLeftOut } from '../components/PostPhotoPicker';
 import { readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
 
 /**
@@ -953,6 +954,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editItemLoading, setEditItemLoading] = useState(false);
     const editPriceRef = useRef<HTMLInputElement>(null);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
+    const [editPhotosLeftOut, noteEditPhotosLeftOut] = usePhotosLeftOut(editPhotos.length);
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [editInShop, setEditInShop] = useState<boolean>(false);
     const [saving, setSaving] = useState(false);
@@ -3619,34 +3621,24 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 <input
                                                     type="file"
                                                     accept="image/*"
+                                                    multiple
                                                     className="hidden"
                                                     onChange={(e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (!file) return;
-                                                        const reader = new FileReader();
-                                                        reader.onload = () => {
-                                                            const img = new Image();
-                                                            img.onload = () => {
-                                                                const canvas = document.createElement('canvas');
-                                                                const max = 800;
-                                                                let w = img.width, h = img.height;
-                                                                if (w > max || h > max) {
-                                                                    if (w > h) { h = Math.round(h * max / w); w = max; }
-                                                                    else { w = Math.round(w * max / h); h = max; }
-                                                                }
-                                                                canvas.width = w; canvas.height = h;
-                                                                canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-                                                                setEditPhotos([...editPhotos, canvas.toDataURL('image/jpeg', 0.7)]);
-                                                            };
-                                                            img.src = reader.result as string;
-                                                        };
-                                                        reader.readAsDataURL(file);
+                                                        // Several in one go, up to the room left, each through the same 800 px redraw, in the order picked.
+                                                        const files = Array.from(e.target.files ?? []);
                                                         e.target.value = '';
+                                                        if (files.length === 0) return;
+                                                        const before = editPhotos.length;
+                                                        void pickedPostPhotos(files, 5 - before).then((picked) => {
+                                                            if (picked.photos.length > 0) setEditPhotos(prev => [...prev, ...picked.photos].slice(0, 5));
+                                                            noteEditPhotosLeftOut(picked.leftOut, Math.min(5, before + picked.photos.length));
+                                                        });
                                                     }}
                                                 />
                                             </label>
                                         )}
                                     </div>
+                                    <PhotosLeftOut leftOut={editPhotosLeftOut} />
                                 </div>
 
                                 {/* Save/Cancel */}

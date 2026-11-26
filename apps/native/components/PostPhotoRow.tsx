@@ -1,6 +1,7 @@
 /**
- * A listing's photos while it is being written: each one with a ✕ to take it off, and a + that adds one (utils/post-photo.ts:
- * Camera or Gallery, nothing asked of the phone until one is tapped), up to the five a listing holds. The edit form's row
+ * A listing's photos while it is being written: each one with a ✕ to take it off, and a + that adds photos (utils/post-photo.ts:
+ * one from the Camera, or several in one go from Gallery or Browse files up to the room left, nothing asked of the phone until
+ * one is tapped), up to the five a listing holds. The edit form's row
  * (app/post/[id].tsx), for a composer that keeps its photos in a list of data URLs.
  */
 import React from 'react';

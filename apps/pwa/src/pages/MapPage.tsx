@@ -77,6 +77,7 @@ import { ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestion
 import { marked, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
+import { PhotosLeftOut, pickedPostPhotos, usePhotosLeftOut } from '../components/PostPhotoPicker';
 import type { ComposerDraft } from '../tools/builder';
 import { linkForumThing } from '../lib/forum';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
@@ -426,6 +427,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [newPostReachPeers, setNewPostReachPeers] = useState<string[]>([]);
     const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
+    const [photosLeftOut, notePhotosLeftOut] = usePhotosLeftOut(newPostPhotos.length);
     const [composerShop, setComposerShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [composerInShop, setComposerInShop] = useState(false);
     const cancelDraftShopRef = useRef<(() => void) | null>(null);
@@ -2290,33 +2292,24 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <input
                                 type="file"
                                 accept="image/*"
+                                multiple
                                 className="hidden"
                                 onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (!file) return;
-                                    const reader = new FileReader();
-                                    reader.onload = () => {
-                                        const img = new Image();
-                                        img.onload = () => {
-                                            const canvas = document.createElement('canvas');
-                                            const MAX = 800;
-                                            let w = img.width, h = img.height;
-                                            if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
-                                            else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
-                                            canvas.width = w; canvas.height = h;
-                                            canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-                                            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                                            setNewPostPhotos(prev => [...prev.slice(0, 4), dataUrl]);
-                                        };
-                                        img.src = reader.result as string;
-                                    };
-                                    reader.readAsDataURL(file);
+                                    // Several in one go, up to the room left, each through the same 800 px redraw, in the order picked.
+                                    const files = Array.from(e.target.files ?? []);
                                     e.target.value = '';
+                                    if (files.length === 0) return;
+                                    const before = newPostPhotos.length;
+                                    void pickedPostPhotos(files, 5 - before).then((picked) => {
+                                        if (picked.photos.length > 0) setNewPostPhotos(prev => [...prev, ...picked.photos].slice(0, 5));
+                                        notePhotosLeftOut(picked.leftOut, Math.min(5, before + picked.photos.length));
+                                    });
                                 }}
                             />
                         </label>
                     )}
                 </div>
+                <PhotosLeftOut leftOut={photosLeftOut} />
                 <p className={`text-xs font-semibold mt-2 uppercase tracking-wide ${required && validationErrors.has('photos') && newPostPhotos.length === 0 ? 'text-red-500' : 'text-nature-400'}`}>
                     {newPostPhotos.length === 0
                         ? (required ? t('0/5 photos (at least 1 required)') : t('0/5 photos (optional)'))

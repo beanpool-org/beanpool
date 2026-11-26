@@ -1,5 +1,5 @@
 /**
- * Several photos picked in one go (Marty, 26 Nov 2026, from a first post on Byron: "she had to go back in to gallery 3 times
+ * Several photos picked in one go (Marty, 26 Nov 2026, from a member's first post: "she had to go back in to gallery 3 times
  * to select 3 photos. bad UX"). The room a post, an event or a Local knowledge page has left decides how many it keeps: the
  * first ones, in the order they were picked, and the member is told plainly how many were left out. One rule for the phone
  * (apps/native/utils/post-photo.ts askForPostPhotos) and the web app (apps/pwa/src/components/PostPhotoPicker.tsx

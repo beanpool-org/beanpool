@@ -118,11 +118,12 @@ function ChatPhotoPagerModal({ photos, start, onClose }: { photos: readonly stri
     const pager = useRef<ScrollView>(null);
     const last = photos.length - 1;
     const shown = Math.max(0, Math.min(last, at));
+    const shownRef = useRef(shown);
+    shownRef.current = shown;
     // contentOffset places the first page on iOS; Android can miss it on the first layout, and a turned phone changes the page
-    // width: place the page being viewed again whenever the width is known or changes.
+    // width: place the page being viewed again whenever the width is known or changes (not on each swipe, which moved it).
     useEffect(() => {
-        if (width > 0) pager.current?.scrollTo({ x: shown * width, animated: false });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (width > 0) pager.current?.scrollTo({ x: shownRef.current * width, animated: false });
     }, [width]);
     const onSettled = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
         if (width <= 0) return;
@@ -159,7 +160,7 @@ function ChatPhotoPagerModal({ photos, start, onClose }: { photos: readonly stri
                         borderRadius: 24, backgroundColor: colors.overlay.imageViewerCloseBg, alignItems: 'center', justifyContent: 'center',
                     }}
                 >
-                    <Text style={{ color: colors.text.inverse, fontSize: 14, fontWeight: '800' }}>{`${shown + 1} / ${photos.length}`}</Text>
+                    <Text style={{ color: colors.text.inverse, fontSize: 14, fontWeight: '800' }}>{shown + 1} / {photos.length}</Text>
                 </View>
                 <ViewerClose onClose={onClose} />
             </View>

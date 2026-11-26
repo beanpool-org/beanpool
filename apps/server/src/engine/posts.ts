@@ -2,6 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
+import { photoFocusList, storedPhotoFocus, type PhotoFocus } from '@beanpool/core';
 import { POLL_DAYS_DEFAULT, isLongPollDays, pollDaysAllowed, formatHundredths, isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor, FORUM_LIMITS } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { pollLineReportWaitsSql, takeBackPollLine } from './poll-other.js';
@@ -163,6 +164,26 @@ export function writePostPhotoRows(id: string, next: readonly PhotoColumns[], no
 }
 
 export const POST_PHOTO_FORMAT_ERROR = word('Each photo must be a JPEG, PNG or WebP image');
+
+/**
+ * `posts.photo_focus` after an edit, or `undefined` to leave it as it is. An edit that sends `photoFocus` sets it, for the
+ * photos the post will have (held as on a create). One that changes the photos without it (an app from before focus points)
+ * keeps each photo's focus with that photo: a photo handed back unchanged (`keptFrom`, its old slot) keeps its own, a new one
+ * has none. One that names neither leaves it.
+ */
+export function photoFocusOnEdit(
+    existing: ReadonlyArray<PhotoFocus | null> | null,
+    sent: unknown,
+    keptFrom: ReadonlyArray<number | null> | null,
+    photoCount: number,
+): string | null | undefined {
+    const count = Math.min(photoCount, 5);
+    if (sent !== undefined) return storedPhotoFocus(photoFocusList(sent, count));
+    if (!keptFrom) return undefined;
+    const carried = keptFrom.slice(0, count).map((slot) => (slot === null ? null : existing?.[slot] ?? null));
+    return storedPhotoFocus(carried);
+}
+
 export const POST_ID_TAKEN_ERROR = 'A new post needs an id nothing else has. Send it without one and this community makes one.';
 export const POST_ID_SHAPE_ERROR = 'A post id is up to 128 lowercase letters, digits, dots, dashes and underscores. Send it without one and this community makes one.';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
@@ -634,6 +655,11 @@ export function createPost(
         knowledge?: KnowledgeColumns;
         /** The photos were charged to their sender's photo budget already: a Local knowledge suggestion's, at its approval. */
         photosPaidFor?: boolean;
+        /**
+         * Each photo's focus, beside `photos` in the same order, raw: held to two numbers 0 to 1 each, a bad one that photo's
+         * none (@beanpool/core photoFocusList). An app that sends none makes the post as before: every card's own crop.
+         */
+        photoFocus?: unknown;
     },
 ): MarketplacePost | null {
     if ((type === 'knowledge') !== !!options?.knowledge) throw new Error(KNOWLEDGE_ONLY_BY_PUBLISH);
@@ -895,6 +921,8 @@ export function createPost(
     // their enterprise charges the keeper who sent the photos, as its edit and its logo do, never the enterprise.
     // A suggestion's photos, approved as a page's, were charged to their sender when sent (photosPaidFor): never twice.
     const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.createdBy ?? authorPublicKey, options?.photosPaidFor ? 0 : undefined);
+    // The part of each photo its cards keep (posts.photo_focus): one per photo kept, none for a poll, which keeps no photo.
+    const photoFocus = storedPhotoFocus(photoFocusList(options?.photoFocus, photoColumns.length));
 
     // A typed tag's week is each listing's own (engine/free-tags.ts): this listing's words start theirs now, and a stamp left
     // under its id that no pass saw go is marked gone first, so it starts again too.
@@ -941,8 +969,8 @@ export function createPost(
             event_repeat, event_repeat_until, event_repeat_skips,
             lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions,
             knowledge_sources, knowledge_place, knowledge_lang, knowledge_checked_at,
-            units_left, lot_price_c, lot_units
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            units_left, lot_price_c, lot_units, photo_focus
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, price_c, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -973,6 +1001,7 @@ export function createPost(
             options?.knowledge?.lang ?? null,
             options?.knowledge?.checkedAt ?? null,
             items.units_left, items.lot_price_c, items.lot_units,
+            photoFocus,
         );
 
         if (photoColumns.length > 0) {
@@ -1433,6 +1462,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         delete updates.lat;
         delete updates.lng;
         delete updates.photos;
+        delete updates.photoFocus;
         delete updates.category;
         delete updates.priceType;
         delete updates.repeatable;
@@ -1594,6 +1624,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const nextShop = shopOnEdit(existingPost, (updates as { shopId?: unknown }).shopId);
 
     let uploadPhotoBytes: number | undefined;
+    // Each photo of the edit's list: the slot of this post's photo it hands back unchanged (its URL), or null for a new one.
+    let keptFrom: Array<number | null> | null = null;
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
         if (existingPost.photos && existingPost.photos.length > 0 && updates.photos.length === 0) {
             throw new Error(word('Add a photo first'));
@@ -1624,14 +1656,17 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
                     return data ? [[r.order_num, data] as [number, string]] : [];
                 })
         );
+        const slots: Array<number | null> = [];
         updates.photos = updates.photos.map(p => {
             const m = typeof p === 'string' ? p.match(/(?:^|[a-z][a-z0-9+.-]*:\/\/[^/\s]*)\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)(?:\?.*)?$/i) : null;
             if (m && m[1] === id) {
                 const data = existingByOrder.get(Number(m[2]));
-                if (data) return data;
+                if (data) { slots.push(Number(m[2])); return data; }
             }
+            slots.push(null);
             return p;
         });
+        keptFrom = slots;
         validatePostPhotos(updates.photos);
     }
 
@@ -1741,6 +1776,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const newKeywords = postSearchKeywords(newTitle, newDesc, newCat, newTags, newFreeTags);
     fields.push('search_keywords = ?');
     values.push(newKeywords);
+    const nextFocus = photoFocusOnEdit(existingPost.photoFocus ?? null, (updates as { photoFocus?: unknown }).photoFocus,
+        keptFrom, Array.isArray(updates.photos) ? updates.photos.length : (existingPost.photos?.length ?? 0));
+    if (nextFocus !== undefined) { fields.push('photo_focus = ?'); values.push(nextFocus); }
 
     values.push(id, authorPublicKey);
 

@@ -5924,6 +5924,8 @@ export function createPost(
         beforeWrite?: () => void;
         /** `assistant:<grant id>` for an owner's AI assistant (engine/posts.ts, posts.created_via). */
         createdVia?: string;
+        /** Each photo's focus, beside `photos`, raw (engine/posts.ts; @beanpool/core photoFocusList). */
+        photoFocus?: unknown;
     }
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite

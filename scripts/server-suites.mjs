@@ -491,6 +491,7 @@ export const SUITES = [
     'test-photo-upload-budget',
     'test-photo-values-own-only',
     'test-market-photo-required',
+    'test-photo-focus',
     'test-api-headers-and-feed-etag',
     'test-directory-publisher',
     'test-directory-hold-back',

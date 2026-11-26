@@ -100,9 +100,12 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         expect(picSrc).toMatch(/contentPosition=\{\s*contentPosition\s*\}/);
         expect(picSrc).toMatch(/MARKET_GRID_CROP[^=]*=\s*\{\s*top:\s*['"]33%['"],\s*left:\s*['"]50%['"]\s*\}/);
         expect(picSrc).not.toMatch(/contentPosition\s*=\s*\{\s*top/);
-        const crops = marketSrc.match(/contentPosition=\{MARKET_GRID_CROP\}/g) ?? [];
+        // With no focus point set the grid card keeps MARKET_GRID_CROP and the list photo stays centred (photo focus, Marty
+        // 26 Nov 2026: utils/photo-focus.ts cardContentPosition hands back its fallback; utils/__tests__/photo-focus.test.ts).
+        const crops = marketSrc.match(/MARKET_GRID_CROP\)\}/g) ?? [];
         expect(crops.length).toBe(1);
-        expect(marketSrc).toMatch(/size="grid"\s+contentPosition=\{MARKET_GRID_CROP\}/);
+        expect(marketSrc).toMatch(/size="grid"\s+contentPosition=\{cardContentPosition\(item, picture, coverImage, MARKET_GRID_CROP\)\}/);
+        expect(marketSrc).toMatch(/size="thumb"\s+contentPosition=\{cardContentPosition\(item, picture, coverImage\)\}/);
     });
 
     it('grid card moves RECURRING under the picture into the text block (market-card-43; the four-row block since PG2)', () => {

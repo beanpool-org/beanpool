@@ -10,6 +10,7 @@ import { beansAmount, sentence, withPin, type HomeMarketItem } from '../../utils
 import { copyPriceLine, eventCopyOf, freePriceWords, isHundredths, perItemLine, perItemOf, t } from '@beanpool/core';
 import { homeStyles, onNode } from './HomeParts';
 import { MARKET_TILE_CROP, marketTileStyles as tiles } from './market-tile-styles';
+import { focusContentPosition } from '../../utils/photo-focus';
 
 /**
  * "New in the Market" as picture tiles (DESIGN-onboarding-home-landing-fable.md §4.1 item 5, §4.4, slice S8): two tiles a
@@ -85,7 +86,7 @@ function MarketTile({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketI
                     photo={onNode(nodeUrl, p.photoUrl || p.bannerUrl)}
                     style={tiles.fill}
                     contentFit="cover"
-                    contentPosition={MARKET_TILE_CROP}
+                    contentPosition={p.photoUrl && p.photoFocus ? focusContentPosition(p.photoFocus) : MARKET_TILE_CROP}
                     accessibilityIgnoresInvertColors
                     fallback={<CategoryTile category={p.category} kind="listing" size="grid" />}
                 />

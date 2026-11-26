@@ -348,6 +348,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
         units_left: null, // a price for each one (per-item prices, slice P2): the count, and the price for all of them with its number;
         lot_price_c: null, // all three NULL on a listing priced any other way
         lot_units: null,
+        photo_focus: null, // each photo's focus (core photo-focus.ts): none on a listing whose photos were never adjusted
     };
     const directNeed = (extra: Record<string, unknown> = {}) => offer({
         id: 'post-d', type: 'need', title: 'Lift to the station', audienceScope: 'direct', targetPubkey: ME, assignedTo: ME, ...extra,
@@ -428,6 +429,29 @@ describe('every column the node sends survives the write, on a sync and on a pus
         await getPost('post-g');
         await vi.waitFor(() => expect(row('post-g').title).toBe('v2'));
         expect(row('post-g')).toEqual({ ...GROUP_ROW, title: 'v2', updated_at: LATER });
+    });
+
+    it("each photo's focus survives a sync, a push, an edit's sync and an opened listing's refresh; one the node clears clears here", async () => {
+        const focus = [{ x: 0.25, y: 0.9 }];
+        const FOCUSED = { ...GROUP_ROW, photo_focus: JSON.stringify(focus) };
+        await applyDelta({ posts: [groupOffer({ photoFocus: focus })] });
+        expect(row('post-g')).toEqual(FOCUSED);
+        // A push goes through the same writer (writeSyncedPost).
+        sql.exec('DELETE FROM posts');
+        await applyDelta({ liveChanges: [{ kind: 'upsert', post: groupOffer({ photoFocus: focus }) as any, created: true }] });
+        expect(row('post-g')).toEqual(FOCUSED);
+        // An edit that leaves the photos alone: the node still sends the focus, and the row keeps it.
+        await applyDelta({ posts: [groupOffer({ photoFocus: focus, title: 'Box trailer (caged)', updatedAt: LATER })] });
+        expect(row('post-g')).toEqual({ ...FOCUSED, title: 'Box trailer (caged)', updated_at: LATER });
+        // Opening the listing refreshes it (refreshCachedPost): a focus moved on the web lands here though nothing else changed.
+        const moved = [{ x: 0.5, y: 0 }];
+        fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => [groupOffer({ photoFocus: moved, title: 'Box trailer (caged)', updatedAt: LATER })] });
+        await getPost('post-g');
+        await vi.waitFor(() => expect(row('post-g').photo_focus).toBe(JSON.stringify(moved)));
+        // The node cleared it (Reset on every photo): the next sync leaves the row with none, every card's own crop again.
+        const CLEARED_AT = '2026-09-24T03:00:00.000Z';
+        await applyDelta({ posts: [groupOffer({ title: 'Box trailer (caged)', updatedAt: CLEARED_AT })] });
+        expect(row('post-g')).toEqual({ ...GROUP_ROW, title: 'Box trailer (caged)', updated_at: CLEARED_AT });
     });
 
     describe('reach_peers: the node sends it to the author alone and never in a broadcast', () => {

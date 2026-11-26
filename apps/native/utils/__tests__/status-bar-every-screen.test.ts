@@ -348,6 +348,7 @@ const DARK_MODALS: Record<string, string> = {
     'components/chat/ChatPhoto.tsx': `${PHOTO} (a DM's or the guest chat's photo)`,
     'app/chat/[id].tsx': `${PHOTO} (a group chat's photo)`,
     'components/MemberAvatar.tsx': `${PHOTO} (a member's own photo, tapped)`,
+    'components/PhotoFocusAdjust.tsx': `${PHOTO}, under the scrim (a post's photo, choosing what its card shows: the post form and edit)`,
 };
 
 /** Every RN-style Modal block in the app's files: its tag (Modal, or LightBarModal), its opening tag and what it holds. */

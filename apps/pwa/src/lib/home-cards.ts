@@ -17,7 +17,7 @@
  * browser (lib/home-cache.ts); the last write wins by `updatedAt`.
  */
 
-import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
+import type { CircleCard, CircleDemand, PhotoFocus, ShownFromLine } from '@beanpool/core';
 import { copyFromLine, eventCopyOf, freePriceWords, formatHundredths } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
@@ -167,6 +167,8 @@ export interface HomeFind {
 
 export interface HomeMarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; price_c?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    /** The focus of its photo, the part the tile keeps (core photo-focus.ts): only on a row whose photo has one. */
+    photoFocus?: PhotoFocus | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean; shownFrom?: ShownFromLine; shownPrice?: string;
     /** An Offer priced for each one (core per-item.ts): only on such a row, so every other row and an older node's read as they did. */
@@ -178,7 +180,7 @@ export interface HomeMarketItem {
  * One row of "Asked near you" (apps/server routes/home-answer.ts NeedItem): a neighbour's open Need, with the Market card's own
  * fields for the row. `credits` only where Beans are on; `priceType` only when the post has one.
  */
-export interface HomeNeedItem { id: string; title: string; category: string; price_c?: number; priceType?: string; createdAt: string; photoUrl: string | null }
+export interface HomeNeedItem { id: string; title: string; category: string; price_c?: number; priceType?: string; createdAt: string; photoUrl: string | null; photoFocus?: PhotoFocus | null }
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
 export interface HomeEventItem {

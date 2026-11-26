@@ -47,6 +47,7 @@ import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
+import { photoFocusList, storedPhotoFocus } from '@beanpool/core';
 import { DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
 import { chatLetsInKey, letInByFacts, memberTookPart, type LetInChat, type LetInDeal, type LetInFacts } from '@beanpool/core';
 import type { StandingAsk, StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
@@ -518,8 +519,10 @@ const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
  * so Your deals and the item page say "3 × Solar Panels". A copy at 6 has no such column: it is cleared and read again with it.
  * 8 (the forum on the phone, slice F3, DESIGN-forums-fable.md §18, §20): a new cache table, `forum_kept` (utils/forum-kept.ts),
  * the forum's front, lists and topics as the node answered them. A copy at 7 is cleared and read again with it, as the rule says.
+ * 9 (photo focus points, Marty 26 Nov 2026): `posts.photo_focus`, each photo's focus as the node holds it (@beanpool/core
+ * photo-focus.ts), NULL on every listing with none. A copy at 8 has no such column: it is cleared and read again with it.
  */
-export const COPY_SCHEMA = 8;
+export const COPY_SCHEMA = 9;
 
 /** The tables that are a copy of the node's: clearDB drops them, and so does an open of a copy below COPY_SCHEMA. */
 const CACHE_TABLES = [
@@ -674,7 +677,9 @@ async function _doInitDB(database: SQLite.SQLiteDatabase, clear: CopyClear | nul
             -- A price for each one (core per-item.ts): how many can be taken now, and the price for all of them with the number it is for.
             units_left INTEGER,
             lot_price_c INTEGER,
-            lot_units INTEGER
+            lot_units INTEGER,
+            -- Each photo's focus, the part of it a card keeps (core photo-focus.ts storedPhotoFocus): JSON, or NULL for none.
+            photo_focus TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -1686,7 +1691,7 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
     }
     const p = posts[0];
     const before = await database.getFirstAsync<any>(
-        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable, tags, free_tags, pinned_until, pinned_at FROM posts WHERE id = ?', [id]
+        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, photo_focus, lendable, tags, free_tags, pinned_until, pinned_at FROM posts WHERE id = ?', [id]
     );
     await acquireSyncLock();
     try {
@@ -1708,6 +1713,7 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
         (before.updated_at || null) !== (p.updated_at || p.updatedAt || null) ||
         (before.lendable ? 1 : 0) !== (p.lendable ? 1 : 0) ||
         (before.photos ?? null) !== syncedPhotosColumn(p) ||
+        (before.photo_focus ?? null) !== syncedPhotoFocusColumn(p) ||
         (before.tags ?? '') !== syncedTagsColumn(p) ||
         (before.free_tags ?? '') !== syncedFreeTagsColumn(p) ||
         (before.pinned_until || null) !== (p.pinned_until || p.pinnedUntil || null) ||
@@ -3591,6 +3597,8 @@ export async function createPost(post: any) {
         lat: post.lat,
         lng: post.lng,
         photos: post.photos ? JSON.parse(post.photos) : undefined,
+        // Each photo's focus, beside them (core photo-focus.ts): sent only when the member set one.
+        ...(storedPhotoFocus(post.photoFocus) ? { photoFocus: post.photoFocus } : {}),
         repeatable: post.repeatable === 1,
         cashAlsoNeeded: post.cash_also_needed === 1,
         // #143 step 4 — per-listing reach. Omitted fields default to 'local' on the server.
@@ -3712,8 +3720,8 @@ export async function createPost(post: any) {
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     const tagsStr = post.tags ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : '';
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, photo_focus)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.price_c,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0,
@@ -3727,7 +3735,8 @@ export async function createPost(post: any) {
          post.targetGroupId || post.target_group_id || null,
          tagsStr,
          storedFreeTags(listingFreeTags(post)),
-         ...eventCacheColumns(post)]
+         ...eventCacheColumns(post),
+         storedPhotoFocus(answer?.post?.photoFocus ?? post.photoFocus)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
     // No notifications ask here (slice N2a): a first listing's named line is on Your deals, where the post lands
@@ -5279,6 +5288,8 @@ export async function updatePost(id: string, updates: any) {
         ...(hasReach ? { reach: updates.reach } : {}),
         ...((!hasReach || updates.reach === 'peers') && reachPeers !== undefined ? { reachPeers } : {}),
         photos,
+        // Each photo's focus (core photo-focus.ts): named only when the edit screen sends it; null clears it.
+        ...(updates.photoFocus !== undefined ? { photoFocus: updates.photoFocus } : {}),
         // A listing priced for each one (§4.6): the count, the count the screen read, and the price for all of them
         // (`{ price_c }` sets it, null clears it, absent keeps it).
         ...(updates.price_type === 'each' ? {
@@ -5301,6 +5312,11 @@ export async function updatePost(id: string, updates: any) {
     if (photos !== undefined) {
         extraCols.push('photos = ?');
         extraArgs.push(photos && photos.length > 0 ? JSON.stringify(photos) : null);
+    }
+    // As the node now holds it (its answer), or as sent when the answer has no post.
+    if (updates.photoFocus !== undefined || (photos !== undefined && serverPost)) {
+        extraCols.push('photo_focus = ?');
+        extraArgs.push(storedPhotoFocus(serverPost ? serverPost.photoFocus : updates.photoFocus));
     }
     if (cashAlsoNeeded !== undefined) {
         extraCols.push('cash_also_needed = ?');
@@ -5573,7 +5589,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
     await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, price_c, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at, units_left, lot_price_c, lot_units) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, price_c, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at, units_left, lot_price_c, lot_units, photo_focus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?, ?, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -5630,8 +5646,18 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.pinnedUntil || p.pinned_until || null,
             p.pinnedAt || p.pinned_at || null,
             ...syncedItemColumns(p),
+            syncedPhotoFocusColumn(p),
         ]
     );
+}
+
+/**
+ * The `photo_focus` column for a listing from the node: each photo's focus as it holds it (core photo-focus.ts), held to the
+ * rule; NULL for one with none, or from a node older than focus points, which then reads as every card's own crop.
+ */
+function syncedPhotoFocusColumn(p: any): string | null {
+    const count = Array.isArray(p.photos) ? p.photos.length : 5;
+    return storedPhotoFocus(photoFocusList(p.photoFocus, count));
 }
 
 /**

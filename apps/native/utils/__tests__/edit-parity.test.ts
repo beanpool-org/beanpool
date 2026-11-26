@@ -170,6 +170,8 @@ const PHONE_CREATE_FIELDS: readonly FieldRule[] = [
     { field: 'freeTags', createPattern: /freeTags=\{postFreeTags\}/, editPattern: /freeTags=\{editFreeTags\}/, dbUpdatePattern: /freeTags !== undefined \? \{ freeTags \}/, mode: 'editable' },
     { field: 'description', createPattern: /accessibilityLabel=\{t\('Description'\)\}/, editPattern: /accessibilityLabel=\{t\('Description'\)\}/, dbUpdatePattern: /description:\s*updates\.description/, mode: 'editable' },
     { field: 'photos', createPattern: /setPostPhotos\(/, editPattern: /setEditPhotos\(/, dbUpdatePattern: /\bphotos,/, mode: 'editable' },
+    // Each photo's focus (core photo-focus.ts): the Adjust screen on both forms, sent on an edit only when the member changed it.
+    { field: 'photoFocus', createPattern: /<PhotoFocusAdjust/, editPattern: /<PhotoFocusAdjust/, dbUpdatePattern: /updates\.photoFocus !== undefined \? \{ photoFocus: updates\.photoFocus \}/, mode: 'editable' },
     { field: 'lat', createPattern: /<ListingLocationRow/, editPattern: /<ListingLocationRow/, dbUpdatePattern: /hasLat \? \{ lat: updates\.lat \}/, mode: 'editable' },
     { field: 'lng', createPattern: /<ListingLocationRow/, editPattern: /<ListingPinDropModal/, dbUpdatePattern: /hasLng \? \{ lng: updates\.lng \}/, mode: 'editable' },
     { field: 'price_c', createPattern: /accessibilityLabel=\{t\('Price'\)\}/, editPattern: /value=\{editCredits\}/, dbUpdatePattern: /price_c:\s*updates\.price_c/, mode: 'editable' },

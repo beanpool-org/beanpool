@@ -18,6 +18,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { t, type EventCopy } from '@beanpool/core';
 import { EventCard } from './EventCard';
 import { MarketCardPicture } from './MarketCardPicture';
+import { cardContentPosition } from '../utils/photo-focus';
 import { CardChip, useCardShell } from './market-card-shell';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
 import { ListingCopyLine } from './ListingCopyLine';
@@ -96,6 +97,7 @@ function ListingPinCard({ post, copy, showsBeans, me, onOpen }: {
                 category={post.category}
                 kind="listing"
                 size="thumb"
+                contentPosition={cardContentPosition(post, picture, cover)}
                 imageStyle={shell.listPhoto}
                 tileBox={shell.listPhotoBox}
             />

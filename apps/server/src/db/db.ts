@@ -523,6 +523,11 @@ export function initSchema() {
         try { db.prepare(`ALTER TABLE posts ADD COLUMN ${column}`).run(); } catch { }
     }
 
+    // Born with photo focus points (Marty, 26 Nov 2026; @beanpool/core photo-focus.ts): one empty column on posts, NULL on every
+    // row that is there, which reads as no focus, every card's own crop. An addition, as K1's above: nothing is read, filled in
+    // or rewritten. On a fresh install it finds its column and does nothing.
+    try { db.prepare('ALTER TABLE posts ADD COLUMN photo_focus TEXT').run(); } catch { }
+
     // Born with Local knowledge's fixes (slice K5): one empty column on the waiting list, NULL on every row that is there. An
     // addition, as K1's above (Marty's pick 6, 11 Nov 2026): nothing is read, filled in or rewritten. A fix waiting from before
     // it (the test node only) has no recorded change, so it reads as the note alone. On a fresh install it finds its column.

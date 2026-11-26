@@ -38,6 +38,7 @@ import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
 import { toolHomeCardIds } from '../tools/index';
 import type { ShopHomeCard } from './shop';
+import type { PhotoFocus } from '@beanpool/core';
 import { eventHomeWhen } from './events';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords, isOwnInviteChange,
@@ -163,6 +164,8 @@ export interface HomeNeedsItem extends NeedsYouEntry { closesAt?: string }
 export interface HomeMarketItem {
     /** `price_c`: the price, whole hundredths of a Bean, only where Beans are on. */
     id: string; type: 'offer' | 'need'; title: string; category: string; price_c?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    /** The focus of its photo, the part the tile keeps (core photo-focus.ts): only on a row whose photo has one. */
+    photoFocus?: PhotoFocus | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean | null; shownFrom?: ShownFromLine | null; shownPrice?: string | null;
     /** An Offer priced for each one (core per-item.ts): only on such a row, so every other row and an older node's read as they did. */

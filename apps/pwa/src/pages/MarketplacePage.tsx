@@ -69,6 +69,8 @@ import {
 import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 // A price for each one: the price box's lines (slice P2; its own lines so a parallel slice's edits to the import above do not meet these).
 import { forumOn, perItemCard } from '@beanpool/core';
+import { PhotoFocusDialog } from '../components/PhotoFocusDialog';
+import { usePhotoFocusByPhoto } from '../lib/photo-focus';
 import { LISTING_AFTER_JOIN_WORDS } from '@beanpool/core';
 import { BeansText } from '../components/BeansText';
 import {
@@ -954,6 +956,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editItemLoading, setEditItemLoading] = useState(false);
     const editPriceRef = useRef<HTMLInputElement>(null);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
+    // Each photo's focus, the part its card keeps (core photo-focus.ts): held by the photo itself, so it goes wherever that photo
+    // goes in editPhotos (taken off, several picked at once), and the Adjust dialog opens on the photo, not its place. Sent only
+    // when the member changed a focus or took a photo off (`touched`), so an untouched edit leaves the node to keep each photo's.
+    const editFocus = usePhotoFocusByPhoto();
     const [editPhotosLeftOut, noteEditPhotosLeftOut] = usePhotosLeftOut(editPhotos.length);
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [editInShop, setEditInShop] = useState<boolean>(false);
@@ -3297,6 +3303,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         }
                                         setEditPhotos(selectedPost.photos || []);
                                         noteEditPhotosLeftOut(0, 0); // a list put in whole is no pick (review of #3391)
+                                        editFocus.resetFrom(selectedPost.photos || [], selectedPost.photoFocus); // with each photo's own focus
                                         editTagsFrom.current = postTagsOf(selectedPost.tags);
                                         setEditTags(editTagsFrom.current);
                                         editFreeTagsFrom.current = freeTagsOf(selectedPost.freeTags);
@@ -3606,9 +3613,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <div className="flex gap-2 flex-wrap">
                                         {editPhotos.map((photo, i) => (
                                             <div key={i} className="relative">
-                                                <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
                                                 <button
-                                                    onClick={() => setEditPhotos(editPhotos.filter((_, j) => j !== i))}
+                                                    type="button"
+                                                    data-testid={`photo-adjust-${i}`}
+                                                    onClick={() => editFocus.open(photo)}
+                                                    aria-label={t('Choose what the card shows')}
+                                                    className="block p-0 border-0 bg-transparent rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                >
+                                                    <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
+                                                </button>
+                                                <button
+                                                    onClick={() => { setEditPhotos(prev => prev.filter((_, j) => j !== i)); editFocus.removed(); }}
                                                     aria-label={t('Remove photo')}
                                                     className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bp-danger-fill hover:bg-bp-danger-hover border-none text-bp-danger-on text-[10px] flex items-center justify-center cursor-pointer shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-red-500"
                                                 >
@@ -3640,6 +3655,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         )}
                                     </div>
                                     <PhotosLeftOut leftOut={editPhotosLeftOut} />
+                                    {editPhotos.length > 0 && (
+                                        <p className="m-0 mt-1 text-sm text-nature-600 dark:text-nature-300">{t('Tap a photo to choose what its card shows.')}</p>
+                                    )}
+                                    {editFocus.adjusting !== null && editPhotos.includes(editFocus.adjusting) && (
+                                        <PhotoFocusDialog
+                                            src={editFocus.adjusting}
+                                            focus={editFocus.at(editFocus.adjusting)}
+                                            onCancel={editFocus.close}
+                                            onDone={(f) => {
+                                                const photo = editFocus.adjusting;
+                                                if (photo !== null) editFocus.setAt(photo, f);
+                                                editFocus.close();
+                                            }}
+                                        />
+                                    )}
                                 </div>
 
                                 {/* Save/Cancel */}
@@ -3696,6 +3726,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         ...(effectiveReach === 'peers' ? { reachPeers: editReachPeers } : {}),
                                                     } : {}),
                                                     photos: editPhotos,
+                                                    // Each photo's focus, only when the member changed one here (null clears it).
+                                                    ...(editFocus.touched ? { photoFocus: editFocus.forPhotos(editPhotos) } : {}),
                                                     ...(tagsChanged ? { tags: editTags } : {}),
                                                     ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
                                                     ...(shopId !== undefined ? { shopId } : {}),

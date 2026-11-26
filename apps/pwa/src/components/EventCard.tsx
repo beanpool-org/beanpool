@@ -23,6 +23,7 @@
  */
 
 import { Fragment, useEffect, useState } from 'react';
+import { cardObjectPosition } from '../lib/photo-focus';
 import { copyCardLine, copyFromLine, eventCopyOf, eventNoticesComing, notifyEventLineWords, pinLive, t, upperCase, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getConversations, getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import { onConversationRead } from '../lib/conversation-read';
@@ -447,6 +448,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                             photo={firstPhoto}
                             alt={p.title}
                             className={`${LIST_PHOTO_FILL} object-cover`}
+                            style={cardObjectPosition(p, firstPhoto)}
                             fallback={<span className={LIST_PHOTO_FILL}><CategoryTile kind="event" size="thumb" /></span>}
                         />
                     </span>
@@ -631,7 +633,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                             photo={firstPhoto}
                             alt={p.title}
                             className="w-full h-full object-cover"
-                            style={GRID_PHOTO_CROP}
+                            style={cardObjectPosition(p, firstPhoto, GRID_PHOTO_CROP)}
                             fallback={<CategoryTile kind="event" size="grid" />}
                         />
                         <span className="absolute top-2 left-2">
@@ -723,6 +725,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                             src={photo}
                             alt={p.title}
                             className="object-cover rounded-xl bg-nature-100 dark:bg-nature-900 w-full h-[110px] mb-1"
+                            style={cardObjectPosition(p, photo)}
                         />
                     ) : (
                         <div className="overflow-hidden rounded-xl w-full h-[110px] mb-1">

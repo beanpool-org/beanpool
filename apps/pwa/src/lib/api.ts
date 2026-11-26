@@ -3,7 +3,7 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
-import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool/core';
+import type { CircleCard, CircleDemand, PhotoFocus, ShownFromLine, PinDays } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { crossOriginLanguageHeaders, languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
@@ -1858,6 +1858,8 @@ export interface MarketplacePost {
     /** How far from the point a read gave (`lat`/`lng`), as the node measured it: km, null for a listing with no place. */
     distanceKm?: number | null;
     photos?: string[];
+    /** Each photo's focus, the part a card's crop keeps, beside `photos` (@beanpool/core photo-focus.ts). Only on a post with one. */
+    photoFocus?: Array<PhotoFocus | null>;
     tags?: string | string[];
     /** The tags its author typed, absent for none (DESIGN-tags-free-entry-fable.md §2). */
     freeTags?: string[];
@@ -2052,6 +2054,8 @@ export async function createMarketplacePost(post: {
     lat?: number;
     lng?: number;
     photos?: string[];
+    /** Each photo's focus, beside `photos` (@beanpool/core photo-focus.ts): sent only when the member set one; null clears it on an edit. */
+    photoFocus?: Array<PhotoFocus | null> | null;
     repeatable?: boolean;
     cashAlsoNeeded?: boolean;
     tags?: string[];
@@ -2505,6 +2509,8 @@ export async function updateMarketplacePost(
         reach?: PostReach;
         reachPeers?: string[];
         photos?: string[];
+        /** Each photo's focus, beside `photos` (@beanpool/core photo-focus.ts): sent only when the member set one; null clears it on an edit. */
+        photoFocus?: Array<PhotoFocus | null> | null;
         tags?: string[];
         /** Named only when the member changed them: absent leaves them, [] clears them. */
         freeTags?: string[];
@@ -3473,6 +3479,8 @@ export async function treasuryPostEvent(treasury: string, body: {
     lat?: number;
     lng?: number;
     photos?: string[];
+    /** Each photo's focus, beside `photos` (@beanpool/core photo-focus.ts): sent only when the member set one; null clears it on an edit. */
+    photoFocus?: Array<PhotoFocus | null> | null;
     tags?: string[];
     freeTags?: string[];
     /** ISO UTC. The end is optional; the node sets start + 2 hours. */

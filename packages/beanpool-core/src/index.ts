@@ -195,6 +195,8 @@ export * from './invited-by.js';
 export * from './market-fill.js';
 export * from './market-order.js';
 export * from './market-card-shell.js';
+// A listing photo's focus: the part of it a card's crop keeps (Marty, 26 Nov 2026).
+export * from './photo-focus.js';
 export * from './pins.js';
 export * from './fresh-banner.js';
 export * from './map-stack.js';

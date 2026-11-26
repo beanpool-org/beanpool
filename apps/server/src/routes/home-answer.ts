@@ -76,6 +76,7 @@ import {
     type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder, firstStepsOver, homeCardType, type HomeNodeFacts,
     type HomeLearnCard, clipName, servedName, WAY_BACK_ASKS,
 } from '@beanpool/core';
+import { photoFocusAt, type PhotoFocus } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import {
@@ -294,6 +295,8 @@ export interface HomeMe {
 
 export interface MarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; price_c?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
+    /** The focus of its photo, the part the tile keeps (@beanpool/core photo-focus.ts): only on a row whose photo has one. */
+    photoFocus?: PhotoFocus;
     /** A member's copy of a listing (engine/event-copy.ts): where it is from, and its price there, in words. */
     shownCopy?: true; shownFrom?: ShownFrom; shownPrice?: string;
     /** An Offer priced for each one (core per-item.ts): its unit, how many can be taken now and its price for all of them. Only on such a row. */
@@ -305,7 +308,13 @@ export interface MarketItem {
  * One row of "Asked near you": a neighbour's open Need, with the Market card's own fields for the row (the category tile, the
  * title, the price line and how long ago). `credits` only where Beans are on; `priceType` only when the post has one.
  */
-export interface NeedItem { id: string; title: string; category: string; price_c?: number; priceType?: string; createdAt: string; photoUrl: string | null }
+export interface NeedItem { id: string; title: string; category: string; price_c?: number; priceType?: string; createdAt: string; photoUrl: string | null; photoFocus?: PhotoFocus }
+
+/** A Home row's photo focus (@beanpool/core photo-focus.ts): only where its first photo has one, so every other row reads as before. */
+function photoFocusField(p: { photos?: string[]; photoFocus?: Array<PhotoFocus | null> }): { photoFocus?: PhotoFocus } {
+    const focus = p.photos?.[0] ? photoFocusAt(p, 0) : null;
+    return focus ? { photoFocus: focus } : {};
+}
 /**
  * One line of "Coming up". `startLocal` and `tz` are the host's clock and its zone (DESIGN-event-times §4: the line reads the
  * place's clock, with its zone named only when it differs from the reader's); `online` an event with no place. Each is
@@ -1193,6 +1202,7 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
             id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
             ...(c.switches.beans ? { price_c: p.price_c } : {}),
             photoUrl: p.photos?.[0] ?? null,
+            ...photoFocusField(p),
             // Only where there is one, so a member's listing and every visitor's row read as before (test-home W3).
             ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
             ...(c.point ? { distanceKm: p.distanceKm ?? null } : {}),
@@ -1237,6 +1247,7 @@ function askedCard(c: Ctx): HomeCards['asked'] | undefined {
         ...(typeof p.priceType === 'string' && bounded(p.priceType, ID_CHARS) ? { priceType: p.priceType } : {}),
         createdAt: p.createdAt,
         photoUrl: p.photos?.[0] ?? null,
+        ...photoFocusField(p),
     }));
     return items.length ? { items } : undefined;
 }
@@ -1270,6 +1281,7 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
         id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
         ...(c.switches.beans ? { price_c: p.price_c } : {}),
         photoUrl: p.photos?.[0] ?? null,
+        ...photoFocusField(p),
         ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
         ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
         ...copyFieldsOf(p),

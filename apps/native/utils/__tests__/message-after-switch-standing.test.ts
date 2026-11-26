@@ -289,7 +289,7 @@ describe('a late answer from the community left', () => {
         await inApp(() => phone.toFront!());
         await settled();
         stands[HILLSIDE] = inUse;
-        await moved(WAYS.find((w) => w.asks)!, HILLSIDE);
+        await moved(WAYS.find((w) => w.way === 'a tapped notice')!, HILLSIDE);
         return async () => { go(); await settled(); };
     }
 
@@ -318,7 +318,7 @@ describe('a late answer from the community left', () => {
         const tap = message();
         await vi.waitFor(() => expect(phone.log).toEqual([`asked ${RIVERSIDE}`]));
         stands[HILLSIDE] = 'suspended';
-        await moved(WAYS.find((w) => w.asks)!, HILLSIDE);
+        await moved(WAYS.find((w) => w.way === 'a tapped notice')!, HILLSIDE);
         go();
         expect(await tap).toBe('existing across');
         expect(suspendedHere(ME, HILLSIDE)).toBe(true);

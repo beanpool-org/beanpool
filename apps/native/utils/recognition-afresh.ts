@@ -10,8 +10,10 @@
  * tabs), and the community now in use is asked; its answer then acts as at any start (a guest stays, a stranger it doesn't
  * know goes to the not-recognised screen).
  *
- * Only the one switch asks: a join that moves the phone before its redeem lands (Welcome's invite, the deep link's Switch &
- * Join) asks the recognition itself once the redeem is in, so a "not a member yet" asked mid-join never diverts it.
+ * Only the switches that bounce through Welcome ask: the one switch, and Settings' saved-community switch (app/(tabs)/settings.tsx
+ * handleSwitchNode). A join that moves the phone before its redeem lands (Welcome's invite, the deep link's Switch & Join) asks
+ * the recognition itself once the redeem is in, so a "not a member yet" asked mid-join never diverts it, and a guest using an
+ * invite on Welcome is never moved off it.
  *
  * No imports, so anything can ask. With no provider drawn (a test, a screen outside the root layout), it asks nothing.
  */

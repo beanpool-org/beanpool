@@ -16,7 +16,7 @@ import {
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance, refreshBalanceFromServer,
-    treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
+    treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor, treasuryTakeUp, getEnterpriseStatuses,
     fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, getListingItems, refreshPost,
     lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk, getReachablePeers,
 } from '../../utils/db';
@@ -27,6 +27,9 @@ import {
 } from '../../components/ListingFormFields';
 import { chatMoment, noteNotifyMoment, useScreenShowing } from '../../components/NotifyLine';
 import { PerItemTakeUp } from '../../components/PerItemTakeUp';
+// "Buy for {enterprise}": a keeper takes up a member's Offer priced for each one for the enterprise (stall slice 2).
+import { EnterpriseTakeUp } from '../../components/EnterpriseTakeUp';
+import { enterpriseTakeUpOffered, takeUpButtons, TAKE_UP_WORDS, type TakeUpAnswer, type TakeUpButton, type TakeUpEnterprise } from '@beanpool/core';
 import {
     carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
     perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
@@ -701,6 +704,8 @@ function PostDetailModal() {
     const [unreadCount, setUnreadCount] = useState<number>(0);
     const [reqUnreadCounts, setReqUnreadCounts] = useState<Record<string, number>>({});
     const [operatedTreasuries, setOperatedTreasuries] = useState<string[]>([]);
+    // Every enterprise by name and state, read only for a keeper on an Offer priced each where the node has the door (slice 2).
+    const [takeUpEnterprises, setTakeUpEnterprises] = useState<TakeUpEnterprise[]>([]);
     const [isConvenor, setIsConvenor] = useState(false);
     const [deletingAsConvenor, setDeletingAsConvenor] = useState(false);
 
@@ -1008,6 +1013,16 @@ function PostDetailModal() {
         return () => { cancelled = true; };
     }, [identity?.publicKey]);
 
+    // "Buy for {enterprise}" (stall slice 2) names each enterprise the reader keeps: read their names only when a button
+    // could show (a keeper, an Offer priced each, the node has the door), never for anyone else.
+    const takeUpCould = operatedTreasuries.length > 0 && enterpriseTakeUpOffered(nodeProfile?.features) && post?.type === 'offer' && post?.price_type === 'each';
+    useEffect(() => {
+        if (!takeUpCould) return;
+        let cancelled = false;
+        getEnterpriseStatuses().then((list) => { if (!cancelled) setTakeUpEnterprises(list); }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [takeUpCould]);
+
     // What a standing take-up can pay now (core standingRoomOf), read only from the node's own balance read: the phone's
     // cached getBalance reads floor 0 when its copy is missing or stale, and would disable Agree on a guess. Unknown until
     // that read lands, and when it fails: Agree stays and the node checks (DESIGN-standing-deals-upfront-fable §3).
@@ -1267,6 +1282,28 @@ function PostDetailModal() {
         } finally {
             setAccepting(false);
         }
+    };
+    // "Buy for {enterprise}" (stall slice 2): one per enterprise the reader keeps, by core's one rule (the web's too).
+    const takeUps = escrowOn ? takeUpButtons({ features: nodeProfile?.features, listing: post, me, keeperOf: operatedTreasuries, enterprises: takeUpEnterprises }) : [];
+    // A take-up for an enterprise refused because the listing moved on: read it again, so the keeper chooses on it as it is now.
+    const readListingAgain = () => {
+        refreshPost(post.id).catch(() => false);
+        requestSync().catch(console.error);
+    };
+    // The node answered a take-up for an enterprise: paid, or held, with where to find it (the enterprise's console, its deals).
+    const afterTakeUp = (b: TakeUpButton, answer: TakeUpAnswer) => {
+        readListingAgain();
+        if (answer.released) {
+            hapticSuccess();
+            Alert.alert(t('Payment Released ✅'), t('The beans have been paid to the member.'));
+            return;
+        }
+        hapticWarning();
+        // A short title the member knows from the console, the node's words in the message (utils/__tests__/alert-words-in-message).
+        Alert.alert(t('Release Payment'), answer.held ?? t(TAKE_UP_WORDS.fallback), [
+            { text: t('OK'), style: 'cancel' },
+            { text: t('Release Payment'), onPress: () => router.push({ pathname: '/treasury-manage', params: { publicKey: b.enterprise, name: b.name } }) },
+        ]);
     };
     // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
     const releaseRow = async (m: DealMoves) => {
@@ -2620,6 +2657,15 @@ function PostDetailModal() {
                                 </Text>
                             </Pressable>
                         )}
+                    </View>
+                )}
+
+                {/* "Buy for {enterprise}" (stall slice 2): a keeper takes this Offer up for the enterprise they keep, which pays the
+                    seller at once. Only where the node has the door and core's takeUpButtons says, as on the web. */}
+                {takeUps.length > 0 && (
+                    <View style={styles.otherPostActions}>
+                        <EnterpriseTakeUp listing={post} postId={post.id} title={post.title} sellerName={post.author_callsign || t('Peer')}
+                            buttons={takeUps} disabled={accepting} send={treasuryTakeUp} onListingMoved={readListingAgain} onDone={afterTakeUp} />
                     </View>
                 )}
 

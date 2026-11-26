@@ -85,6 +85,9 @@ import {
     ITEM_BOX_START, itemDealRow, itemDealTakenLine, itemSellerStock, itemTakeUpBox, itemTakeUpRefusalIn, type ItemBoxState,
 } from '@beanpool/core';
 import { PerItemTakeUp } from '../components/PerItemTakeUp';
+// "Buy for {enterprise}": a keeper takes up a member's Offer priced for each one for the enterprise (stall slice 2).
+import { takeUpButtons, type TakeUpAnswer, type TakeUpButton } from '@beanpool/core';
+import { EnterpriseTakeUp } from '../components/EnterpriseTakeUp';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     myNodeRoleOnce,
@@ -96,7 +99,7 @@ import {
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest, openDealIn,
     treasuryApprove, treasuryReject, treasuryComplete,
     signStandingStart, stopStandingDeal, lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
-    getMembers, getTreasury, getEnterpriseStatuses,
+    getMembers, getTreasury, getEnterpriseStatuses, treasuryTakeUp, type EnterpriseStatus,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, getReachablePeers, type Group, type PostReach, type ReachablePeer,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
@@ -657,6 +660,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const selectedPostRef = useRef<MarketplacePost | null>(null);
     selectedPostRef.current = selectedPost;
     const [inactiveEnterprises, setInactiveEnterprises] = useState<Map<string, { paused: boolean; status: string; name: string }>>(new Map());
+    // Every enterprise by name and state (the feed's statuses read), for "Buy for {enterprise}" on a listing (stall slice 2).
+    const [enterpriseNames, setEnterpriseNames] = useState<EnterpriseStatus[]>([]);
     const [selectedPostEnterprise, setSelectedPostEnterprise] = useState<{ paused: boolean; status: string; name: string } | null>(null);
     const [lightboxState, setLightboxState] = useState<{
         isOpen: boolean;
@@ -1127,6 +1132,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     }
                 }
                 setInactiveEnterprises(inactiveMap);
+                if (statusesData?.enterprises) setEnterpriseNames(statusesData.enterprises);
 
                 // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
                 const byId = new Map<string, MarketplacePost>();
@@ -1821,6 +1827,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // A keeper of the enterprise that listed it may edit or pause/resume it, as on the phone (app/post/[id].tsx isOperatorOfAuthor):
         // the node takes the mutation signed with the keeper's own key (apps/server engine/posts.ts updatePost, pausePost, resumePost),
         // for a listing here for everyone. Deleting it stays the author's alone on this page.
+        // "Buy for {enterprise}" (stall slice 2): one per enterprise the reader keeps, by core's one rule (the phone's too), which
+        // also keeps it off another community's listing (`_remoteNode`, `originNode`): the door takes up a listing here only.
+        const takeUps = takeUpButtons({ features: communityInfo?.features, listing: selectedPost, me: identity?.publicKey, keeperOf, enterprises: enterpriseNames });
         const keepsAuthor = !!identity && !isOwnPost && !isRemotePost && keeperOf.includes(selectedPost.authorPublicKey)
             && (selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.targetGroupId && !selectedPost.targetPubkey;
 
@@ -2060,6 +2069,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             } finally {
                 setAccepting(false);
             }
+        };
+        // A take-up for an enterprise refused because the listing moved on: read it again, so the keeper chooses on it as it is now.
+        const readListingAgain = () => {
+            const id = selectedPost.id;
+            getMarketplacePosts({ id })
+                .then(rows => { if (rows[0]) setSelectedPost(prev => (prev?.id === id ? rows[0] : prev)); })
+                .catch(() => {});
+            refresh();
+        };
+        // The node answered a take-up for an enterprise: paid, or held with where to find it (the enterprise's page, its deals).
+        const afterTakeUp = (b: TakeUpButton, answer: TakeUpAnswer) => {
+            readListingAgain();
+            if (answer.released) { alert(t('Payment released successfully!')); return; }
+            alert(answer.held ?? '');
+            onNavigate?.('enterprise', b.enterprise);
         };
         const renderOwnDeal = (m: DealMoves<MarketplaceTransaction>) => {
             const tx = m.tx;
@@ -3117,6 +3141,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         })()}
                         
                     </div>
+                )}
+
+                {/* "Buy for {enterprise}" (stall slice 2): a keeper takes this Offer up for the enterprise they keep, which pays the
+                    seller at once. Only where the node has the door and core's takeUpButtons says, as on the phone. */}
+                {takeUps.length > 0 && (
+                    <EnterpriseTakeUp listing={selectedPost} postId={selectedPost.id} title={selectedPost.title} sellerName={selectedPost.authorCallsign}
+                        buttons={takeUps} disabled={accepting} send={treasuryTakeUp} onListingMoved={readListingAgain} onDone={afterTakeUp} />
                 )}
                 
                 {/* 3. The rating, once a deal here is finished, for its two people (Message is in the quiet row, Report at the foot). */}

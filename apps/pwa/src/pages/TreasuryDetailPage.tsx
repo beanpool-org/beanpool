@@ -29,7 +29,7 @@ import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
     deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isSampleId, keeperWords, parseHundredths, t, tn, word, amountRefusalWords, ANY_DECIMALS,
-    isAmbiguousAmount, parseAmount, type WordKey, BANNER_PICTURE,
+    isAmbiguousAmount, parseAmount, type WordKey, BANNER_PICTURE, releaseAsksHours,
 } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { ReportModal } from '../components/ReportModal';
@@ -916,7 +916,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleCompleteDeal = async (txId: string, postTitle?: string, credits?: number, priceType?: string, initialHours?: number) => {
         let finalHours: number | undefined;
-        if (priceType && priceType !== 'fixed') {
+        // Hours only for a deal priced by the hour, day, week or month (core releaseAsksHours): a deal on an Offer priced for
+        // each one (a take-up for the enterprise left held, stall slice 2) is for a number of items, and pays what is held.
+        if (releaseAsksHours(priceType)) {
             // The hours as typed, in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, any decimals, as before.
             const question = postTitle ? t('Enter hours worked for "{title}":', { title: postTitle }) : t('Enter hours worked for "deal":');
             const input = window.prompt(question, initialHours ? formatNumber(initialHours) : '1');

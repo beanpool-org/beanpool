@@ -26,7 +26,7 @@ import {
     stepDownConfirmText, removeKeeperConfirmText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
-import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, keeperWords, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
+import { formatDate, formatHundredths, formatNumber, inCapitalsOf, isHundredths, keeperWords, t, tn, isSampleId, parseAmount, parseHundredths, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, releaseAsksHours } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
@@ -617,7 +617,9 @@ export default function TreasuryManageScreen() {
 
     const handleCompleteDeal = (d: any) => {
         if (!treasuryKey) return;
-        if (d.price_type && d.price_type !== 'fixed') {
+        // Hours only for a deal priced by the hour, day, week or month (core releaseAsksHours): a deal on an Offer priced for
+        // each one (a take-up for the enterprise left held, stall slice 2) is for a number of items, and pays what is held.
+        if (releaseAsksHours(d.price_type)) {
             // In the language's way ("2,5"), so it reads back as the same hours.
             setHourlyDealHours(d.hours ? formatNumber(d.hours) : '1');
             setHourlyDealPrompt(d);

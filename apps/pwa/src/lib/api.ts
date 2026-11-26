@@ -3,7 +3,7 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
-import type { CircleCard, CircleDemand, PhotoFocus, ShownFromLine, PinDays } from '@beanpool/core';
+import type { CircleCard, CircleDemand, PhotoFocus, ShownFromLine, PinDays, TakeUpBody } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { crossOriginLanguageHeaders, languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
@@ -404,6 +404,10 @@ export interface CommunityInfo {
         /** Present, and true, only once this node takes up an Offer priced for each one (DESIGN-per-item-price-fable.md §6; core
          *  perItemOffered): the create and edit forms offer the unit Each only then. Absent (until every slice is merged, or an older node): not offered. */
         perItem?: true;
+        /** Present, and true, only where a keeper can take up a member's Offer priced for each one for their enterprise in one
+         *  tap (POST /api/treasury/:treasury/take-up; core enterpriseTakeUpOffered): the item page shows "Buy for {enterprise}"
+         *  only then (stall slice 2). Absent (the global community, any of its four switches off, an older node): no such button. */
+        enterpriseTakeUp?: true;
         /** Present, and true, only where this community has a forum (core forumOn): the Chat tab's top is then Chats · Forum
          *  (pages/ChatTabPage.tsx, slice T0). Absent (its owners switched it off, or an older node): the tab as before. */
         forum?: true;
@@ -3509,6 +3513,15 @@ export async function treasuryReject(treasury: string, transactionId: string): P
 }
 export async function treasuryComplete(treasury: string, transactionId: string, hours?: number): Promise<{ success: boolean }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId, hours });
+}
+/**
+ * "Buy for {enterprise}" (stall slice 2): a keeper takes up a member's Offer priced for each one for the enterprise, which
+ * the node holds and releases at once (POST /api/treasury/:treasury/take-up, slice 1). The body is core takeUpBody: the
+ * member's own accept fields and a retry id, no key (the enterprise rides the path, the keeper is the signer). Always 200
+ * once Beans are held, `released` saying whether it was paid (core takeUpAnswerOf); a refusal throws with its code.
+ */
+export async function treasuryTakeUp(treasury: string, body: TakeUpBody): Promise<{ success: boolean; released: boolean; replay?: boolean; error?: string }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/take-up`, body);
 }
 export async function treasurySweep(treasury: string, amount_c: number): Promise<{ success: boolean; swept_c: number; balance_c: number }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount_c });

@@ -13,6 +13,7 @@ vi.mock('../lib/debts', async (orig) => ({ ...(await orig<typeof import('../lib/
 
 import { RepaymentCard, useMyRepayment } from './RepaymentCard';
 import { REPAYMENT_WORDS, PAY_UNANSWERED_RETRY, PAY_REFUSED_UNSAID } from '../lib/debts';
+import { payAgedLine } from '@beanpool/core';
 
 /** One card as the Ledger draws it: the repayment read once by useMyRepayment, re-read after a payment (with `onPaid`). */
 function Card({ place, onPaid }: { place?: 'top' | 'wallet'; onPaid?: () => void }) {
@@ -208,6 +209,111 @@ describe('RepaymentCard', () => {
         expect(confirmSpy.mock.calls[0][0]).toContain('This won’t come off your debt: it has no pay-back code.');
         expect(await screen.findByText(/This did not come off your debt: it was paid without your pay-back code\. .*reference: tx-9\. Until an admin counts it, your debt is still being worked off: .*what you hold above 0\.$/)).toBeInTheDocument();
         expect(sentBody()).toEqual({ amount_c: 5000, requestId: expect.any(String) });
+    });
+});
+
+/**
+ * The held payment's age (core money-retry.ts; the class PR #3393 named open): the node forgets a retry id after its 7 days,
+ * so Try again sends a held payment for a day from its FIRST sending only. Past that the card stops offering Try again, says
+ * the Ledger shows whether it went through, and Pay the Commons asks again and sends a new payment with a new id. The clock
+ * is the test's (only Date is faked, so the requests' promises run as they do); `rerender` is the card drawn again later.
+ */
+describe('a held payment ages: Try again for a day from its first sending, never after', () => {
+    const H = 3_600_000;
+    const T0 = Date.UTC(2026, 10, 27, 9, 0, 0);
+    afterEach(() => { vi.useRealTimers(); });
+
+    /** The member pays 7 Beans at T0 and the answer is lost: the card holds the payment for Try again. */
+    async function lostAt(t0: number) {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(t0);
+        debts.getMyRepayment.mockResolvedValue(null);
+        debts.payTheCommons.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        const view = render(<Card place="wallet" />);
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '7' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(PAY_UNANSWERED_RETRY);
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        expect(confirmSpy).toHaveBeenCalledTimes(1);
+        return view;
+    }
+    const later = (view: ReturnType<typeof render>, at: number) => { vi.setSystemTime(at); view.rerender(<Card place="wallet" />); };
+
+    for (const [name, age] of [['just after', 1000], ['23 hours later', 23 * H]] as const) {
+        it(`${name}: Try again sends the same payment, same id, no new question`, async () => {
+            const view = await lostAt(T0);
+            later(view, T0 + age);
+            debts.payTheCommons.mockResolvedValueOnce({ transactionId: 'tx-7', amount_c: 700 });
+            expect(screen.queryByTestId('pay-commons-aged')).toBeNull();
+            fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+            expect(await screen.findByText('Paid 7 Beans to the Commons.')).toBeInTheDocument();
+            expect(sentBody(1)).toBe(sentBody(0));
+            expect(confirmSpy).toHaveBeenCalledTimes(1);
+        });
+    }
+
+    for (const [name, age] of [['25 hours later', 25 * H], ['8 days later (the node has forgotten its id)', 8 * 24 * H]] as const) {
+        it(`${name}: no Try again; the aged line says to see the Ledger; Pay the Commons asks again and sends a NEW id`, async () => {
+            const view = await lostAt(T0);
+            later(view, T0 + age);
+            expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+            expect(screen.getByTestId('pay-commons-aged')).toHaveTextContent(payAgedLine());
+            // The lost-answer line promised Try again and "never paid twice": it is gone, never shown beside the aged line.
+            expect(screen.queryByText(PAY_UNANSWERED_RETRY)).toBeNull();
+            expect(screen.queryByText(/never paid twice/)).toBeNull();
+            expect(debts.payTheCommons).toHaveBeenCalledTimes(1);
+            // A new payment: asked again, with a new id; the node's answer is this payment's, never the old one replayed.
+            debts.payTheCommons.mockResolvedValueOnce({ transactionId: 'tx-new', amount_c: 700 });
+            fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+            expect(confirmSpy).toHaveBeenCalledTimes(2);
+            expect(await screen.findByText('Paid 7 Beans to the Commons.')).toBeInTheDocument();
+            expect(sentBody(1)).toEqual({ amount_c: 700, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+            expect(sentBody(1).requestId).not.toBe(sentBody(0).requestId);
+        });
+    }
+
+    it('aged, the member says no to the new question: nothing is sent, and the aged line stays', async () => {
+        const view = await lostAt(T0);
+        later(view, T0 + 25 * H);
+        confirmSpy.mockReturnValueOnce(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        expect(debts.payTheCommons).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('pay-commons-aged')).toBeInTheDocument();
+        // Changing the amount keeps it up too: an aged payment is never sent, and its line stays until the next one goes.
+        fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '8' } });
+        expect(screen.getByTestId('pay-commons-aged')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    });
+
+    it('sent again at 23 hours and lost again, it keeps its FIRST stamp: at 25 hours it has aged', async () => {
+        const view = await lostAt(T0);
+        later(view, T0 + 23 * H);
+        debts.payTheCommons.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(debts.payTheCommons).toHaveBeenCalledTimes(2));
+        expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        expect(sentBody(1)).toBe(sentBody(0));
+        later(view, T0 + 25 * H);
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.getByTestId('pay-commons-aged')).toBeInTheDocument();
+    });
+
+    it('a card left open draws itself again the moment the payment ages: Try again goes without a tap', async () => {
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+        vi.setSystemTime(T0);
+        debts.getMyRepayment.mockResolvedValue(null);
+        debts.payTheCommons.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        render(<Card place="wallet" />);
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '7' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
+        expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(24 * H - 60_000); });
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        act(() => { vi.advanceTimersByTime(60_000); });
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(screen.getByTestId('pay-commons-aged')).toHaveTextContent(payAgedLine());
     });
 });
 

@@ -344,25 +344,31 @@ describe('the member’s side: the Ledger’s repayment card and Pay the Commons
     });
     it('Pay the Commons checks the amount and code, asks first, then pays with the code as the debt id', () => {
         const pay = read('app', 'pay-commons.tsx');
-        expect(pay).toMatch(/parseBeans\(amount\)[\s\S]{0,300}debtCodeOk\(debt\)[\s\S]{0,200}Alert\.alert\(t\(REPAYMENT_LINES\.payTitle\)[\s\S]{0,300}send\(confirmCommonsPayment\(amount_c, debt \|\| undefined\)\)/);
+        // Stamped with its first sending as it goes (core money-retry.ts firstSending): Try again sends it for a day from then.
+        expect(pay).toMatch(/parseBeans\(amount\)[\s\S]{0,300}debtCodeOk\(debt\)[\s\S]{0,200}Alert\.alert\(t\(REPAYMENT_LINES\.payTitle\)[\s\S]{0,300}send\(firstSending\(confirmCommonsPayment\(amount_c, debt \|\| undefined\), Date\.now\(\)\)\)/);
+        expect(pay).toContain('const payment = going.payment;');
         expect(pay).toContain('const r = await payTheCommons(node, identity, payment);');
         expect(pay).toContain('if (!r.ok) { setError(r.message); return; }');
     });
     it('a lost answer keeps the confirmed payment: Try again sends it with the same id, no new confirm; changing it drops it', () => {
         const pay = read('app', 'pay-commons.tsx');
-        expect(pay).toContain('if (!r.ok && unanswered(r)) { setHeld(payment); setError(PAY_UNANSWERED_RETRY); return; }');
-        expect(pay).toMatch(/const pay = \(\) => \{\s*if \(held\) \{ send\(held\); return; \}/);
-        expect(pay).toContain('const edit = (set: (v: string) => void) => (v: string) => { set(v); setHeld(null); };');
+        // Held with its first sending's stamp (`going`), and sent again only while it is less than a day old (core
+        // money-retry.ts heldResend; pay-commons-aged.test.ts draws the screen over the ages): an aged one is a new payment.
+        expect(pay).toContain('if (!r.ok && unanswered(r)) { setHeld(going); setError(PAY_UNANSWERED_RETRY); return; }');
+        expect(pay).toMatch(/const pay = \(\) => \{[^}]*const again = heldResend\(held, Date\.now\(\)\);\s*if \(again\) \{ send\(again\); return; \}/);
+        // A change drops a held payment that is still sent again (heldAfterChange keeps only an aged one, never sent).
+        expect(pay).toContain('const edit = (set: (v: string) => void) => (v: string) => { set(v); setHeld((h) => heldAfterChange(h, Date.now())); };');
         expect(pay).toContain('onChangeText={edit(setAmount)}');
         expect(pay).toContain('onChangeText={edit((v) => { codeTyped.current = true; setCode(v); })}');
         // In the member's language since words S3l (components/repayment-lines.ts): the same words, the same place.
-        expect(pay).toContain("{held ? t('Try again') : t(REPAYMENT_LINES.payTitle)}");
+        expect(pay).toContain('const tryAgain = heldResend(held, now) !== null;');
+        expect(pay).toContain("{tryAgain ? t('Try again') : t(REPAYMENT_LINES.payTitle)}");
     });
     it('one payment at a time: the confirmed tap goes through oneAtATime, with nothing awaited before it', () => {
         const pay = read('app', 'pay-commons.tsx');
         expect(pay).toContain('const once = useRef(oneAtATime(setBusy)).current;');
-        expect(pay).toMatch(/const send = \(payment: ConfirmedPayment<CommonsPayment>\) => once\(async \(\) => \{\s*setError\(null\);\s*const node = await anchorUrl\(\);/);
-        expect(pay).toContain("{ text: t('Pay'), onPress: () => send(confirmCommonsPayment(amount_c, debt || undefined)) }");
+        expect(pay).toMatch(/const send = \(going: HeldPayment<ConfirmedPayment<CommonsPayment>>\) => once\(async \(\) => \{\s*setError\(null\);\s*const node = await anchorUrl\(\);/);
+        expect(pay).toContain("{ text: t('Pay'), onPress: () => send(firstSending(confirmCommonsPayment(amount_c, debt || undefined), Date.now())) }");
         expect(pay).not.toMatch(/setBusy\(true\)/);
     });
     it('the link’s amount is what was left when the admin shared it: prefilled, said so, in the confirm for that code only; the paid words use the node’s', () => {

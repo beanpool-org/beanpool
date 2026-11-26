@@ -5,6 +5,7 @@ import { useIdentity } from './IdentityContext';
 import { fetchMembership } from '../utils/membership-probe';
 import { membershipAnswerOf } from '../utils/membership-answer';
 import { noteStandingHere } from '../utils/standing-here';
+import { provideRecognitionAfresh } from '../utils/recognition-afresh';
 
 /**
  * Whether the active community node recognises this identity as a member.
@@ -48,19 +49,24 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
     const [retired, setRetired] = useState(false);
     const [nodeUrl, setNodeUrl] = useState<string | null>(null);
     const mounted = useRef(true);
+    // Each ask takes a turn, and only the latest one writes what it heard: an answer still out when the phone moved on (asked
+    // at launch or on a return, then a switch) is the community left's, and never stands for the one now in use.
+    const turn = useRef(0);
 
     useEffect(() => () => { mounted.current = false; }, []);
 
     const recheck = useCallback(async (): Promise<NodeRecognition> => {
+        const mine = ++turn.current;
+        const latest = () => mounted.current && mine === turn.current;
         if (!identity?.publicKey) {
-            if (mounted.current) { setRecognition('unknown'); setRetired(false); setNodeUrl(null); }
+            if (latest()) { setRecognition('unknown'); setRetired(false); setNodeUrl(null); }
             return 'unknown';
         }
         const url = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (mounted.current) setNodeUrl(url);
+        if (latest()) setNodeUrl(url);
         if (!url) {
             // No node configured at all — onboarding's job, not a rejection.
-            if (mounted.current) { setRecognition('unknown'); setRetired(false); }
+            if (latest()) { setRecognition('unknown'); setRetired(false); }
             return 'unknown';
         }
         try {
@@ -76,7 +82,7 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
                 : answer.kind === 'member' ? 'member'
                 : answer.kind === 'closed' ? 'closed'
                 : answer.recovering ? 'recovering' : 'stranger';
-            if (mounted.current) {
+            if (latest()) {
                 setRecognition(result);
                 setRetired(answer?.kind === 'closed' && answer.retired === true);
             }
@@ -107,10 +113,20 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
             return result;
         } catch {
             // Unreachable / network error — leave it as unknown, never 'stranger'.
-            if (mounted.current) { setRecognition('unknown'); setRetired(false); }
+            if (latest()) { setRecognition('unknown'); setRetired(false); }
             return 'unknown';
         }
     }, [identity?.publicKey]);
+
+    // The one switch has just moved the phone to `url` (utils/use-communities.ts switchCommunity, utils/recognition-afresh.ts):
+    // what is held was the community left's, so it goes now, before the bounce through Welcome, back to what a cold start
+    // holds ('unknown': the root guard lands an account on the tabs, never holds it on Welcome as a stranger), and nothing
+    // asked before the move writes after it. Then `url` is asked, and its answer acts as at any start.
+    const askAfresh = useCallback((url: string): Promise<NodeRecognition> => {
+        if (mounted.current) { setRecognition('unknown'); setRetired(false); setNodeUrl(url); }
+        return recheck();
+    }, [recheck]);
+    useEffect(() => provideRecognitionAfresh(askAfresh), [askAfresh]);
 
     // Check on identity change, and again whenever the app returns to the foreground
     // (membership can change while away, e.g. an admin removes the member).

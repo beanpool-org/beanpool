@@ -12,6 +12,7 @@ import { fetchMembership } from './membership-probe';
 import { switchPhoneTo } from './reconnect';
 import { sameCommunity } from './push-pins';
 import { sameCommunityRecord } from './community-index';
+import { askRecognitionAfresh } from './recognition-afresh';
 
 // The communities this phone knows, for the BeanPool sheet: which one is in use, whether each answers and
 // whether the member belongs to it, and switching between them. It used to live in the header's own modal;
@@ -38,9 +39,12 @@ export function communitySwitchUnderWay(): boolean {
  * The phone moves to another community it keeps: a tap on the BeanPool sheet's row (`switchTo` below), and a tap on a
  * notice from that community (push-notice-switch.ts). The one switch for both. The community becomes the phone's (its own
  * database, the anchor, the update screen told), then back to the bottom of the stack and the whole app through Welcome
- * for it, where the root guard lands the member (member-landing.ts). `beforeWelcome` runs between the two, once the
- * community is the phone's: a tapped notice asks the root layout's recognition again there, so the guard reads this
- * community's answer, and asks for its screen. Throws, before anything moves, for an address that isn't plain.
+ * for it, where the root guard lands the member (member-landing.ts). Before the bounce the root layout's recognition is
+ * asked afresh for this community (recognition-afresh.ts): the answer it held was the community left's, and a guest there
+ * coming back to their own community was held on Welcome as a stranger, on the newcomers' front door (27 Nov). It is dropped
+ * at once, as at a cold start, so the guard lands the account on the tabs; this community's answer acts when it comes.
+ * `beforeWelcome` runs between the two, once the community is the phone's: a tapped notice asks the recognition again there
+ * for the answer itself, and asks for its screen. Throws, before anything moves, for an address that isn't plain.
  */
 export async function switchCommunity(url: string, beforeWelcome?: () => Promise<void>): Promise<void> {
     moving = true;
@@ -51,6 +55,8 @@ export async function switchCommunity(url: string, beforeWelcome?: () => Promise
         // asked again for the community now in use (utils/community-switch.ts). It holds the one move lock
         // (community-move-lock.ts), so the address check never acts on the address this switch is leaving.
         await switchPhoneTo(url);
+        // Dropped now, asked in the background: the bounce never waits on a community that is slow to answer.
+        void askRecognitionAfresh(url);
         await beforeWelcome?.().catch((e) => console.warn('[Communities] Before the bounce through Welcome', e));
         // Back to the bottom of the stack, then bounce the whole app through Welcome for the new community.
         if (router.canDismiss()) router.dismissAll();

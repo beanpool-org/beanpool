@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
- * Message after the phone moved to another community (#3360 review, F1 and F2): an ordinary switch (the BeanPool sheet's row,
- * Contacts' Switch, Find's row, Settings' Advanced switch) asks the community now in use nothing of how the account stands
- * there, so Message asks at the tap, before it opens or makes a chat across; and what a community last said is its own, so a
- * late answer from the one left changes nothing of the one in use.
+ * Message after the phone moved to another community (#3360 review, F1 and F2): a switch may ask the community now in use
+ * nothing of how the account stands there (Settings' Advanced switch, Reconnect), or ask it in the background (the one switch:
+ * the BeanPool sheet's row, Contacts' Switch, Find's row, utils/recognition-afresh.ts), so Message asks at the tap, before it
+ * opens or makes a chat across; and what a community last said is its own, so a late answer from the one left changes nothing
+ * of the one in use.
  *
  * Every way into another community x what was heard of it before x how the account stands there now x the chat there. Real: the
  * app's own ask (NodeStatusContext.tsx), each switch (use-communities.ts, reconnect.ts, the move lock and the writes Settings
@@ -150,13 +151,15 @@ async function launchedIn(community: string): Promise<void> {
 
 /** Each way a member moves the phone to another community it keeps. `asks`: the app then asks it how the account stands there. */
 const WAYS: Array<{ way: string; asks: boolean; move: (to: string) => Promise<void> }> = [
-    { way: 'the BeanPool sheet\'s row', asks: false, move: async (to) => {
+    // The one switch asks the community now in use afresh before its bounce through Welcome (utils/recognition-afresh.ts), so the
+    // root guard never holds a member on Welcome with the answer of the community left (27 Nov): it notes how the account stands.
+    { way: 'the BeanPool sheet\'s row', asks: true, move: async (to) => {
         draw(true);
         await settled();
         await inApp(() => sheet.switchTo(to));
         draw();
     } },
-    { way: 'Contacts\' Switch, and Find\'s row', asks: false, move: (to) => inApp(() => switchCommunity(to)) },
+    { way: 'Contacts\' Switch, and Find\'s row', asks: true, move: (to) => inApp(() => switchCommunity(to)) },
     { way: 'Settings\' Advanced switch', asks: false, move: (to) => inApp(async () => {
         // settings.tsx handleUpdateAnchor: the move, then its own probe, which reads only whether the account is a member.
         await whileCommunityMoves(async (held) => {
@@ -286,7 +289,7 @@ describe('a late answer from the community left', () => {
         await inApp(() => phone.toFront!());
         await settled();
         stands[HILLSIDE] = inUse;
-        await moved(WAYS.find((w) => w.asks)!, HILLSIDE);
+        await moved(WAYS.find((w) => w.way === 'a tapped notice')!, HILLSIDE);
         return async () => { go(); await settled(); };
     }
 
@@ -315,7 +318,7 @@ describe('a late answer from the community left', () => {
         const tap = message();
         await vi.waitFor(() => expect(phone.log).toEqual([`asked ${RIVERSIDE}`]));
         stands[HILLSIDE] = 'suspended';
-        await moved(WAYS.find((w) => w.asks)!, HILLSIDE);
+        await moved(WAYS.find((w) => w.way === 'a tapped notice')!, HILLSIDE);
         go();
         expect(await tap).toBe('existing across');
         expect(suspendedHere(ME, HILLSIDE)).toBe(true);

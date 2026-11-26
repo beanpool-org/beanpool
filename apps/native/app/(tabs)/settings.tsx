@@ -1425,6 +1425,10 @@ export default function SettingsScreen() {
             // in use (utils/community-switch.ts).
             const { switchPhoneTo } = await import('../../utils/reconnect');
             await switchPhoneTo(targetUrl);
+            // The root guard reads this community's answer, not the one of the community left, as the sheet's switch asks it
+            // (utils/recognition-afresh.ts): a guest there switching to their own is never held on Welcome's front door.
+            const { askRecognitionAfresh } = await import('../../utils/recognition-afresh');
+            void askRecognitionAfresh(targetUrl);
 
             // Hard bounce the Application State Tree via the Welcome resolver
             router.replace('/welcome');

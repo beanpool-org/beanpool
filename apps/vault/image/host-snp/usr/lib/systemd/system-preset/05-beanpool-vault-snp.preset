@@ -1,0 +1,2 @@
+# SEV-SNP host images only: root's helper that asks the chip for the keyholder's reports (vault comeback design §2.2).
+enable beanpool-vault-attest.service

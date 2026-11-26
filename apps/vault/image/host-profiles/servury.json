@@ -1,0 +1,32 @@
+{
+  "profile": "servury",
+  "platform": "sev-snp",
+  "product": "Milan",
+  "firmware": {
+    "name": "OVMF.amdsev.fd",
+    "url": "https://servury.com/downloads/blackbox/2026.11.3/OVMF.amdsev.fd",
+    "sha256": "8731846cdbcbb6aa5c624238b839544b1553f4c5af874450f043321b3ef8958b",
+    "release": "2026.11.3",
+    "source": "edk2 tag edk2-stable202505, OvmfPkg/AmdSev/AmdSevX64.dsc, -a X64 -t GCC5 -b RELEASE -D FD_SIZE_4MB, built in a snapshot.debian.org 20261103T000000Z chroot (Servury blackbox-images-2026.11.3.tar.gz, RELEASE.json)"
+  },
+  "launch": {
+    "vcpus": 1,
+    "vcpuType": "EPYC-v4",
+    "guestFeatures": "0x1",
+    "append": ""
+  },
+  "guestPolicy": "0x30000",
+  "signer": "vcek",
+  "minTcb": {
+    "bootloader": 4,
+    "tee": 0,
+    "snp": 29,
+    "microcode": 222
+  },
+  "notes": [
+    "Servury Blackbox Nano, Montreal. Chosen by Marty on 26 Nov 2026 (vault comeback design, DECIDED block).",
+    "Launch inputs from Servury's measured-boot guide and RELEASE.json 2026.11.3 (read 26 Nov 2026): 1 vCPU on Nano, EPYC-v4, guest features 0x1, guest policy 0x30000 (SMT allowed, debug off, no migration agent). The firmware's hash is the same in releases 2026.09 to 2026.11.3.",
+    "minTcb is the release's floor, not part of the image: the levels the 26 Nov probe read off this host's report (bootloader 4, tee 0, SNP 29, microcode 222). AMD-SB-3059 is fixed at SNP 0x1F = 31 (Milan SEV firmware 1.3A.03); this host was not patched on 26 Nov. Raise snp to 31 here as soon as Servury patches, and sign a release with the new host policy.",
+    "The chip family (Milan) is the director's reading of the probe (SEV firmware 1.58 build 1 = 1.3A.01, a Milan level); the first report's CPUID fields confirm it (design test T2)."
+  ]
+}

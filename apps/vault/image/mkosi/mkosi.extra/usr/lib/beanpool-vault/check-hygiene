@@ -66,6 +66,19 @@ say "hygiene: $(journalctl -b -u beanpool-vault-identity.service -o cat 2>/dev/n
 say "hygiene: $(journalctl -b -u beanpool-vault-keyholder.service -o cat 2>/dev/null | grep 'vault-keyholder: release' | tail -n 1)"
 check "the keyholder knows which image it booted" 'printf "%s" "$health" | grep -q "\"release\":\"[0-9a-f]\{64\}\""'
 
+# An image built for an SEV-SNP host (build.sh --host <profile>, which writes /etc/beanpool-vault/host.json): one report
+# from the chip at every boot, and its public values on the console (vault comeback design §3.2 item 4): guest policy,
+# privilege level, signer, the firmware levels (TCB) and the launch measurement. The custodian's tool checks a fresh
+# report at every unlock and decides; this says SNP is on, for whoever watches the boot.
+if [ -f /etc/beanpool-vault/host.json ] && grep -q '"platform": "sev-snp"' /etc/beanpool-vault/host.json; then
+    snp=$(/opt/node/bin/node /usr/lib/beanpool-vault/vault-keyholder.mjs --snp-check 2>&1)
+    printf '%s\n' "$snp" | while IFS= read -r line; do say "hygiene: $line"; done
+    check "SNP is on: the chip gave a report, asked for at VMPL 0" 'printf "%s" "$snp" | grep -q "^snp: report version [0-9]*, .*, VMPL 0$"'
+    check "SNP guest policy: debug off, no migration agent" 'printf "%s" "$snp" | grep -q "(debug off, migration agent off)"'
+    check "SNP report signed by the chip's own key (VCEK), chip not masked" 'printf "%s" "$snp" | grep -q "^snp: signer VCEK" && ! printf "%s" "$snp" | grep -q "chip key masked"'
+    check "SNP helper running for the keyholder" 'systemctl is-active --quiet beanpool-vault-attest.service'
+fi
+
 check "no SSH server" '! command -v sshd >/dev/null && [ ! -e /usr/sbin/sshd ]'
 check "no login shell for any account" '! awk -F: "\$7 !~ /(nologin|false|sync)\$/ {print}" /etc/passwd | grep -q .'
 check "root can't log in (locked)" 'awk -F: "\$1 == \"root\" {exit !(\$2 ~ /^[!*]/)}" /etc/shadow'

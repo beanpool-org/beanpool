@@ -149,9 +149,11 @@ export function ImageLightbox({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, count, handlePrev, handleNext, onClose]);
 
-    // Touch event handlers for swipe
+    // Touch event handlers for swipe. One finger only: a second finger is the browser's pinch-zoom, and a pinch that drifts
+    // sideways must never turn the photo over (the swipe and the zoom don't fight).
     const handleTouchStart = (e: React.TouchEvent) => {
         if (count <= 1) return;
+        if (e.touches.length > 1) { touchStartRef.current = null; return; }
         const touch = e.touches[0];
         touchStartRef.current = { x: touch.clientX, y: touch.clientY };
         touchDeltaRef.current = { x: 0, y: 0 };
@@ -159,6 +161,7 @@ export function ImageLightbox({
 
     const handleTouchMove = (e: React.TouchEvent) => {
         if (!touchStartRef.current) return;
+        if (e.touches.length > 1) { touchStartRef.current = null; return; }
         const touch = e.touches[0];
         touchDeltaRef.current = {
             x: touch.clientX - touchStartRef.current.x,

@@ -34,7 +34,7 @@ vi.mock('expo-router', () => ({ useRouter: () => router, useLocalSearchParams: (
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => h.insets }));
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: any) => createElement('div', null, children) }));
 vi.mock('expo-image', () => ({ Image: () => null }));
-vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn() }));
+vi.mock('../post-photo', () => ({ askForPostPhoto: vi.fn(), askForPostPhotos: vi.fn() }));
 vi.mock('../../components/TagPicker', () => ({ TagPicker: () => null }));
 vi.mock('react-native', async () => {
     const { createElement: el } = await import('react');

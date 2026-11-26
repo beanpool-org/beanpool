@@ -20,7 +20,7 @@ import { useStyles, useTheme } from '../../ThemeContext';
 import { Alert } from '../../../utils/keyboard-alert';
 import { leaveScreen } from '../../../utils/leave-screen';
 import { forgetHomeForHeader } from '../../../utils/home-store';
-import { askForPostPhoto } from '../../../utils/post-photo';
+import { askForPostPhotos } from '../../../utils/post-photo';
 import { TagPicker } from '../../../components/TagPicker';
 import { hostOf, openableSource } from '../../../components/learn/KnowledgeDetail';
 import { photoToggleName } from '../../../components/learn/learn-keep';
@@ -524,7 +524,7 @@ export default function LearnCheckOneScreen() {
                                     style={s.secondary}
                                     onPress={() => {
                                         Keyboard.dismiss();
-                                        askForPostPhoto((dataUrl) => {
+                                        askForPostPhotos(KNOWLEDGE_LIMITS.photos - form.photos.length, (dataUrl) => {
                                             if (!mountedRef.current) return;
                                             setForm((prev) => ({
                                                 ...prev,

@@ -26,9 +26,10 @@ interface Props {
     borderRadius?: number;
     /**
      * Given, each photo is a button ("Photo {n} of {count}") that calls this with the photo's place among the photos drawn and its
-     * own URL (the same ~800 px photo the frame crops: no bigger copy exists, memory photos-stay-800px). Absent, nothing is pressable.
+     * own URL (the same ~800 px photo the frame crops: no bigger copy exists, memory photos-stay-800px), and the photos drawn, in
+     * order (a failed one already dropped), so the full-size view can swipe through the same ones. Absent, nothing is pressable.
      */
-    onOpen?: (index: number, uri: string) => void;
+    onOpen?: (index: number, uri: string, shown: string[]) => void;
 }
 
 function isValid(p: any): p is string {
@@ -142,7 +143,7 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16, onOpen 
                         // Key by pre-filter `origIndex` (not post-filter `i`, and without `uri`) so dropping an earlier failed slide
                         // never reuses its native expo-image view for a surviving slide, while in-place Edit `?v=` updates still reuse it.
                         return onOpen ? (
-                            <Pressable key={origIndex} accessibilityRole="button" accessibilityLabel={label} style={{ width, height }} onPress={() => onOpen(i, uri)}>
+                            <Pressable key={origIndex} accessibilityRole="button" accessibilityLabel={label} style={{ width, height }} onPress={() => onOpen(i, uri, valid.map((item) => item.uri))}>
                                 {picture}
                             </Pressable>
                         ) : (

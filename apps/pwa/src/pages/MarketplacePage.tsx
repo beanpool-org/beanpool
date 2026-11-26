@@ -69,8 +69,8 @@ import {
 import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 // A price for each one: the price box's lines (slice P2; its own lines so a parallel slice's edits to the import above do not meet these).
 import { forumOn, perItemCard } from '@beanpool/core';
-import { photoFocusList, type PhotoFocus } from '@beanpool/core';
 import { PhotoFocusDialog } from '../components/PhotoFocusDialog';
+import { usePhotoFocusByPhoto } from '../lib/photo-focus';
 import { LISTING_AFTER_JOIN_WORDS } from '@beanpool/core';
 import { BeansText } from '../components/BeansText';
 import {
@@ -117,6 +117,7 @@ import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
+import { PhotosLeftOut, pickedPostPhotos, usePhotosLeftOut } from '../components/PostPhotoPicker';
 import { readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
 
 /**
@@ -955,13 +956,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editItemLoading, setEditItemLoading] = useState(false);
     const editPriceRef = useRef<HTMLInputElement>(null);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
-    // Each photo's focus, the part its card keeps (core photo-focus.ts): beside editPhotos, in the same order; and the photo
-    // whose Adjust dialog is open.
-    const [editFocus, setEditFocus] = useState<Array<PhotoFocus | null>>([]);
-    const [editFocusAt, setEditFocusAt] = useState<number | null>(null);
-    // Whether the member changed a focus (or took a photo off) in this edit: only then is `photoFocus` sent, so an untouched edit
-    // leaves the node to keep each photo's focus with it.
-    const [editFocusTouched, setEditFocusTouched] = useState(false);
+    // Each photo's focus, the part its card keeps (core photo-focus.ts): held by the photo itself, so it goes wherever that photo
+    // goes in editPhotos (taken off, several picked at once), and the Adjust dialog opens on the photo, not its place. Sent only
+    // when the member changed a focus or took a photo off (`touched`), so an untouched edit leaves the node to keep each photo's.
+    const editFocus = usePhotoFocusByPhoto();
+    const [editPhotosLeftOut, noteEditPhotosLeftOut] = usePhotosLeftOut(editPhotos.length);
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [editInShop, setEditInShop] = useState<boolean>(false);
     const [saving, setSaving] = useState(false);
@@ -3303,8 +3302,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             }).finally(() => setEditItemLoading(false));
                                         }
                                         setEditPhotos(selectedPost.photos || []);
-                                        setEditFocus(photoFocusList(selectedPost.photoFocus, (selectedPost.photos || []).length) ?? []);
-                                        setEditFocusTouched(false);
+                                        noteEditPhotosLeftOut(0, 0); // a list put in whole is no pick (review of #3391)
+                                        editFocus.resetFrom(selectedPost.photos || [], selectedPost.photoFocus); // with each photo's own focus
                                         editTagsFrom.current = postTagsOf(selectedPost.tags);
                                         setEditTags(editTagsFrom.current);
                                         editFreeTagsFrom.current = freeTagsOf(selectedPost.freeTags);
@@ -3617,14 +3616,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 <button
                                                     type="button"
                                                     data-testid={`photo-adjust-${i}`}
-                                                    onClick={() => setEditFocusAt(i)}
+                                                    onClick={() => editFocus.open(photo)}
                                                     aria-label={t('Choose what the card shows')}
                                                     className="block p-0 border-0 bg-transparent rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 >
                                                     <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
                                                 </button>
                                                 <button
-                                                    onClick={() => { setEditPhotos(editPhotos.filter((_, j) => j !== i)); setEditFocus(editFocus.filter((_, j) => j !== i)); setEditFocusTouched(true); }}
+                                                    onClick={() => { setEditPhotos(prev => prev.filter((_, j) => j !== i)); editFocus.removed(); }}
                                                     aria-label={t('Remove photo')}
                                                     className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bp-danger-fill hover:bg-bp-danger-hover border-none text-bp-danger-on text-[10px] flex items-center justify-center cursor-pointer shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-red-500"
                                                 >
@@ -3638,47 +3637,36 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 <input
                                                     type="file"
                                                     accept="image/*"
+                                                    multiple
                                                     className="hidden"
                                                     onChange={(e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (!file) return;
-                                                        const reader = new FileReader();
-                                                        reader.onload = () => {
-                                                            const img = new Image();
-                                                            img.onload = () => {
-                                                                const canvas = document.createElement('canvas');
-                                                                const max = 800;
-                                                                let w = img.width, h = img.height;
-                                                                if (w > max || h > max) {
-                                                                    if (w > h) { h = Math.round(h * max / w); w = max; }
-                                                                    else { w = Math.round(w * max / h); h = max; }
-                                                                }
-                                                                canvas.width = w; canvas.height = h;
-                                                                canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-                                                                setEditPhotos([...editPhotos, canvas.toDataURL('image/jpeg', 0.7)]);
-                                                            };
-                                                            img.src = reader.result as string;
-                                                        };
-                                                        reader.readAsDataURL(file);
+                                                        // Several in one go, up to the room left, each through the same 800 px redraw, in the order picked.
+                                                        const files = Array.from(e.target.files ?? []);
                                                         e.target.value = '';
+                                                        if (files.length === 0) return;
+                                                        const before = editPhotos.length;
+                                                        void pickedPostPhotos(files, 5 - before).then((picked) => {
+                                                            if (picked.photos.length > 0) setEditPhotos(prev => [...prev, ...picked.photos].slice(0, 5));
+                                                            noteEditPhotosLeftOut(picked.leftOut, Math.min(5, before + picked.photos.length));
+                                                        });
                                                     }}
                                                 />
                                             </label>
                                         )}
                                     </div>
+                                    <PhotosLeftOut leftOut={editPhotosLeftOut} />
                                     {editPhotos.length > 0 && (
                                         <p className="m-0 mt-1 text-sm text-nature-600 dark:text-nature-300">{t('Tap a photo to choose what its card shows.')}</p>
                                     )}
-                                    {editFocusAt !== null && editPhotos[editFocusAt] && (
+                                    {editFocus.adjusting !== null && editPhotos.includes(editFocus.adjusting) && (
                                         <PhotoFocusDialog
-                                            src={editPhotos[editFocusAt]}
-                                            focus={editFocus[editFocusAt] ?? null}
-                                            onCancel={() => setEditFocusAt(null)}
+                                            src={editFocus.adjusting}
+                                            focus={editFocus.at(editFocus.adjusting)}
+                                            onCancel={editFocus.close}
                                             onDone={(f) => {
-                                                const at = editFocusAt;
-                                                setEditFocus(prev => { const next = prev.slice(); while (next.length <= at) next.push(null); next[at] = f; return next; });
-                                                setEditFocusTouched(true);
-                                                setEditFocusAt(null);
+                                                const photo = editFocus.adjusting;
+                                                if (photo !== null) editFocus.setAt(photo, f);
+                                                editFocus.close();
                                             }}
                                         />
                                     )}
@@ -3739,7 +3727,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     } : {}),
                                                     photos: editPhotos,
                                                     // Each photo's focus, only when the member changed one here (null clears it).
-                                                    ...(editFocusTouched ? { photoFocus: photoFocusList(editFocus, editPhotos.length) } : {}),
+                                                    ...(editFocus.touched ? { photoFocus: editFocus.forPhotos(editPhotos) } : {}),
                                                     ...(tagsChanged ? { tags: editTags } : {}),
                                                     ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
                                                     ...(shopId !== undefined ? { shopId } : {}),

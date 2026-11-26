@@ -50,6 +50,11 @@
       "import": "./dist/contacts-vectors.js",
       "default": "./dist/contacts-vectors.js"
     },
+    "./photo-focus-vectors": {
+      "types": "./dist/photo-focus-vectors.d.ts",
+      "import": "./dist/photo-focus-vectors.js",
+      "default": "./dist/photo-focus-vectors.js"
+    },
     "./door-work": {
       "types": "./dist/door-work.d.ts",
       "import": "./dist/door-work.js",

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
     DEFAULT_PHOTO_FOCUS, MARKET_CARD_SHELL, photoFocusAt, photoFocusFromStored, photoFocusList, photoFocusObjectPosition, photoFocusOf,
     photoFocusPercent, photoFocusToward, photoFocusWindow, storedPhotoFocus,
+    NO_PHOTO_FOCUS, photoFocusByPhoto, photoFocusForPhotos, photoFocusOfPhoto, withPhotoFocus, type PhotoFocus, type PhotoFocusByPhoto,
 } from '../index.js';
+import { checkPhotoFocusVectors, type PhotoFocusFormDriver } from '../photo-focus-vectors.js';
 
 describe('photo focus (a card crop the member picks, Marty 26 Nov 2026)', () => {
     it('no focus is the grid card\'s crop today: 50% across, 33% down', () => {
@@ -99,5 +101,67 @@ describe('photo focus (a card crop the member picks, Marty 26 Nov 2026)', () => 
         const f = photoFocusToward(3 / 4, 4 / 3, 0.5, 0.45);
         const box = photoFocusWindow(3 / 4, 4 / 3, f);
         expect(box.top + box.height / 2).toBeCloseTo(0.45, 2);
+    });
+});
+
+describe('a form\'s focus points are held by photo, so each goes wherever its photo goes (review of #3390)', () => {
+    /** A form built on core's helpers alone, as both apps' focus forms are. */
+    const coreForm = (): PhotoFocusFormDriver => {
+        let photos: string[] = [];
+        let held: PhotoFocusByPhoto = NO_PHOTO_FOCUS;
+        return {
+            setPhotos: (next) => { photos = next; },
+            removed: () => {},
+            adjust: (photo, f) => { held = withPhotoFocus(held, photo, f); },
+            putWhole: (next, focus) => { photos = next; held = photoFocusByPhoto(next, focus); },
+            sent: () => photoFocusForPhotos(photos, held),
+        };
+    };
+
+    it('every way a form changes its photos keeps each photo\'s own focus (the table both apps run)', () => {
+        expect(checkPhotoFocusVectors(coreForm)).toEqual([]);
+    });
+
+    it('the table catches a focus kept by its place in a list beside the photos (as the forms kept it before)', () => {
+        const byIndex = (): PhotoFocusFormDriver => {
+            let photos: string[] = [];
+            let before: string[] = [];
+            let list: Array<PhotoFocus | null> = [];
+            return {
+                setPhotos: (next) => { before = photos; photos = next; },
+                removed: (photo) => { const at = before.indexOf(photo); list = list.filter((_, j) => j !== at); },
+                adjust: (photo, f) => { const at = photos.indexOf(photo); while (list.length <= at) list.push(null); list[at] = f; },
+                putWhole: (next, focus) => { photos = next; list = photoFocusList(focus, next.length) ?? []; },
+                sent: () => photoFocusList(list, photos.length),
+            };
+        };
+        const wrong = checkPhotoFocusVectors(byIndex);
+        expect(wrong.some((w) => w.startsWith('a tool\'s draft over an adjusted new post (the review of #3390), step 3 (replacePhotosOnly)'))).toBe(true);
+    });
+
+    it('a post\'s photos and focus, as sent or as stored, held by photo; a bad or missing one is none', () => {
+        const f: PhotoFocus = { x: 0.2, y: 0.8 };
+        expect([...photoFocusByPhoto(['a', 'b', 'c'], [null, f])]).toEqual([['b', f]]);
+        expect([...photoFocusByPhoto(['a', 'b'], JSON.stringify([f, { x: 2, y: 0 }]))]).toEqual([['a', f]]);
+        expect([...photoFocusByPhoto(['a', 'a'], [f, { x: 0, y: 0 }])]).toEqual([['a', f]]);
+        expect([...photoFocusByPhoto(null, [f])]).toEqual([]);
+        expect([...photoFocusByPhoto(['a', '', 7], 'not json')]).toEqual([]);
+        expect([...photoFocusByPhoto(['a', 7 as unknown as string, 'c'], [f, f, f])]).toEqual([['a', f], ['c', f]]);
+        expect(photoFocusOfPhoto(new Map([['a', f]]), 'a')).toEqual(f);
+        expect(photoFocusOfPhoto(new Map([['a', f]]), null)).toBeNull();
+        expect(photoFocusOfPhoto(NO_PHOTO_FOCUS, 'a')).toBeNull();
+    });
+
+    it('setting a focus makes a new map and holds it to two numbers 0 to 1; null or a bad one takes it off', () => {
+        const before = new Map<string, PhotoFocus>([['a', { x: 0.5, y: 0.5 }]]);
+        const after = withPhotoFocus(before, 'b', { x: 0.123456, y: 1 });
+        expect(after).not.toBe(before);
+        expect(before.has('b')).toBe(false);
+        expect(after.get('b')).toEqual({ x: 0.123, y: 1 });
+        expect(withPhotoFocus(after, 'a', null).has('a')).toBe(false);
+        expect(withPhotoFocus(after, 'a', { x: 3, y: 0 } as PhotoFocus).has('a')).toBe(false);
+        expect(photoFocusForPhotos(['x', 'b', 'a'], after)).toEqual([null, { x: 0.123, y: 1 }, { x: 0.5, y: 0.5 }]);
+        expect(photoFocusForPhotos([], after)).toBeNull();
+        expect(photoFocusForPhotos(['x'], after)).toBeNull();
     });
 });

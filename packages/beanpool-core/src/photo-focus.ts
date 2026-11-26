@@ -77,6 +77,54 @@ export function photoFocusAt(post: { photoFocus?: ReadonlyArray<PhotoFocus | nul
     return photoFocusOf(list[index]);
 }
 
+/**
+ * A form's focus points while it is written, held by the photo each one belongs to (its data URL or its address), never by
+ * its place in a list. Whatever a form does to its photos (one taken off, several added in one pick, the order changed, the
+ * list put in whole from a draft, a tool or a post), each photo's focus stays with that photo, and a photo the form holds no
+ * focus for has none. No list of focus points is kept beside the photos to fall out of step with them (review of #3390: a
+ * tool's draft put in whole posted with another photo's focus). Two copies of the very same photo share its one focus.
+ */
+export type PhotoFocusByPhoto = ReadonlyMap<string, PhotoFocus>;
+
+/** No focus held: a form opened empty, or put in whole from photos that carry none (a draft, a tool's photos). */
+export const NO_PHOTO_FOCUS: PhotoFocusByPhoto = new Map();
+
+/**
+ * The focus held by photo for a post's `photos` and its focus points, in the same order: `photoFocus` as sent (a list), or
+ * `posts.photo_focus` as stored (its JSON). A photo with none holds none; anything unreadable is none.
+ */
+export function photoFocusByPhoto(photos: ReadonlyArray<unknown> | null | undefined, focus: unknown): Map<string, PhotoFocus> {
+    const list = typeof focus === 'string' ? photoFocusFromStored(focus) : photoFocusList(focus, MOST_FOCUS_POINTS);
+    const held = new Map<string, PhotoFocus>();
+    (Array.isArray(photos) ? photos : []).slice(0, MOST_FOCUS_POINTS).forEach((photo, i) => {
+        const f = list?.[i] ?? null;
+        if (typeof photo === 'string' && photo !== '' && f && !held.has(photo)) held.set(photo, f);
+    });
+    return held;
+}
+
+/** The focus held for `photo`, or `null` for none. */
+export function photoFocusOfPhoto(held: PhotoFocusByPhoto, photo: string | null | undefined): PhotoFocus | null {
+    return photo ? held.get(photo) ?? null : null;
+}
+
+/** `held` with `photo`'s focus set, or taken off for `null`: a new map, so a React form sees the change. */
+export function withPhotoFocus(held: PhotoFocusByPhoto, photo: string, focus: PhotoFocus | null): Map<string, PhotoFocus> {
+    const next = new Map(held);
+    const clean = photoFocusOf(focus);
+    if (clean) next.set(photo, clean);
+    else next.delete(photo);
+    return next;
+}
+
+/**
+ * The `photoFocus` to send for `photos` as the form holds them now: each photo's own focus, in the photos' order, `null` for
+ * a photo with none; `null` when none has one (photoFocusList), so a post with none sends none.
+ */
+export function photoFocusForPhotos(photos: ReadonlyArray<string>, held: PhotoFocusByPhoto): Array<PhotoFocus | null> | null {
+    return photoFocusList(photos.map((p) => held.get(p) ?? null), photos.length);
+}
+
 /** A focus as two percentages, for the phone's `contentPosition` and the web's `object-position`. */
 export function photoFocusPercent(focus: PhotoFocus): { left: number; top: number } {
     return { left: round3(focus.x * 100), top: round3(focus.y * 100) };

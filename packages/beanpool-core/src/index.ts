@@ -258,3 +258,5 @@ export * from './contacts-invite.js';
 export * from './contacts-former-words.js';
 // Local knowledge's card on the Pulse (slice KP, apps): what it draws from PULSE_KNOWLEDGE_WORDS, and one card a day across pages.
 export * from './pulse-knowledge-card.js';
+// Several photos picked in one go: the first that fit the room left, in the order picked, and how many were left out (both apps).
+export * from './photos-that-fit.js';

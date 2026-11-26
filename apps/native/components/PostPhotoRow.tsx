@@ -1,13 +1,14 @@
 /**
- * A listing's photos while it is being written: each one with a ✕ to take it off, and a + that adds one (utils/post-photo.ts:
- * Camera or Gallery, nothing asked of the phone until one is tapped), up to the five a listing holds. The edit form's row
+ * A listing's photos while it is being written: each one with a ✕ to take it off, and a + that adds photos (utils/post-photo.ts:
+ * one from the Camera, or several in one go from Gallery or Browse files up to the room left, nothing asked of the phone until
+ * one is tapped), up to the five a listing holds. The edit form's row
  * (app/post/[id].tsx), for a composer that keeps its photos in a list of data URLs.
  */
 import React from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { t } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
-import { askForPostPhoto } from '../utils/post-photo';
+import { askForPostPhotos } from '../utils/post-photo';
 
 /** The most photos a listing holds (the node keeps five: engine/posts.ts). */
 export const MAX_POST_PHOTOS = 5;
@@ -24,10 +25,10 @@ export function PostPhotoRow({ photos, onChange, testID, required }: { photos: s
         add: { width: 60, height: 60, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.border.strong, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.card },
         addIcon: { color: colors.text.muted, fontSize: 26 },
     }));
-    // The newest list each time: two photos picked quickly both stay.
+    // The newest list each time: two photos picked quickly, or several picked in one go (each handed over in turn), all stay.
     const latest = React.useRef(photos);
     latest.current = photos;
-    const add = () => askForPostPhoto((photo) => {
+    const add = () => askForPostPhotos(MAX_POST_PHOTOS - photos.length, (photo) => {
         if (latest.current.length >= MAX_POST_PHOTOS) return;
         latest.current = [...latest.current, photo];
         onChange(latest.current);

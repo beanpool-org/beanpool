@@ -37,13 +37,13 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { StackActions, useRoute } from '@react-navigation/native';
 import {
     POST_TYPE_LINES, carryTotalToEach, feeOf, formatHundredths, parseHundredths, perItemCreateFields, perItemFeeLine, perItemLines,
-    priceUnitsOffered, t, upperCase, type PerItemField,
+    priceUnitsOffered, storedPhotoFocus, t, upperCase, type PerItemField,
 } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getReachablePeers } from '../utils/db';
 import { noteNotifyMoment, LISTING_MOMENT } from '../components/NotifyLine';
 import { hasUsableAvatar as sharedHasUsableAvatar } from '../utils/profile-status';
-import { askForPostPhoto } from '../utils/post-photo';
+import { askForPostPhotos } from '../utils/post-photo';
 import { usePhotoFocusList } from '../utils/use-photo-focus-list';
 import { PhotoFocusAdjust } from '../components/PhotoFocusAdjust';
 import { useIdentity } from './IdentityContext';
@@ -321,8 +321,11 @@ export default function NewListingScreen() {
     const [postReachPeers, setPostReachPeers] = useState<string[]>([]);
     const [reachablePeerList, setReachablePeerList] = useState<{ peerId: string; callsign: string | null }[]>([]);
     const [postPhotos, setPostPhotos] = useState<string[]>([]);
-    // Each photo's focus, the part its card keeps (core photo-focus.ts): beside postPhotos, in the same order.
+    // Each photo's focus, the part its card keeps (core photo-focus.ts): held by the photo itself, so it goes wherever that
+    // photo goes in postPhotos (taken off, several picked at once, the list put in whole by a draft).
     const photoFocus = usePhotoFocusList();
+    // The focus the draft keeps, as posts.photo_focus holds it: a string, so the draft is saved only when it changes.
+    const postFocusStored = storedPhotoFocus(photoFocus.forPhotos(postPhotos));
     const [postLat, setPostLat] = useState<number | null>(null);
     const [postLng, setPostLng] = useState<number | null>(null);
     const [pinDropMode, setPinDropMode] = useState(false);
@@ -428,7 +431,7 @@ export default function NewListingScreen() {
     const resetNewPost = () => {
         setAlsoOnGlobal(false);
         setPostType('offer'); setPostCategory(''); setPostTags([]); setPostFreeTags([]); setPostTitle(''); setPostDescription('');
-        setPostCredits(''); setPickedPriceType('fixed'); setPostItemCount(''); setPostItemLot(''); setItemRefusal(null); setPostRepeatable(false); setPostPhotos([]); photoFocus.resetFrom(null);
+        setPostCredits(''); setPickedPriceType('fixed'); setPostItemCount(''); setPostItemLot(''); setItemRefusal(null); setPostRepeatable(false); setPostPhotos([]); photoFocus.resetFrom([]);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
         setValidationToast(''); setPostReach('local'); setPostReachPeers([]);
     };
@@ -449,11 +452,11 @@ export default function NewListingScreen() {
             const draft = {
                 anchorUrl, postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits,
                 postPriceType: pickedPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
-                postReach, postReachPeers, savedAt: Date.now(),
+                postPhotoFocus: postFocusStored, postReach, postReachPeers, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, pickedPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
+    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, pickedPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postFocusStored, postLat, postLng, postReach, postReachPeers]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
@@ -470,7 +473,10 @@ export default function NewListingScreen() {
         setPostItemLot(typeof d.postItemLot === 'string' ? d.postItemLot : '');
         setPostRepeatable(!!d.postRepeatable);
         setPostCashAlsoNeeded(!!d.postCashAlsoNeeded);
-        setPostPhotos(Array.isArray(d.postPhotos) ? d.postPhotos : []);
+        const draftPhotos: string[] = Array.isArray(d.postPhotos) ? d.postPhotos : [];
+        setPostPhotos(draftPhotos);
+        // The list put in whole: each photo's focus as the draft kept it, held by photo (none for a draft from before).
+        photoFocus.resetFrom(draftPhotos, { photo_focus: d.postPhotoFocus });
         setPostLat(typeof d.postLat === 'number' ? d.postLat : null);
         setPostLng(typeof d.postLng === 'number' ? d.postLng : null);
         setPostReach(d.postReach === 'peers' || d.postReach === 'everywhere' ? d.postReach : 'local');
@@ -646,8 +652,9 @@ export default function NewListingScreen() {
 
     const pickPhoto = async () => {
         if (postPhotos.length >= 5) return;
-        // The shared sheet: Camera, Gallery, and Browse files on Android, closed by Back (utils/post-photo).
-        askForPostPhoto((photo) => setPostPhotos(prev => [...prev, photo]));
+        // The shared sheet: Camera, Gallery, and Browse files on Android, closed by Back (utils/post-photo). Gallery and Browse
+        // files pick up to the room left in one go, each photo handed over in the order picked.
+        askForPostPhotos(5 - postPhotos.length, (photo) => setPostPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev)));
     };
 
     const showPricingGuide = () => {
@@ -723,7 +730,7 @@ export default function NewListingScreen() {
                 lat: postLat,
                 lng: postLng,
                 photos: postPhotos.length > 0 ? JSON.stringify(postPhotos) : null,
-                photoFocus: photoFocus.forPhotos(postPhotos.length),
+                photoFocus: photoFocus.forPhotos(postPhotos),
                 created_at: new Date().toISOString(),
                 // #143 step 4 — per-listing reach (fallback to 'local' if 'peers' selected without chosen targets)
                 reach: (postReach === 'peers' && postReachPeers.length === 0) ? 'local' : postReach,
@@ -991,10 +998,10 @@ export default function NewListingScreen() {
                                 {postPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                         <View key={i} style={styles.photoThumb}>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Choose what the card shows')} testID={`photo-adjust-${i}`} onPress={() => photoFocus.open(i)}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Choose what the card shows')} testID={`photo-adjust-${i}`} onPress={() => photoFocus.open(uri)}>
                                                 <RNImage source={{ uri }} style={styles.photoImg} />
                                             </Pressable>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo')} style={styles.photoRemove} onPress={() => { setPostPhotos(prev => prev.filter((_, j) => j !== i)); photoFocus.removeAt(i); }}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo')} style={styles.photoRemove} onPress={() => { setPostPhotos(prev => prev.filter((_, j) => j !== i)); photoFocus.removed(); }}>
                                                 <Text style={styles.photoRemoveText}>✕</Text>
                                             </Pressable>
                                         </View>
@@ -1010,8 +1017,8 @@ export default function NewListingScreen() {
                             {postPhotos.length > 0 ? <Text style={styles.photoHint}>{t('Tap a photo to choose what its card shows.')}</Text> : null}
                             <PhotoFocusAdjust
                                 visible={photoFocus.adjusting !== null}
-                                uri={photoFocus.adjusting !== null ? postPhotos[photoFocus.adjusting] ?? null : null}
-                                focus={photoFocus.adjusting !== null ? photoFocus.at(photoFocus.adjusting) : null}
+                                uri={photoFocus.adjusting}
+                                focus={photoFocus.at(photoFocus.adjusting)}
                                 onCancel={photoFocus.close}
                                 onDone={(f) => { if (photoFocus.adjusting !== null) photoFocus.setAt(photoFocus.adjusting, f); photoFocus.close(); }}
                             />

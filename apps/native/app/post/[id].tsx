@@ -45,7 +45,7 @@ import { getProfileStatus, acceptNeedsProfileLine } from '../../utils/profile-st
 import { ReviewModal } from '../../components/ReviewModal';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { BillsTab } from '../../components/Bills';
-import { askForPostPhoto } from '../../utils/post-photo';
+import { askForPostPhotos } from '../../utils/post-photo';
 import { usePhotoFocusList } from '../../utils/use-photo-focus-list';
 import { PhotoFocusAdjust } from '../../components/PhotoFocusAdjust';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -575,7 +575,8 @@ function PostDetailModal() {
     const [editItemLoading, setEditItemLoading] = useState(false);
     const editPriceRef = useRef<TextInput>(null);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
-    // Each photo's focus, the part its card keeps (core photo-focus.ts): beside editPhotos, in the same order.
+    // Each photo's focus, the part its card keeps (core photo-focus.ts): held by the photo itself, so it goes wherever that
+    // photo goes in editPhotos (taken off, several picked at once).
     const editFocus = usePhotoFocusList();
     // "Put this in your shop" (slice S4′): where the listing is now, as the node says, and where the edit puts it.
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
@@ -608,8 +609,9 @@ function PostDetailModal() {
     // The photo frame is 4:3 of the column (the screen less the page's 16 a side); the carousel needs the number.
     const { width: screenWidth, fontScale } = useWindowDimensions();
     const photoHeight = Math.round((screenWidth - 32) * SHELL.photo.grid.aspectHeight / SHELL.photo.grid.aspectWidth);
-    // The photo a tap opened whole (the frame crops to 4:3): its own URL, the same ~800 px photo, in the chat's full-screen viewer.
-    const [viewerUri, setViewerUri] = useState<string | null>(null);
+    // The photo a tap opened whole (the frame crops to 4:3), among the photos the carousel drew: the same ~800 px photos in the
+    // full-screen viewer, which swipes through all of them from the one tapped.
+    const [viewer, setViewer] = useState<{ photos: string[]; index: number } | null>(null);
     // The note under IN RETURN, once the member has asked for the whole of it ("More").
     const [termsNoteOpen, setTermsNoteOpen] = useState(false);
     // Where the take-up sits in the page, for the scroll that brings its confirmation into view.
@@ -1476,7 +1478,7 @@ function PostDetailModal() {
             }).finally(() => setEditItemLoading(false));
         }
         setEditPhotos(photos);
-        editFocus.resetFrom(post);
+        editFocus.resetFrom(photos, post);
         setEditMode(true);
         // A member's own Offer for everyone here can go in their shop: the toggle starts where the node says it is now, and
         // shows nothing while that can't be read (an enterprise's shop is a later slice).
@@ -1552,7 +1554,7 @@ function PostDetailModal() {
                 } : {}),
                 photos: editPhotos.length > 0 ? JSON.stringify(editPhotos) : null,
                 // Each photo's focus, only when the member changed one here (null clears it); untouched, the node keeps each photo's.
-                ...(editFocus.touched ? { photoFocus: editFocus.forEdit(editPhotos.length) } : {}),
+                ...(editFocus.touched ? { photoFocus: editFocus.forEdit(editPhotos) } : {}),
                 ...(shopId !== undefined ? { shopId } : {}),
             });
             // Refresh the post
@@ -1743,7 +1745,7 @@ function PostDetailModal() {
 
     const pickEditPhoto = () => {
         if (editPhotos.length >= 5) return;
-        askForPostPhoto((photo) => {
+        askForPostPhotos(5 - editPhotos.length, (photo) => {
             setEditPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev));
         });
     };
@@ -2209,10 +2211,10 @@ function PostDetailModal() {
                                 {editPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                         <View key={i} style={styles.editPhotoThumb}>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Choose what the card shows')} testID={`photo-adjust-${i}`} onPress={() => editFocus.open(i)}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Choose what the card shows')} testID={`photo-adjust-${i}`} onPress={() => editFocus.open(uri)}>
                                                 <Image accessibilityLabel={t('Post photo')} source={{ uri }} style={styles.editPhotoImg} />
                                             </Pressable>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo from the post')} style={styles.editPhotoRemove} onPress={() => { setEditPhotos(prev => prev.filter((_, j) => j !== i)); editFocus.removeAt(i); }}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityHint={t('Removes this photo from the post')} style={styles.editPhotoRemove} onPress={() => { setEditPhotos(prev => prev.filter((_, j) => j !== i)); editFocus.removed(); }}>
                                                 <Text style={styles.editPhotoRemoveText}>✕</Text>
                                             </Pressable>
                                         </View>
@@ -2227,8 +2229,8 @@ function PostDetailModal() {
                             {editPhotos.length > 0 ? <Text style={styles.editPhotoHint}>{t('Tap a photo to choose what its card shows.')}</Text> : null}
                             <PhotoFocusAdjust
                                 visible={editFocus.adjusting !== null}
-                                uri={editFocus.adjusting !== null ? editPhotos[editFocus.adjusting] ?? null : null}
-                                focus={editFocus.adjusting !== null ? editFocus.at(editFocus.adjusting) : null}
+                                uri={editFocus.adjusting}
+                                focus={editFocus.at(editFocus.adjusting)}
                                 onCancel={editFocus.close}
                                 onDone={(f) => { if (editFocus.adjusting !== null) editFocus.setAt(editFocus.adjusting, f); editFocus.close(); }}
                             />
@@ -2761,7 +2763,7 @@ function PostDetailModal() {
                   */}
                 {photos.length > 0 ? (
                     <View style={styles.photoFrame} testID="post-photo-frame">
-                        <PhotoCarousel photos={photos} height={photoHeight} borderRadius={SHELL.radius} onOpen={(_i, uri) => setViewerUri(uri)} />
+                        <PhotoCarousel photos={photos} height={photoHeight} borderRadius={SHELL.radius} onOpen={(index, _uri, shown) => setViewer({ photos: shown, index })} />
                     </View>
                 ) : (
                     <View style={styles.tileBanner} testID="post-tile-banner">
@@ -3124,7 +3126,7 @@ function PostDetailModal() {
                 </View>
             )}
             {/* The photo whole, over the page, until tapped or closed. Drawn only while open: it is a Modal, and most visits never open it. */}
-            {!!viewerUri && <ChatPhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} />}
+            {!!viewer && <ChatPhotoViewer uri={viewer.photos[viewer.index]} photos={viewer.photos} index={viewer.index} onClose={() => setViewer(null)} />}
             {showPinSheet && (
                 <PinSheet
                     visible

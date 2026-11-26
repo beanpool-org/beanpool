@@ -156,18 +156,48 @@ describe('usePhotoFocusList: an edit sends the focus only when the member change
         let hook: ReturnType<typeof usePhotoFocusList> | null = null;
         const Probe = () => { hook = usePhotoFocusList(); return null; };
         act(() => { root.render(createElement(Probe) as any); });
-        act(() => { hook!.resetFrom({ photo_focus: '[{"x":0.2,"y":0.8}]' }); });
+        act(() => { hook!.resetFrom(['p0', 'p1'], { photo_focus: '[{"x":0.2,"y":0.8}]' }); });
         expect(hook!.touched).toBe(false);
-        expect(hook!.forEdit(2)).toBeUndefined();
-        expect(hook!.at(0)).toEqual({ x: 0.2, y: 0.8 });
-        act(() => { hook!.setAt(1, { x: 0.5, y: 0 }); });
-        expect(hook!.forEdit(2)).toEqual([{ x: 0.2, y: 0.8 }, { x: 0.5, y: 0 }]);
-        act(() => { hook!.resetFrom(null); });
-        expect(hook!.forEdit(2)).toBeUndefined();
-        act(() => { hook!.resetFrom({ photoFocus: [null, { x: 1, y: 1 }] }); });
-        act(() => { hook!.removeAt(0); });
-        expect(hook!.forEdit(1)).toEqual([{ x: 1, y: 1 }]);
-        act(() => { hook!.setAt(0, null); });
-        expect(hook!.forEdit(1)).toBeNull();
+        expect(hook!.forEdit(['p0', 'p1'])).toBeUndefined();
+        expect(hook!.at('p0')).toEqual({ x: 0.2, y: 0.8 });
+        act(() => { hook!.setAt('p1', { x: 0.5, y: 0 }); });
+        expect(hook!.forEdit(['p0', 'p1'])).toEqual([{ x: 0.2, y: 0.8 }, { x: 0.5, y: 0 }]);
+        act(() => { hook!.resetFrom([], null); });
+        expect(hook!.forEdit(['p0', 'p1'])).toBeUndefined();
+        act(() => { hook!.resetFrom(['q0', 'q1'], { photoFocus: [null, { x: 1, y: 1 }] }); });
+        act(() => { hook!.removed(); });
+        expect(hook!.forEdit(['q1'])).toEqual([{ x: 1, y: 1 }]);
+        act(() => { hook!.setAt('q1', null); });
+        expect(hook!.forEdit(['q1'])).toBeNull();
+    });
+
+    it('every way a form changes its photos keeps each photo\'s own focus (the table both apps run, core photo-focus-vectors)', async () => {
+        const { usePhotoFocusList } = await import('../use-photo-focus-list');
+        const { checkPhotoFocusVectors } = await import('@beanpool/core/photo-focus-vectors');
+        const wrong = checkPhotoFocusVectors(() => {
+            let hook: ReturnType<typeof usePhotoFocusList> | null = null;
+            let photos: string[] = [];
+            const Probe = () => { hook = usePhotoFocusList(); return null; };
+            act(() => { root.render(createElement(Probe, { key: Math.random() }) as any); });
+            return {
+                setPhotos: (next) => { photos = next; },
+                removed: () => act(() => { hook!.removed(); }),
+                adjust: (photo, f) => act(() => { hook!.open(photo); hook!.setAt(photo, f); hook!.close(); }),
+                putWhole: (next, focus) => { photos = next; act(() => { hook!.resetFrom(next, { photoFocus: Array.isArray(focus) ? focus : undefined, photo_focus: focus }); }); },
+                sent: () => hook!.forPhotos(photos),
+            };
+        });
+        expect(wrong).toEqual([]);
+    });
+
+    it('no phone form keeps focus points in a list beside its photos, or opens Adjust on a photo\'s place', () => {
+        for (const form of ['../../app/new-listing.tsx', '../../app/post/[id].tsx']) {
+            const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), form), 'utf8');
+            expect(src, form).toContain('usePhotoFocusList()');
+            expect(src, form).not.toMatch(/useState<Array<PhotoFocus \| null>>/);
+            // Adjust opens on the photo itself (`.open(uri)`), never a number, and a removal moves no focus by its place.
+            expect(src, form).not.toMatch(/Focus\.open\(\s*i\s*\)/);
+            expect(src, form).not.toMatch(/removeAt\(/);
+        }
     });
 });

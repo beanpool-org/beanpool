@@ -1,40 +1,47 @@
 import { useCallback, useState } from 'react';
-import { photoFocusFromStored, photoFocusList, type PhotoFocus } from '@beanpool/core';
+import { NO_PHOTO_FOCUS, photoFocusByPhoto, photoFocusForPhotos, photoFocusOfPhoto, withPhotoFocus, type PhotoFocus, type PhotoFocusByPhoto } from '@beanpool/core';
 
 /**
- * A post form's focus points (@beanpool/core photo-focus.ts), kept beside its photo list and in the same order: the n-th
- * entry is the n-th photo's, a missing or null entry a photo with none. Its own hook, so the forms' photo pickers change
- * only by one line each: a removed photo takes its focus with it (`removeAt`), an added one has none.
+ * A post form's focus points (@beanpool/core photo-focus.ts), held by the photo each belongs to, never by its place in the
+ * list: whatever the form does to its photos (one taken off, several added in one pick, the list put in whole), each photo's
+ * focus stays with that photo and a photo added has none (review of #3390). The list sent is read off the form's photos as
+ * they stand (`forPhotos`), so it cannot fall out of step with them. Its own hook, so the forms' photo pickers change only by
+ * a line each.
  */
 export function usePhotoFocusList() {
-    const [focus, setFocus] = useState<Array<PhotoFocus | null>>([]);
-    /** The photo whose Adjust screen is open, by its place in the list, or null. */
-    const [adjusting, setAdjusting] = useState<number | null>(null);
+    const [held, setHeld] = useState<PhotoFocusByPhoto>(NO_PHOTO_FOCUS);
+    /** The photo whose Adjust screen is open (the photo itself, not its place), or null. */
+    const [adjusting, setAdjusting] = useState<string | null>(null);
     /**
      * Whether the member changed a focus (or took a photo off) since the form opened. An edit sends `photoFocus` only then: this
      * phone's copy can be behind the node (a focus set on the web not synced here yet), and an untouched edit leaves the node
      * to keep each photo's focus with it.
      */
     const [touched, setTouched] = useState(false);
-    const setAt = useCallback((index: number, next: PhotoFocus | null) => {
+    const setAt = useCallback((photo: string, next: PhotoFocus | null) => {
         setTouched(true);
-        setFocus((prev) => {
-            const list = prev.slice();
-            while (list.length <= index) list.push(null);
-            list[index] = next;
-            return list;
-        });
+        setHeld((prev) => withPhotoFocus(prev, photo, next));
     }, []);
-    const removeAt = useCallback((index: number) => { setTouched(true); setFocus((prev) => prev.filter((_, j) => j !== index)); }, []);
-    /** Start from a post's focus as this phone holds it (its `photoFocus`, or the copy's `photo_focus`), or none. */
-    const resetFrom = useCallback((post?: { photoFocus?: unknown; photo_focus?: unknown } | null) => {
-        setFocus((Array.isArray(post?.photoFocus) ? photoFocusList(post?.photoFocus, 5) : photoFocusFromStored(post?.photo_focus)) ?? []);
+    /** A photo taken off: its focus is held by the photo, so nothing moves; an edit now sends the list for the photos left. */
+    const removed = useCallback(() => setTouched(true), []);
+    /**
+     * Start from `photos` (the form's list as it is put in whole) and the post's focus as this phone holds it (its
+     * `photoFocus`, or the copy's `photo_focus`), or none: a new form, a draft.
+     */
+    const resetFrom = useCallback((photos: readonly string[], post?: { photoFocus?: unknown; photo_focus?: unknown } | null) => {
+        setHeld(photoFocusByPhoto(photos, Array.isArray(post?.photoFocus) ? post?.photoFocus : post?.photo_focus));
         setAdjusting(null);
         setTouched(false);
     }, []);
-    /** The list to send for `count` photos: null when none has a focus (core photoFocusList). */
-    const forPhotos = useCallback((count: number) => photoFocusList(focus, count), [focus]);
-    /** An edit's `photoFocus`: the list for `count` photos when the member touched it, else nothing (undefined: not sent). */
-    const forEdit = useCallback((count: number) => (touched ? photoFocusList(focus, count) : undefined), [touched, focus]);
-    return { focus, touched, at: (index: number) => focus[index] ?? null, setAt, removeAt, resetFrom, forPhotos, forEdit, adjusting, open: setAdjusting, close: () => setAdjusting(null) };
+    /** The list to send for the form's `photos` as they stand: each one's own focus; null when none has one. */
+    const forPhotos = useCallback((photos: readonly string[]) => photoFocusForPhotos(photos, held), [held]);
+    /** An edit's `photoFocus`: the list for `photos` when the member touched it, else nothing (undefined: not sent). */
+    const forEdit = useCallback((photos: readonly string[]) => (touched ? photoFocusForPhotos(photos, held) : undefined), [touched, held]);
+    return {
+        touched,
+        at: (photo: string | null | undefined) => photoFocusOfPhoto(held, photo),
+        setAt, removed, resetFrom, forPhotos, forEdit, adjusting,
+        open: setAdjusting as (photo: string) => void,
+        close: () => setAdjusting(null),
+    };
 }

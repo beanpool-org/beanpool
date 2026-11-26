@@ -12,9 +12,9 @@
 import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, POLL_DAYS_DEFAULT, pollOtherLines, pollWeekGroupNote, pollWeekNotice, type PollDays } from '@beanpool/core';
 import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
-import { photoFocusList, storedPhotoFocus, type PhotoFocus } from '@beanpool/core';
+import { photoFocusByPhoto, photoFocusForPhotos, storedPhotoFocus, type PhotoFocus } from '@beanpool/core';
 import { PhotoFocusDialog } from '../components/PhotoFocusDialog';
-import { cardObjectPosition } from '../lib/photo-focus';
+import { cardObjectPosition, usePhotoFocusByPhoto } from '../lib/photo-focus';
 import { carryTotalToEach, perItemCreateFields, perItemFeeLine, perItemLines, priceUnitsOffered, type PerItemField } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
 import { CashAlsoNeededField, ListingReachField, RepeatableField } from '../components/ListingFormFields';
@@ -80,6 +80,7 @@ import { ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestion
 import { marked, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
+import { PhotosLeftOut, pickedPostPhotos, usePhotosLeftOut } from '../components/PostPhotoPicker';
 import type { ComposerDraft } from '../tools/builder';
 import { linkForumThing } from '../lib/forum';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
@@ -429,13 +430,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [newPostReachPeers, setNewPostReachPeers] = useState<string[]>([]);
     const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
-    // Each photo's focus, the part its card keeps (core photo-focus.ts): beside newPostPhotos, in the same order. The photo
-    // whose Adjust dialog is open, by its place; the focus an event edit opened with, to send only a change.
-    const [newPostFocus, setNewPostFocus] = useState<Array<PhotoFocus | null>>([]);
-    const [focusAdjusting, setFocusAdjusting] = useState<number | null>(null);
+    // Each photo's focus, the part its card keeps (core photo-focus.ts): held by the photo itself, so it goes wherever that photo
+    // goes in newPostPhotos (taken off, several picked at once, the list put in whole), and the Adjust dialog opens on the photo,
+    // not its place. And the focus an event edit opened with, to send only a change.
+    const newPostFocus = usePhotoFocusByPhoto();
+    const { resetFrom: resetNewPostFocus } = newPostFocus;
     const eventFocusFrom = useRef<string | null>(null);
     // The form's photos cleared (a post made, a form reset): their focus goes with them.
-    useEffect(() => { if (newPostPhotos.length === 0) setNewPostFocus([]); }, [newPostPhotos.length]);
+    useEffect(() => { if (newPostPhotos.length === 0) resetNewPostFocus([]); }, [newPostPhotos.length, resetNewPostFocus]);
+    const [photosLeftOut, notePhotosLeftOut] = usePhotosLeftOut(newPostPhotos.length);
     const [composerShop, setComposerShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [composerInShop, setComposerInShop] = useState(false);
     const cancelDraftShopRef = useRef<(() => void) | null>(null);
@@ -703,6 +706,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setNewPostReach('local');
         setNewPostReachPeers([]);
         setNewPostPhotos(openDraft.photos ?? []);
+        notePhotosLeftOut(0, 0); // a list put in whole is no pick: no 'left out' line (review of #3391)
+        resetNewPostFocus(openDraft.photos ?? []); // and no focus: a tool's photos carry none (review of #3390)
         setAudienceScope('public');
         setTargetGroupId('');
         setPostLat(null);
@@ -1273,7 +1278,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         const id = eventEdit.id;
         const payload: Parameters<typeof updateMarketplacePost>[2] = eventEditPayload(eventEdit.before, currentEventForm());
         // Its photo's focus, when the host changed it (or the photos, which carry their focus with them on the node).
-        const focusNow = photoFocusList(newPostFocus, newPostPhotos.length);
+        const focusNow = newPostFocus.forPhotos(newPostPhotos);
         if (storedPhotoFocus(focusNow) !== eventFocusFrom.current) payload.photoFocus = focusNow;
         if (Object.keys(payload).length === 0) {
             closeEventForm();
@@ -2104,8 +2109,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setNewPostTitle(form.title);
             setNewPostDescription(form.description);
             setNewPostPhotos(form.photos);
-            setNewPostFocus(photoFocusList((source as { photoFocus?: unknown }).photoFocus, form.photos.length) ?? []);
-            eventFocusFrom.current = storedPhotoFocus(photoFocusList((source as { photoFocus?: unknown }).photoFocus, form.photos.length));
+            notePhotosLeftOut(0, 0);
+            // The list put in whole: each photo's focus as the event holds it, held by photo, and that list read the same way,
+            // so an edit that changes nothing sends nothing.
+            const eventFocus = (source as { photoFocus?: unknown }).photoFocus;
+            resetNewPostFocus(form.photos, eventFocus);
+            eventFocusFrom.current = storedPhotoFocus(photoFocusForPhotos(form.photos, photoFocusByPhoto(form.photos, eventFocus)));
             setEventStart(form.start);
             setEventEnd(form.end);
             setEventRepeat(form.repeat ?? 'never');
@@ -2287,7 +2296,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
     /** The form's focus points for the post's body: named only when the member set one (core photo-focus.ts). */
     function focusBody(): { photoFocus?: Array<PhotoFocus | null> } {
-        const list = photoFocusList(newPostFocus, newPostPhotos.length);
+        const list = newPostFocus.forPhotos(newPostPhotos);
         return list ? { photoFocus: list } : {};
     }
 
@@ -2300,14 +2309,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <button
                                 type="button"
                                 data-testid={`photo-adjust-${i}`}
-                                onClick={() => setFocusAdjusting(i)}
+                                onClick={() => newPostFocus.open(photo)}
                                 aria-label={t('Choose what the card shows')}
                                 className="block p-0 border-0 bg-transparent rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
                             </button>
                             <button
-                                onClick={() => { setNewPostPhotos(prev => prev.filter((_, j) => j !== i)); setNewPostFocus(prev => prev.filter((_, j) => j !== i)); }}
+                                onClick={() => { setNewPostPhotos(prev => prev.filter((_, j) => j !== i)); newPostFocus.removed(); }}
                                 aria-label={t('Remove photo')}
                                 className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-bp-danger-fill hover:bg-bp-danger-hover border-none rounded-full text-bp-danger-on text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md transition-colors transform hover:scale-110"
                             >
@@ -2321,33 +2330,24 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <input
                                 type="file"
                                 accept="image/*"
+                                multiple
                                 className="hidden"
                                 onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (!file) return;
-                                    const reader = new FileReader();
-                                    reader.onload = () => {
-                                        const img = new Image();
-                                        img.onload = () => {
-                                            const canvas = document.createElement('canvas');
-                                            const MAX = 800;
-                                            let w = img.width, h = img.height;
-                                            if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
-                                            else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
-                                            canvas.width = w; canvas.height = h;
-                                            canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-                                            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                                            setNewPostPhotos(prev => [...prev.slice(0, 4), dataUrl]);
-                                        };
-                                        img.src = reader.result as string;
-                                    };
-                                    reader.readAsDataURL(file);
+                                    // Several in one go, up to the room left, each through the same 800 px redraw, in the order picked.
+                                    const files = Array.from(e.target.files ?? []);
                                     e.target.value = '';
+                                    if (files.length === 0) return;
+                                    const before = newPostPhotos.length;
+                                    void pickedPostPhotos(files, 5 - before).then((picked) => {
+                                        if (picked.photos.length > 0) setNewPostPhotos(prev => [...prev, ...picked.photos].slice(0, 5));
+                                        notePhotosLeftOut(picked.leftOut, Math.min(5, before + picked.photos.length));
+                                    });
                                 }}
                             />
                         </label>
                     )}
                 </div>
+                <PhotosLeftOut leftOut={photosLeftOut} />
                 <p className={`text-xs font-semibold mt-2 uppercase tracking-wide ${required && validationErrors.has('photos') && newPostPhotos.length === 0 ? 'text-red-500' : 'text-nature-400'}`}>
                     {newPostPhotos.length === 0
                         ? (required ? t('0/5 photos (at least 1 required)') : t('0/5 photos (optional)'))
@@ -2356,15 +2356,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 {newPostPhotos.length > 0 && (
                     <p className="m-0 mt-1 text-sm text-nature-600 dark:text-nature-300">{t('Tap a photo to choose what its card shows.')}</p>
                 )}
-                {focusAdjusting !== null && newPostPhotos[focusAdjusting] && (
+                {newPostFocus.adjusting !== null && newPostPhotos.includes(newPostFocus.adjusting) && (
                     <PhotoFocusDialog
-                        src={newPostPhotos[focusAdjusting]}
-                        focus={newPostFocus[focusAdjusting] ?? null}
-                        onCancel={() => setFocusAdjusting(null)}
+                        src={newPostFocus.adjusting}
+                        focus={newPostFocus.at(newPostFocus.adjusting)}
+                        onCancel={newPostFocus.close}
                         onDone={(f) => {
-                            const at = focusAdjusting;
-                            setNewPostFocus(prev => { const next = prev.slice(); while (next.length <= at) next.push(null); next[at] = f; return next; });
-                            setFocusAdjusting(null);
+                            const photo = newPostFocus.adjusting;
+                            if (photo !== null) newPostFocus.setAt(photo, f);
+                            newPostFocus.close();
                         }}
                     />
                 )}

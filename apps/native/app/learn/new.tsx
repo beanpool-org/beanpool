@@ -51,7 +51,7 @@ import { readNodePage, useKnowledgePage } from '../../components/learn/useKnowle
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { useIdentity } from '../IdentityContext';
 import { useLearnMode } from '../../utils/use-learn-mode';
-import { askForPostPhoto } from '../../utils/post-photo';
+import { askForPostPhotos } from '../../utils/post-photo';
 import { TagPicker } from '../../components/TagPicker';
 
 /** The Market's picker reads library tags it is never given here (freeOnly). */
@@ -254,7 +254,8 @@ export default function NewKnowledgeScreen() {
         set({ sources: form.sources.map((x, at) => (at === i ? { ...x, ...patch } : x)) });
     const pickPhoto = () => {
         Keyboard.dismiss();
-        askForPostPhoto((photo) => setForm((f) => (f.photos.length < KNOWLEDGE_LIMITS.photos ? { ...f, photos: [...f.photos, photo] } : f)));
+        askForPostPhotos(KNOWLEDGE_LIMITS.photos - form.photos.length,
+            (photo) => setForm((f) => (f.photos.length < KNOWLEDGE_LIMITS.photos ? { ...f, photos: [...f.photos, photo] } : f)));
     };
 
     if (use !== 'new' && !opened) {

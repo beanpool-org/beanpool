@@ -162,6 +162,11 @@ export interface NodeFeatures {
      */
     perItem?: boolean;
     /**
+     * This node lets an enterprise's keeper take up a member's Offer priced for each one for the enterprise, in one tap
+     * (POST /api/treasury/:t/take-up, the market-stall slice 1). Absent from an older node: no "Buy for {enterprise}" (slice 2).
+     */
+    enterpriseTakeUp?: boolean;
+    /**
      * This node stores a voice line as one (apps/server engine/voice-lines.ts, voice V2; core voiceLinesOn): direct and locked
      * group chats offer the microphone only then. A node that doesn't say is from before it, and stores a voice line as words
      * with a sound no one can play (a live community, 14 Nov): off, the composer exactly as before voice.
@@ -206,7 +211,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'newEventPush', 'knowledge', 'perItem', 'voiceLines', 'forum', 'forumPublic', 'forumNotices', 'outsideMessages', 'bills',
+    'askedPush', 'newEventPush', 'knowledge', 'perItem', 'enterpriseTakeUp', 'voiceLines', 'forum', 'forumPublic', 'forumNotices', 'outsideMessages', 'bills',
     'groupGuests', 'contacts',
 ];
 

@@ -409,6 +409,11 @@ CREATE TABLE IF NOT EXISTS posts (
     units_left INTEGER CHECK (units_left IS NULL OR (units_left >= 0 AND units_left <= 9999)),
     lot_price_c INTEGER CHECK (lot_price_c IS NULL OR lot_price_c > 0),
     lot_units INTEGER CHECK (lot_units IS NULL OR lot_units >= 2),
+    -- Each photo's focus, the part of it its cards keep (@beanpool/core photo-focus.ts; Marty, 26 Nov 2026): JSON, a list in
+    -- the photos' order of {"x","y"} (each 0 to 1) or null, as core's storedPhotoFocus writes it. NULL: none, every card's own
+    -- crop, as on every post from before it. Written by the engine alone (engine/posts.ts), which holds what is sent to the
+    -- rule, so no CHECK. No trigger, index or default here calls a connection function, so an older image boots on this file.
+    photo_focus TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).

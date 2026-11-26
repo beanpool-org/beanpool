@@ -64,6 +64,8 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             tags: b.tags,
             // The tags its host typed, raw: held to the rule by the engine (engine/post-fields.ts assertFreeTags).
             freeTags: b.freeTags,
+            // Each photo's focus, raw: held to two numbers 0 to 1 by the engine (@beanpool/core photoFocusList).
+            photoFocus: b.photoFocus,
             createdBy,
             beforeWrite,
             out,

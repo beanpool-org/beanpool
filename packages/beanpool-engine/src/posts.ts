@@ -24,7 +24,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { PINS_MAX, TIER_LEVELS, avatarUrlOf, lendBackAroundOf, pollIsSealed, shopPhotoUrlOf, tierIndexForName, wordsFor } from '@beanpool/core';
+import { PINS_MAX, TIER_LEVELS, avatarUrlOf, lendBackAroundOf, photoFocusFromStored, pollIsSealed, shopPhotoUrlOf, tierIndexForName, wordsFor, type PhotoFocus } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared, preparedShape } from './statements.js';
@@ -160,6 +160,12 @@ export interface MarketplacePost {
     lat?: number;
     lng?: number;
     photos?: string[];
+    /**
+     * Each photo's focus, the part of it a card's crop keeps, beside `photos` in the same order (`null` for a photo with none;
+     * @beanpool/core photo-focus.ts, posts.photo_focus). Only on a post with one, so every other post reads byte for byte as
+     * before and an app from before focus points draws its own crop.
+     */
+    photoFocus?: Array<PhotoFocus | null>;
     originNode?: string;
     /**
      * A member's copy of an event, an Offer or a Need from their own community (DESIGN-list-on-global-fable.md §3; apps/server
@@ -901,6 +907,7 @@ export function knowledgeFieldsOf(row: any): KnowledgeFields {
 export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false, tierByAuthor?: Map<string, number>, withoutTier = false): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
     const freeTags = freeTagsOf(row.free_tags);
+    const photoFocus = photoFocusFromStored(row.photo_focus);
     // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
     // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards; the floor
     // dropped a frozen member to Newcomer on their cards alone, which gave the freeze away (r4178376532).
@@ -956,6 +963,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         lat: row.lat,
         lng: row.lng,
         photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => postPhotoUrl(row.id, p.order_num, p.updated_at, row.audience_scope)),
+        ...(photoFocus ? { photoFocus } : {}),
         originNode: row.origin_node,
         ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host, ...(row.shown_from_post_id ? { shownFromPostId: row.shown_from_post_id } : {}), ...(row.shown_price ? { shownPrice: row.shown_price } : {}), ...(row.shown_takes_questions === 1 ? { takesQuestions: true } : {}) } : {}),
         // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
@@ -2817,6 +2825,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
+    // Where each photo's crop sits on a card: part of the photo, as the photo is.
+    photoFocus: 'keep',
     // A copy says it is one, where from when the directory says so, and its price at home in words. The stored host is never a
     // reader's.
     shownCopy: 'keep', shownFrom: 'keep', shownPrice: 'keep', shownFromHost: 'drop', shownFromPostId: 'drop', takesQuestions: 'drop',

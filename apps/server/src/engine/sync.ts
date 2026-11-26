@@ -7,7 +7,7 @@ import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainSer
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
-import { bodyOfSignedText, bytesOfSignedText, copiedFreeTags, copiedPostTags, isHundredths, replaceLoneSurrogates, storedFreeTags, storedPostTags } from '@beanpool/core';
+import { bodyOfSignedText, bytesOfSignedText, copiedFreeTags, copiedPostTags, isHundredths, photoFocusList, replaceLoneSurrogates, storedFreeTags, storedPhotoFocus, storedPostTags } from '@beanpool/core';
 import { attachmentKey, getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
@@ -1314,6 +1314,14 @@ function postItems(rp: any): [number | null, number | null, number | null] {
     return [count(rp.unitsLeft, 0), price !== null && units !== null ? price : null, price !== null && units !== null ? units : null];
 }
 
+/**
+ * photo_focus: each photo's focus (@beanpool/core photo-focus.ts), plain assignment, so a focus cleared on the main server is
+ * cleared here, held to the rule (photoFocusList). A main server older than focus points says nothing: none, every card's crop.
+ */
+function postPhotoFocus(rp: any): [string | null] {
+    return [storedPhotoFocus(photoFocusList(rp.photoFocus, 5))];
+}
+
 function postShownFrom(rp: any): [string | null, string | null, string | null, 1 | null] {
     return [
         typeof rp.shownFromHost === 'string' ? rp.shownFromHost : null,
@@ -2116,8 +2124,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
                                 lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, pinned_until, pinned_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions,
                                 knowledge_sources, knowledge_place, knowledge_lang, knowledge_checked_at, knowledge_outdated_at, knowledge_outdated_note, knowledge_helped,
-                                units_left, lot_price_c, lot_units)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                units_left, lot_price_c, lot_units, photo_focus)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2168,6 +2176,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postShownFrom(rp),
                         ...postKnowledge(rp),
                         ...postItems(rp),
+                        ...postPhotoFocus(rp),
                     );
                     newPosts++;
                 } else {
@@ -2244,6 +2253,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         units_left = ?,
                         lot_price_c = ?,
                         lot_units = ?,
+                        photo_focus = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2287,6 +2297,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postShownFrom(rp),
                         ...postKnowledge(rp),
                         ...postItems(rp),
+                        ...postPhotoFocus(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );

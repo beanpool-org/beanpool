@@ -827,7 +827,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
     const requestBody = copyBody((ctx as any).requestBody || {});
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
     const { id, type, category, title, description, price_c, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo,
-        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom, unitsLeft, lot } = requestBody;
+        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom, unitsLeft, lot, photoFocus } = requestBody;
     // The price is whole hundredths, `price_c` (money-body.ts): a body with the old `credits` is an app from before them.
     if ((ctx as any).requestBody && 'credits' in (ctx as any).requestBody) {
         ctx.status = 400;
@@ -927,6 +927,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
                 tags,
                 // The tags its author typed, raw: the engine holds them to the rule (engine/post-fields.ts assertFreeTags).
                 freeTags,
+                // Each photo's focus, raw: held to two numbers 0 to 1 by the engine (@beanpool/core photoFocusList).
+                photoFocus,
                 shownCopy: copy,
             }
         );

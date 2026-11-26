@@ -5,9 +5,9 @@ import {
 
 /**
  * One rule for every money write an app keeps to send again with its retry id (core money-retry.ts): a day from its FIRST
- * sending, strictly inside the node's REQUEST_ID_KEPT_DAYS (7; the node's suite test-enterprise-take-up pins that). Past it a
- * held payment is aged: never sent again, and a new payment starts afresh. Pay the Commons (both apps) holds its payment
- * through HeldPayment here; the take-up sheet's book reads moneyResendable.
+ * sending, strictly inside the node's REQUEST_ID_KEPT_DAYS (7; the node's suite test-commons-pay-idempotent-http step 9
+ * pins that). Past it a held payment is aged: never sent again, and a new payment starts afresh. Pay the Commons (both
+ * apps) holds its payment through HeldPayment here.
  */
 const H = 3_600_000;
 const DAY = 24 * H;

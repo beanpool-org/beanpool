@@ -40,7 +40,6 @@ import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MONEY_RESEND_HOURS, firstSending, heldResend } from '@beanpool/core';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -245,6 +244,11 @@ async function main(): Promise<void> {
     {
         const mod = await import('./engine/money-requests.js').catch(() => null);
         const keptDays = (mod as any)?.REQUEST_ID_KEPT_DAYS as number | undefined;
+        // Read at run time, so on a tree without core's money-retry.ts the suite still runs to the end and says what fails.
+        const core = (await import('@beanpool/core')) as Record<string, any>;
+        const MONEY_RESEND_HOURS = Number(core.MONEY_RESEND_HOURS);
+        const firstSending = (core.firstSending ?? ((payment: unknown, sentAt: number) => ({ payment, sentAt }))) as (p: unknown, at: number) => { payment: unknown; sentAt: number };
+        const heldResend = (core.heldResend ?? (() => undefined)) as (held: unknown, now: number) => unknown;
         const H = 3_600_000;
         const resendMs = MONEY_RESEND_HOURS * H;
         assert(typeof keptDays === 'number' && resendMs > 0 && resendMs + DAY <= keptDays * DAY,

@@ -6,10 +6,11 @@
  * MONEY_RESEND_HOURS from its FIRST sending, never after: past that it is aged, never sent again, and a new payment starts
  * afresh with a new id, so the node's answer is never last week's payment replayed and read as this one done.
  *
- * Its stores: the take-up sheet's book of unanswered sales (enterprise-take-up.ts takeUpUnansweredBook) and the payment
- * Pay the Commons holds for Try again (each app's pay screen: the phone's app/pay-commons.tsx, the web's
- * components/RepaymentCard.tsx, through HeldPayment here). The node's suite apps/server/src/test-enterprise-take-up.ts
- * reads MONEY_RESEND_HOURS against REQUEST_ID_KEPT_DAYS, and holds a class table of every door that takes a retry id.
+ * Its store here: the payment Pay the Commons holds for Try again (each app's pay screen: the phone's app/pay-commons.tsx,
+ * the web's components/RepaymentCard.tsx, through HeldPayment). The take-up sheet's book of unanswered sales (stall slice
+ * 2, PR #3393) keeps the same rule: a day from the first sending, the same ten minutes of clock slack. The node's suite
+ * apps/server/src/test-commons-pay-idempotent-http.ts (step 9) reads MONEY_RESEND_HOURS against REQUEST_ID_KEPT_DAYS
+ * through the door and the node's own prune.
  */
 import { t, word } from './words.js';
 

@@ -192,9 +192,15 @@ describe('Pay the Commons: Try again for a day from the first sending, never aft
         expect(host.textContent).toContain(payAgedLine());
         expect(button('Try again')).toBeNull();
         await tap(REPAYMENT_LINES.payTitle);
+        // A new payment is asked again; the member says no.
+        expect(alerts.opened).toHaveLength(2);
         const cancel = alerts.opened.at(-1)!.buttons.find((b) => b.text === 'Cancel');
         expect(cancel).toBeTruthy();
+        await act(async () => { await cancel!.onPress?.(); });
+        await settle();
         expect(node.payments).toHaveLength(1);
+        expect(host.textContent).toContain(payAgedLine());
+        expect(button('Try again')).toBeNull();
     });
 
     it('a screen left open draws itself again the moment the payment ages: Try again goes without a tap', async () => {

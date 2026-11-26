@@ -1,0 +1,14 @@
+# SEV-SNP host images only. Under the host's measured direct boot no boot loader says which partition is the ESP
+# (systemd-boot's LoaderDevicePartUUID is never set: the firmware loads the UKI itself), so systemd's gpt-auto
+# generator mounts none. This mounts the install image's ESP (label ESP, usr/lib/repart.d/00-esp.conf) at /efi, root's
+# alone, for the image identity (the UKI there named by its roothash: src/shared/image-identity.ts) and root's install
+# step (systemd-sysupdate writes each new UKI there, usr/lib/sysupdate.d/30-uki.transfer).
+[Unit]
+Description=The ESP (measured direct boot)
+Before=local-fs.target
+
+[Mount]
+What=/dev/disk/by-partlabel/ESP
+Where=/efi
+Type=vfat
+Options=umask=0077,nodev,nosuid,noexec

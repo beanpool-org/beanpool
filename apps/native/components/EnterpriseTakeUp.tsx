@@ -106,11 +106,9 @@ export function EnterpriseTakeUp({ listing, postId, title, sellerName, buttons, 
         setRefusal(null);
         // Kept from the moment it goes: a page left and opened again before the answer finds it, and sends it again, not a new one.
         unanswered.keep(go.sale);
+        let answer: TakeUpAnswer;
         try {
-            const answer = takeUpAnswerOf(await send(open.enterprise, go.sale.body));
-            takeUpSettle(unanswered, go, 'answered');
-            close();
-            onDone(open, answer);
+            answer = takeUpAnswerOf(await send(open.enterprise, go.sale.body));
         } catch (e: any) {
             const outcome = takeUpOutcomeOf(e);
             takeUpSettle(unanswered, go, outcome);
@@ -119,9 +117,14 @@ export function EnterpriseTakeUp({ listing, postId, title, sellerName, buttons, 
             const text = takeUpRefusalText(e);
             setRefusal(outcome === 'lost' ? null : typeof e?.code === 'string' ? text : signedRequestWords(text));
             if (outcome === 'lost' || (outcome === 'refused' && takeUpListingMoved(e))) onListingMoved?.();
+            return;
         } finally {
             setBusy(false);
         }
+        // The node answered: forgotten here, outside the catch, so nothing the page does next can put it back as unanswered.
+        takeUpSettle(unanswered, go, 'answered');
+        close();
+        onDone(open, answer);
     };
     return (
         <View style={s.sheet} testID="take-up-sheet">

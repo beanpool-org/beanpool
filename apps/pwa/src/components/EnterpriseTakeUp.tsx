@@ -86,20 +86,23 @@ export function EnterpriseTakeUp({ listing, postId, title, sellerName, buttons, 
         setRefusal(null);
         // Kept from the moment it goes: a listing closed and opened again before the answer finds it, and sends it again.
         unanswered.keep(go.sale);
+        let answer: TakeUpAnswer;
         try {
-            const answer = takeUpAnswerOf(await send(open.enterprise, go.sale.body));
-            takeUpSettle(unanswered, go, 'answered');
-            close();
-            onDone(open, answer);
+            answer = takeUpAnswerOf(await send(open.enterprise, go.sale.body));
         } catch (e) {
             const outcome = takeUpOutcomeOf(e);
             takeUpSettle(unanswered, go, outcome);
             // A lost answer is never shown as a refusal: the kept sale's line says it may have gone through (drawn below).
             setRefusal(outcome === 'lost' ? null : takeUpRefusalText(e));
             if (outcome === 'lost' || (outcome === 'refused' && takeUpListingMoved(e))) onListingMoved?.();
+            return;
         } finally {
             setBusy(false);
         }
+        // The node answered: forgotten here, outside the catch, so nothing the page does next can put it back as unanswered.
+        takeUpSettle(unanswered, go, 'answered');
+        close();
+        onDone(open, answer);
     };
     return (
         <div data-testid="take-up-sheet" className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-3">

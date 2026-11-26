@@ -52,16 +52,18 @@ afterEach(async () => {
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-function cli(args: string[], opts: { input?: string; env?: Record<string, string> } = {}): Promise<{ code: number | null; out: string }> {
+// `out` is stdout and stderr in the order their chunks arrived, which is NOT the order they were written: two pipes
+// race. `stdout`/`stderr` are each in order. Never assert an order across the two from `out` (it flaked on CI, 26 Nov).
+function cli(args: string[], opts: { input?: string; env?: Record<string, string> } = {}): Promise<{ code: number | null; out: string; stdout: string; stderr: string }> {
     return new Promise(resolve => {
         const child = spawn(process.execPath, [compiledCli, ...args], {
             cwd: VAULT_ROOT, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, VAULT_CUSTODIAN_PASSPHRASE: '', ...opts.env },
         });
-        let out = '';
-        child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
-        child.stderr.on('data', (d: Buffer) => { out += d.toString(); });
+        let out = '', stdout = '', stderr = '';
+        child.stdout.on('data', (d: Buffer) => { out += d.toString(); stdout += d.toString(); });
+        child.stderr.on('data', (d: Buffer) => { out += d.toString(); stderr += d.toString(); });
         child.stdin.end(opts.input ?? '');
-        child.once('exit', code => resolve({ code, out }));
+        child.once('exit', code => resolve({ code, out, stdout, stderr }));
     });
 }
 
@@ -384,7 +386,11 @@ describe('vault-custodian release', () => {
         const declined = await cli(['release', 'sign', '--dir', drop, '--key', keys[0], ...feed], { input: 'no\n' });
         expect(declined.code).toBe(1);
         expect(declined.out).toContain('!!! DOWNGRADE: 1.0.0 requires the sev-snp hardware check before any share goes. This release has none.');
-        expect(declined.out.indexOf('DOWNGRADE')).toBeLessThan(declined.out.indexOf('You are signing exactly this release'));
+        // The release (with the DOWNGRADE lines) goes to stdout before the yes prompt is asked on stderr (cli.ts sign:
+        // describeRelease is printed, then confirmYes). Across two pipes the arrival order is a race, so check each stream.
+        expect(declined.stdout).toContain('!!! DOWNGRADE');
+        expect(declined.stdout).not.toContain('You are signing exactly this release');
+        expect(declined.stderr).toContain('You are signing exactly this release');
         expect(existsSync(path.join(drop, SIGNATURES_ASSET))).toBe(false);
         expect((await cli(['release', 'verify', '--dir', drop, ...feed])).out).toContain('!!! DOWNGRADE');
     });

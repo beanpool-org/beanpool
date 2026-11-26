@@ -26,6 +26,11 @@
  *                                                           author's own need
  *   POST /api/(treasury|enterprise)/:id/approve             R, and P to the helper on its   the enterprise, and the
  *                                                           need                            keeper's enterprise work
+ *   POST /api/treasury/:id/take-up                          P to the seller, R              the enterprise, and the
+ *                                                                                           keeper's enterprise work (a
+ *                                                                                           one-step buy of a member's offer
+ *                                                                                           for it); nothing for a retry
+ *                                                                                           whose request id is answered
  *   POST /api/(treasury|enterprise)/:id/sweep               P (to the Commons: nobody new)  the enterprise, and the
  *                                                                                           keeper's enterprise work
  *   POST /api/(treasury|enterprise)/:id/pledge              L, and P when it is a crowdfund the member (pledges are a
@@ -68,7 +73,7 @@ import { canOperateTreasury } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { admitMoneyActs, assertMoneyActsAllowed, MoneyLimitError, type MoneyAct, type MoneyActHold, type MoneyActsCheck } from '../engine/money-limits.js';
-import { pledgeDispatchKind } from './treasury.js';
+import { pledgeDispatchKind, TAKE_UP_ROUTE } from './treasury.js';
 import { positiveHundredthsOf } from '../money-body.js';
 
 /** The account whose acts they are, and `keeper` when that is an enterprise the signer keeps (their enterprise work). */
@@ -161,6 +166,18 @@ export const MONEY_ROUTES: readonly MoneyRoute[] = [
         plan: (actor, m, b) => {
             const ent = enterpriseActingFor(actor, m[0]);
             return ent ? { account: ent, keeper: actor, acts: approval(ent, b.transactionId) } : null;
+        },
+    },
+    {
+        // An enterprise's take-up of a member's offer (routes/treasury.ts): what the accept above counts, against the enterprise
+        // and the keeper's enterprise work, as its approve is. A retry whose request id is already answered pays nothing more
+        // (the route answers the first take-up), so it counts nothing, as a paid bill's retry doesn't.
+        method: 'POST', path: at('take-up'), ids: ['postId'],
+        plan: (actor, m, b) => {
+            const ent = enterpriseActingFor(actor, m[0]);
+            if (!ent) return null;
+            if (typeof b.requestId === 'string' && db.prepare('SELECT 1 FROM money_requests WHERE payer_pubkey = ? AND request_id = ? AND route = ?').get(ent, b.requestId, TAKE_UP_ROUTE)) return null;
+            return { account: ent, keeper: actor, acts: [{ kind: 'payment', recipient: listing(b.postId)?.author ?? null }, { kind: 'request' }] };
         },
     },
     {

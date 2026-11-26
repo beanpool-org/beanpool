@@ -6,7 +6,10 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, reconcileLedgerFromDb } from './state-engine.js';
+import { initStateEngine, reconcileLedgerFromDb, createTreasury, adminAssignTreasuryOperator, createPost as rawCreatePost } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+import { TAKE_UP_ROUTE } from './routes/treasury.js';
+import { moneyRequestOf, recordAnswer } from './engine/money-requests.js';
 import { startHttpsServer } from './https-server.js';
 import {
     enterpriseActingFor,
@@ -189,6 +192,48 @@ async function main() {
         enterpriseActingFor(alice.pub, '/api/treasury/nonexistent/approve') === null,
         'enterpriseActingFor returns null for non-existent enterprise'
     );
+
+    // Unit test: an enterprise's take-up (POST /api/treasury/:id/take-up) counts what the accept counts, against the enterprise
+    // and the keeper's enterprise work, as its approve does; a retry whose request id is already answered counts nothing.
+    {
+        const createPost = wrapCreatePost(rawCreatePost);
+        const keeper = makeIdentity();
+        const seller = makeIdentity();
+        const stranger = makeIdentity();
+        insertMember(keeper, 'keeper_unit');
+        insertMember(seller, 'seller_unit');
+        insertMember(stranger, 'stranger_unit');
+        const ent = createTreasury('Riverside stall', 'data:image/png;base64,iVBORw0KGgo=').publicKey;
+        adminAssignTreasuryOperator(ent, keeper.pub);
+        const postId = createPost('offer', 'produce', 'Plums', 'Plums, priced for each one', 200, 'each', seller.pub,
+            undefined, undefined, undefined, undefined, undefined, undefined, { unitsLeft: 5 })!.id;
+        const path = `/api/treasury/${ent}/take-up`;
+        const plan = moneyPlanFor('POST', path, keeper.pub, { postId, hours: 1, itemOption: 'each', expect_c: 200 });
+        assert(
+            plan !== null && plan.account === ent && plan.keeper === keeper.pub && plan.acts.length === 2
+                && plan.acts[0].kind === 'payment' && plan.acts[0].recipient === seller.pub && plan.acts[1].kind === 'request',
+            `moneyPlanFor counts a take-up as a payment to the seller and a request, against the enterprise and its keeper (${JSON.stringify(plan)})`
+        );
+        assert(
+            MONEY_ROUTES.some((r) => r.path.test(path) && r.ids?.includes('postId')),
+            'the take-up row reads postId as an id (sent as text, or refused before anything is counted)'
+        );
+        assert(
+            moneyPlanFor('POST', path, stranger.pub, { postId }) === null,
+            'moneyPlanFor counts nothing for a take-up by someone who does not keep the enterprise (the handler refuses it)'
+        );
+        const fields = { postId, hours: 1, itemOption: 'each', expect_c: 200 };
+        const answered = moneyRequestOf(ent, TAKE_UP_ROUTE, 'unit-take-up-0001', fields)!;
+        recordAnswer(answered, { transactionId: 'unit-deal' });
+        assert(
+            moneyPlanFor('POST', path, keeper.pub, { ...fields, requestId: 'unit-take-up-0001' }) === null,
+            'moneyPlanFor counts nothing for a take-up retried with a request id already answered'
+        );
+        assert(
+            moneyPlanFor('POST', path, keeper.pub, { ...fields, requestId: 'unit-take-up-0002' }) !== null,
+            'and a new request id counts again'
+        );
+    }
 
     // 2. HTTP Integration Tests
     console.log('\n--- HTTP Integration Tests ---');

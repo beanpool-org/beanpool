@@ -466,6 +466,11 @@ export interface NodeFeatures {
      *  engine/per-item.ts): the create and edit forms offer the unit Each only where it is (@beanpool/core perItemOffered).
      *  Present on every node from 1.4.1 (PER_ITEM_BUILT); absent on an older one, so a phone's forms offer Each only there. */
     perItem?: true;
+    /** Present, and true, only where an enterprise can take up a member's Offer priced for each one by one keeper's tap
+     *  (POST /api/treasury/:treasury/take-up; DESIGN-stall-consignment-fable.md §6, slice 1): enterprises, treasuries, deals
+     *  held in trust and Beans all on. Slice 2's apps show "Buy for {enterprise}" only where it is said. Absent (the global
+     *  community, a community with any of the four off, a server from before it): no such button. Nothing reads it in slice 1. */
+    enterpriseTakeUp?: true;
     /** True on every node of this build: it stores a voice line as one (engine/voice-lines.ts, DESIGN-cross-chat-voice-fable.md
      *  §5.4, slice V2), in a direct chat and in a locked group's. The apps offer the microphone only where it is
      *  (@beanpool/core voiceLinesOn). A node from before V2 says nothing, and stores a voice line as a text line carrying a
@@ -760,6 +765,8 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.bills ? { bills: true as const } : {}),
         // A capability of the build, as pins are: on every node from 1.4.1.
         ...(PER_ITEM_BUILT ? { perItem: true as const } : {}),
+        // And an enterprise's take-up of a member's Offer priced for each one (routes/treasury.ts): only where all it stands on is on.
+        ...(s.enterprises && s.treasuries && s.escrow && s.beans ? { enterpriseTakeUp: true as const } : {}),
         // And voice lines (engine/voice-lines.ts): every profile stores one. The apps offer the microphone only where it is said.
         voiceLines: true,
         ...(s.forum ? { forum: true as const } : {}),

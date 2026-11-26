@@ -222,6 +222,16 @@ async function main() {
             },
         },
         {
+            // A seller of its own, not a keeper, whose Offer is priced for each one: the enterprise pays from its Beans.
+            name: 'take up a member\'s offer for an enterprise they keep (POST /api/treasury/:id/take-up)',
+            setup: (m) => {
+                const s = member(`Sela${++sellers}`);
+                const postId = createPost('offer', 'misc', `Jam jars for ${m.callsign}`, 'Jam jars, priced for each one', hc(10), 'each', s.pk,
+                    undefined, undefined, undefined, undefined, undefined, undefined, { unitsLeft: 5 })!.id;
+                return { method: 'POST', path: `/api/treasury/${keptEnterprise(m).ent}/take-up`, body: { postId, hours: 1, itemOption: 'each', expect_c: hc(10) } };
+            },
+        },
+        {
             name: 'sweep an enterprise they keep to the Commons (POST /api/treasury/:id/sweep)',
             setup: (m) => ({ method: 'POST', path: `/api/treasury/${keptEnterprise(m).ent}/sweep`, body: { amount_c: hc(1) } }),
         },

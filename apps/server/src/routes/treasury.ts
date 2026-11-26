@@ -16,7 +16,7 @@ import Router from '@koa/router';
 import {
     createTreasury, adminSetOperator, canOperateTreasury, canAdministerTreasury,
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    createPost, approvePostRequest, completePostTransaction, rejectPostRequest,
+    createPost, approvePostRequest, completePostTransaction, rejectPostRequest, acceptPost, getMarketplaceTransaction,
     getBalance, moveToCommons, conservingTransaction,
     sweepEnterpriseCeiling,
     pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp, getEnterpriseLedger,
@@ -36,12 +36,15 @@ import { memberShop, newListingCategory, shopOf, visitorShop } from '../engine/s
 import { getChatMute } from '../engine/chat-mutes.js';
 import { enterpriseThreadReadRefusal } from '../engine/enterprise-thread.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
-import { LISTING_COPY_CODE } from '../engine/escrow.js';
+import { LEND_ASK_FIRST_CODE, LISTING_COPY_CODE, POST_GONE_CODE } from '../engine/escrow.js';
+import { marketplacePostOutOfSight } from '../engine/post-sight.js';
+import { moneyRequestOf, priorAnswer, recordAnswer, type MoneyRequest } from '../engine/money-requests.js';
+import { respondCopyNoDeal, respondDealOpen, respondItemTakeUpRefusal } from './deal-refusals.js';
 import { pledgesReturnedAt as pledgesReturnedAtFor } from '../engine/unfunded-pledges.js';
 import { db, pledgeToProject, getCrowdfundProject, mayCancelProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR, PLEDGE_NOT_ACTIVE_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
-import { blockCrossNodeSettlement } from '../federation-settlement.js';
+import { blockCrossNodeSettlement, respondSettlementAware, SETTLEMENT_REFUSED_CODE } from '../federation-settlement.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { stripImageValue } from '../storage/image-metadata.js';
@@ -55,7 +58,8 @@ import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlOf, isPastDeadline, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
+import { avatarUrlOf, isPastDeadline, isPerItem, isSyntheticAccount, replaceLoneSurrogates, word } from '@beanpool/core';
+import { getPosts, type MarketplaceTransaction } from '@beanpool/engine';
 import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, carriesOldMoneyKey, optionalHundredthsOf, requirePositiveHundredths } from '../money-body.js';
 import { readProjectDeadline } from './project-deadline.js';
@@ -82,6 +86,64 @@ export function pledgeDispatchKind(treasury: string, body: { type?: unknown; mem
 function ownPendingRequest(treasury: string, actor: string): (KeeperJoinRequest & { availableToBack_c: number }) | null {
     const mine = getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor);
     return mine ? { ...mine, availableToBack_c: getAvailableBacking(actor) } : null;
+}
+
+/** An enterprise's take-up of a member's Offer (POST /api/treasury/:treasury/take-up): the route its request ids are kept under. */
+export const TAKE_UP_ROUTE = 'POST /api/treasury/:treasury/take-up';
+/** A take-up of anything but an Offer priced for each one, refused before the engine is called. */
+export const TAKE_UP_EACH_ONLY_CODE = 'take_up_each_only';
+/** A retry of a take-up whose deal its seller has since cancelled: nothing more moves on that request id. */
+export const TAKE_UP_CANCELLED_CODE = 'take_up_cancelled';
+/** What a take-up's request id records (engine/money-requests.ts): the deal it made. */
+type TakeUpAnswer = { transactionId: string };
+/** The words when a take-up's Beans are held and its release did not happen (it can be released from the enterprise's deals). */
+const TAKE_UP_HELD_TEXT = word('The Beans are held for this sale, but it isn’t released yet. A keeper can release it from the enterprise’s deals.');
+
+/**
+ * A take-up's answer once its Beans are held: the release (unless `release` is false), then 200 with the deal as it now stands
+ * (getMarketplaceTransaction). Never a 4xx or 5xx once Beans are held: the money limits take a refused request's acts back, and
+ * this request did hold them. Never a false success: `released` is the deal's own status read back after the release, and when
+ * it is not released the answer says why, in the member's words. A deal already released answers itself (alreadyCompleted).
+ */
+function answerTakeUp(ctx: any, txId: string, treasury: string, actor: string, opts: { replay: boolean; release: boolean }): void {
+    let why: string | null = null;
+    if (opts.release) {
+        try {
+            if (!completePostTransaction(txId, treasury, undefined, { authSigner: actor })) why = TAKE_UP_HELD_TEXT;
+        } catch (e) {
+            why = memberErrorText(e, TAKE_UP_HELD_TEXT);
+        }
+    }
+    let transaction: MarketplaceTransaction | null = null;
+    try {
+        transaction = getMarketplaceTransaction(txId);
+    } catch (e) {
+        console.error(`[Treasury] take-up ${txId}: the deal could not be read back:`, (e as Error)?.message ?? e);
+    }
+    const released = transaction?.status === 'completed';
+    ctx.status = 200;
+    ctx.body = { success: true, transaction, released, ...(opts.replay ? { replay: true } : {}), ...(released ? {} : { error: why ?? TAKE_UP_HELD_TEXT }) };
+}
+
+/**
+ * The engine's refusal of a take-up, as the accept route answers it (routes/marketplace.ts POST /api/marketplace/posts/accept):
+ * a loan asked for first, a copy, the count's refusals with how many are left, a listing gone, the deal already open with its
+ * id; otherwise the status and code the engine put on it (403 TWO_PERSON_RULE; Rules 5 and 6 with their own words), in the
+ * member's words. Nothing was held: every one of these is thrown before the hold, or rolls it back.
+ */
+function respondTakeUpRefusal(ctx: any, err: any): void {
+    const fallback = word('Could not take up this Offer for the enterprise.');
+    if (err?.code === LEND_ASK_FIRST_CODE) { ctx.status = 409; ctx.body = { error: err.message, code: LEND_ASK_FIRST_CODE }; return; }
+    if (respondCopyNoDeal(ctx, err)) return;
+    if (respondItemTakeUpRefusal(ctx, err, fallback)) return;
+    if (err?.code === POST_GONE_CODE) { ctx.status = 400; ctx.body = { error: err.message, code: POST_GONE_CODE }; return; }
+    if (respondDealOpen(ctx, err)) return;
+    if (err?.code === SETTLEMENT_REFUSED_CODE) { respondSettlementAware(ctx, err, fallback); return; }
+    if (answerPotPaused(ctx, err)) return;
+    const fault = isServerFault(err);
+    const s = err?.status ?? err?.statusCode;
+    ctx.status = fault ? 500 : typeof s === 'number' && Number.isInteger(s) && s >= 400 && s <= 599 ? s : 400;
+    ctx.body = { error: memberErrorText(err, fault ? SERVER_FAULT_TEXT : fallback), ...(!fault && typeof err?.code === 'string' ? { code: err.code } : {}) };
 }
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
@@ -1045,6 +1107,96 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.status = e.status || e.statusCode || 400;
             ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
+    });
+
+    // Take up a member's Offer priced for each one FOR the enterprise, by one keeper's tap, and release it at once: the
+    // enterprise pays the seller from its own Beans or its credit line (DESIGN-stall-consignment-fable.md §5, slice 1; Marty,
+    // 26 Nov 2026). A stall that sold a member's goods for cash has, in fact, bought them with Beans: buyer the enterprise,
+    // seller the member, one fee. Cash never enters BeanPool, so nothing here speaks of it.
+    //
+    // The body is the accept route's own (routes/marketplace.ts POST /api/marketplace/posts/accept): `hours` how many,
+    // `itemOption` 'each' or 'lot', `expect_c` the total the keeper's screen showed, each passed to the engine unread; and an
+    // optional `requestId` (engine/money-requests.ts). It names no key: the enterprise rides the path and the keeper is the
+    // signer, as the event route above does, so the signature middleware has nothing to pin and keepership is checked here.
+    //
+    // Every refusal is answered before anything is written and outside any ledger transaction. The engine does the rest, and
+    // nothing of it is repeated here: the two-person rule, Rules 5 and 6, the enterprise's room, the count, one open deal,
+    // holiday, paused, wound up, a copy, a loan, its own listing (engine/escrow.ts acceptPost, completePostTransaction).
+    router.post('/api/treasury/:treasury/take-up', async (ctx) => {
+        const { treasury } = ctx.params;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
+        const raw = (ctx as any).requestBody;
+        const b = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+        // A take-up for an enterprise is one sale, never a standing deal: a standing deal never pays the enterprise's keepers
+        // and pays its periods with no further tap (DESIGN-standing-deals-fable §1.5).
+        if ('standing' in b) { ctx.status = 400; ctx.body = { error: word('An enterprise can’t start a standing deal this way.') }; return; }
+        const { postId, hours, itemOption, expect_c, requestId } = b;
+        if (typeof postId !== 'string' || postId === '') { ctx.status = 400; ctx.body = { error: word('Say which Offer to take up (postId, as text).') }; return; }
+
+        // A retry of a take-up already made is answered before the listing is read: the sale of the last one leaves the listing
+        // sold out, and its retry must get that sale back, not "not found". The id is the enterprise's, so a prior answer can
+        // only name a deal this enterprise already holds or held; it tells nobody anything about a listing it may not see.
+        let request: MoneyRequest | undefined;
+        let prior: TakeUpAnswer | undefined;
+        try {
+            request = moneyRequestOf(treasury, TAKE_UP_ROUTE, requestId, { postId, hours, itemOption, expect_c });
+            prior = request ? priorAnswer<TakeUpAnswer>(request) : undefined;
+        } catch (e: any) {
+            ctx.status = typeof e?.status === 'number' ? e.status : 400;
+            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT), ...(typeof e?.code === 'string' ? { code: e.code } : {}) };
+            return;
+        }
+        if (prior) {
+            const deal = getMarketplaceTransaction(prior.transactionId);
+            if (!deal || (deal.status !== 'pending' && deal.status !== 'completed')) {
+                // Its seller cancelled it (or a ruling ended it): nothing more moves on this id.
+                ctx.status = 409;
+                ctx.body = { error: word('That sale was cancelled, so nothing more was paid.'), code: TAKE_UP_CANCELLED_CODE };
+                return;
+            }
+            answerTakeUp(ctx, prior.transactionId, treasury, actor, { replay: true, release: true });
+            return;
+        }
+
+        // The listing as the engine reads it, in the enterprise's sight first (engine/escrow.ts acceptPost): a group's or a
+        // direct post the enterprise can't see, or one hidden by reports, is an id nobody has, and nothing else is said of it.
+        const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
+        if (!post || marketplacePostOutOfSight(post, treasury) || (!!post.hiddenByReportsAt && post.authorPublicKey !== treasury)) {
+            ctx.status = 400;
+            ctx.body = { error: word('Post not found or not active'), code: POST_GONE_CODE };
+            return;
+        }
+        // Only an Offer priced for each one, refused here and never by calling the engine. For a one-off price the engine
+        // RECORDS a deferred wage claim when it can't pay a keeper seller yet (assertHoldFunded), and that claim is paid later
+        // with no further tap; for a listing priced for each one it records none. A take-up through this door leaves no claim.
+        if (post.type !== 'offer' || !isPerItem(post)) {
+            ctx.status = 400;
+            ctx.body = { error: word('An enterprise can take up only an Offer priced for each one.'), code: TAKE_UP_EACH_ONLY_CODE };
+            return;
+        }
+
+        let held: MarketplaceTransaction;
+        try {
+            held = acceptPost(postId, treasury, undefined, { authSigner: actor, item: { n: hours, option: itemOption, expect_c } });
+        } catch (err: any) {
+            respondTakeUpRefusal(ctx, err);
+            return;
+        }
+        // The very next statement, nothing awaited between: the id is written straight after the hold. It can't go inside
+        // the hold's own transaction without changing engine/escrow.ts, and it need not: if the node dies between the hold
+        // and this write, the retry meets the engine's one open deal per buyer per listing (escrow.ts acceptPost) and is
+        // answered 409 deal_open with this deal's id, so there is never a second sale; a keeper then releases it
+        // (POST /api/treasury/:treasury/complete). Should the write itself fail, the deal is left held, not released, for
+        // the same reason: a released deal with no id written would let a retry buy again.
+        let recorded = true;
+        if (request) {
+            try { recordAnswer(request, { transactionId: held.id } satisfies TakeUpAnswer); } catch (e) {
+                recorded = false;
+                console.error(`[Treasury] take-up ${held.id}: its request id was not written, so it is left held:`, (e as Error)?.message ?? e);
+            }
+        }
+        answerTakeUp(ctx, held.id, treasury, actor, { replay: false, release: recorded });
     });
 
     // Reject a bid on the treasury's Need

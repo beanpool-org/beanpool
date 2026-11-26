@@ -39,7 +39,8 @@ import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import { copyBody, copyUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
 import { COPY_CONFIRM_MOST } from '../engine/copy-lease.js';
 import { standbyWritesNothing } from '../config/node-role.js';
-import { itemRefusalOf, itemTakeUpRefusalOf } from '../engine/per-item.js';
+import { itemRefusalOf } from '../engine/per-item.js';
+import { respondCopyNoDeal, respondDealOpen, respondItemTakeUpRefusal } from './deal-refusals.js';
 import { directoryStamp } from '../engine/directory-cache.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -49,7 +50,7 @@ import { memberNextPollStartAt } from '../engine/poll-week.js';
 import { ownerAdminLimit } from '../engine/owner-admin-limit.js';
 import { noteNewReport } from '../services/alerts.js';
 import { logger } from '../logger.js';
-import { DEAL_OPEN_CODE, LEND_ASK_FIRST_CODE, LISTING_COPY_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
+import { LEND_ASK_FIRST_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
 import { dealQuantityFromBody, parsePostFlag } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE, ENTERPRISE_CLOSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
@@ -1572,13 +1573,6 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
-function respondCopyNoDeal(ctx: any, err: any): boolean {
-    if (err?.code !== LISTING_COPY_CODE) return false;
-    ctx.status = 409;
-    ctx.body = { error: err.message, code: LISTING_COPY_CODE };
-    return true;
-}
-
 /**
  * A create or an edit of a listing priced for each one refused (engine/per-item.ts): 400, or 409 `units_changed` with how many
  * are left now, and the refusal's code, so an app can say which field and refresh the count.
@@ -1588,31 +1582,6 @@ function respondItemRefusal(ctx: any, err: any, fallback: string): boolean {
     if (!r) return false;
     ctx.status = r.status;
     ctx.body = { error: memberErrorText(err, fallback), code: r.code, ...(r.unitsLeft !== undefined ? { unitsLeft: r.unitsLeft } : {}) };
-    return true;
-}
-
-/**
- * A take-up, a request or a release on a listing priced for each one refused (engine/per-item.ts; core ITEM_TAKE_UP_REFUSALS):
- * 409 when the listing moved on since the buyer's screen read it (price_changed, units_gone with how many are left now,
- * lot_gone, each_accept_only), 400 for a count that isn't one or a release for another number; its code beside its words, so
- * an app can refresh the listing and say what changed.
- */
-function respondItemTakeUpRefusal(ctx: any, err: any, fallback: string): boolean {
-    const r = itemTakeUpRefusalOf(err);
-    if (!r) return false;
-    ctx.status = r.status;
-    ctx.body = { error: memberErrorText(err, fallback), code: r.code, ...(r.unitsLeft !== undefined ? { unitsLeft: r.unitsLeft } : {}) };
-    return true;
-}
-
-/**
- * The member already has a deal under way on this listing (engine/escrow.ts DEAL_OPEN_CODE): 409, its code, and the deal's id,
- * so an app says so and opens that deal. The deal is the caller's own (the buyer or requester this route was entitled to).
- */
-function respondDealOpen(ctx: any, err: any): boolean {
-    if (err?.code !== DEAL_OPEN_CODE) return false;
-    ctx.status = 409;
-    ctx.body = { error: err.message, code: DEAL_OPEN_CODE, transactionId: err.transactionId };
     return true;
 }
 

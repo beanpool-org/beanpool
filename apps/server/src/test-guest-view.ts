@@ -1569,7 +1569,7 @@ async function main(): Promise<void> {
             'GET /api/treasuries', 'GET /api/treasuries/map', 'GET /api/treasuries/statuses',
             'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing',
             'GET /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing/release',
-            'POST /api/treasury/:treasury/complete', 'POST /api/treasury/:treasury/event', 'POST /api/treasury/:treasury/keepers/:pubkey/remove',
+            'POST /api/treasury/:treasury/complete', 'POST /api/treasury/:treasury/take-up', 'POST /api/treasury/:treasury/event', 'POST /api/treasury/:treasury/keepers/:pubkey/remove',
             'POST /api/treasury/:treasury/keepers/changes/:changeId/object', 'POST /api/treasury/:treasury/keepers/request',
             'GET /api/treasury/:treasury/keepers/requests', 'POST /api/treasury/:treasury/keepers/requests/:requestId/approve',
             'POST /api/treasury/:treasury/keepers/requests/:requestId/decline', 'POST /api/treasury/:treasury/keepers/step-down',

@@ -377,7 +377,7 @@ async function main() {
     assert(surplusOf(grantEnterprise) === 0, 'Project grant does not increment earned_surplus');
 
     // Rule 7 constraint: The ceiling must NOT be editable by the enterprise's own keepers (admin-only for now)
-    const keeperEndpoints = ['/api/treasury/:treasury/offer', '/api/treasury/:treasury/need', '/api/treasury/:treasury/approve', '/api/treasury/:treasury/complete', '/api/treasury/:treasury/sweep'];
+    const keeperEndpoints = ['/api/treasury/:treasury/offer', '/api/treasury/:treasury/need', '/api/treasury/:treasury/approve', '/api/treasury/:treasury/complete', '/api/treasury/:treasury/take-up', '/api/treasury/:treasury/sweep'];
     assert(!keeperEndpoints.some(e => e.includes('ceiling')), 'No keeper routes expose ceiling modification');
 
     // Existing enterprise without ceiling (e.g. CommunityEggs) defaults to NULL and is uncapped

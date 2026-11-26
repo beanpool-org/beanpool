@@ -102,6 +102,8 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // with the test that proves it. Members' locked contact lists (DESIGN-private-contacts-fable.md C1): kept on every profile
 // while the owners' switch is on, as it is by default (test-contact-copies). A price for each one (DESIGN-per-item-price-fable.md
 // §6): a capability of the build, on every profile from 1.4.1 (config/node-profile.ts PER_ITEM_BUILT; test-per-item-listings).
+// An enterprise's take-up of a member's Offer priced for each one (DESIGN-stall-consignment-fable.md §6, slice 1): said only
+// where enterprises, treasuries, deals held in trust and Beans are all on, so a local community only (test-enterprise-take-up).
 // Voice lines (DESIGN-cross-chat-voice-fable.md §5.4, V2): a capability of the build, on every profile, said outright so a
 // phone offers its microphone only where the node stores a voice line as one (test-voice-line; a live community, 14 Nov).
 // The forum (DESIGN-forums-fable.md §4, F1): on for every kind until its owners switch it off, public on the global community
@@ -109,7 +111,7 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // Messages from other communities (DESIGN-cross-chat-voice-fable.md §3.5, X2): the owners' switch, on by default on every
 // kind, said while on (test-relay-mail).
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, outsideMessages: true, groupGuests: true, shareOutside: true, askedPush: true, newEventPush: true, knowledge: true, bills: true, perItem: true, voiceLines: true, forum: true, forumNotices: true, contacts: true, door: 'members' },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, outsideMessages: true, groupGuests: true, shareOutside: true, askedPush: true, newEventPush: true, knowledge: true, bills: true, perItem: true, enterpriseTakeUp: true, voiceLines: true, forum: true, forumNotices: true, contacts: true, door: 'members' },
     global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: false, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, dmRequests: true, outsideMessages: true, groupGuests: true, perItem: true, voiceLines: true, forum: true, forumPublic: true, forumNotices: true, contacts: true, door: 'open' },
 };
 

@@ -31,6 +31,7 @@ const protectedPaths = [
     '/api/marketplace/transactions/cancel',
     '/api/treasury/corp1/approve',
     '/api/enterprise/corp1/complete',
+    '/api/treasury/corp1/take-up',
     '/api/treasury/corp1/sweep',
     '/api/treasury/corp1/pledge',
     '/api/treasury/corp1/wind-up/finalise',

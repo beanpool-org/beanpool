@@ -1551,8 +1551,8 @@ function PostDetailModal() {
                     ...(effectiveReach === 'peers' ? { reachPeers: editReachPeers } : {}),
                 } : {}),
                 photos: editPhotos.length > 0 ? JSON.stringify(editPhotos) : null,
-                // Each photo's focus as the form now has it: null clears it (core photo-focus.ts).
-                photoFocus: editFocus.forPhotos(editPhotos.length),
+                // Each photo's focus, only when the member changed one here (null clears it); untouched, the node keeps each photo's.
+                ...(editFocus.touched ? { photoFocus: editFocus.forEdit(editPhotos.length) } : {}),
                 ...(shopId !== undefined ? { shopId } : {}),
             });
             // Refresh the post

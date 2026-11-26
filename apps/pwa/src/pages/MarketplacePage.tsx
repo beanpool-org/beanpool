@@ -959,6 +959,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // whose Adjust dialog is open.
     const [editFocus, setEditFocus] = useState<Array<PhotoFocus | null>>([]);
     const [editFocusAt, setEditFocusAt] = useState<number | null>(null);
+    // Whether the member changed a focus (or took a photo off) in this edit: only then is `photoFocus` sent, so an untouched edit
+    // leaves the node to keep each photo's focus with it.
+    const [editFocusTouched, setEditFocusTouched] = useState(false);
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [editInShop, setEditInShop] = useState<boolean>(false);
     const [saving, setSaving] = useState(false);
@@ -3301,6 +3304,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         }
                                         setEditPhotos(selectedPost.photos || []);
                                         setEditFocus(photoFocusList(selectedPost.photoFocus, (selectedPost.photos || []).length) ?? []);
+                                        setEditFocusTouched(false);
                                         editTagsFrom.current = postTagsOf(selectedPost.tags);
                                         setEditTags(editTagsFrom.current);
                                         editFreeTagsFrom.current = freeTagsOf(selectedPost.freeTags);
@@ -3620,7 +3624,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
                                                 </button>
                                                 <button
-                                                    onClick={() => { setEditPhotos(editPhotos.filter((_, j) => j !== i)); setEditFocus(editFocus.filter((_, j) => j !== i)); }}
+                                                    onClick={() => { setEditPhotos(editPhotos.filter((_, j) => j !== i)); setEditFocus(editFocus.filter((_, j) => j !== i)); setEditFocusTouched(true); }}
                                                     aria-label={t('Remove photo')}
                                                     className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bp-danger-fill hover:bg-bp-danger-hover border-none text-bp-danger-on text-[10px] flex items-center justify-center cursor-pointer shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-red-500"
                                                 >
@@ -3673,6 +3677,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             onDone={(f) => {
                                                 const at = editFocusAt;
                                                 setEditFocus(prev => { const next = prev.slice(); while (next.length <= at) next.push(null); next[at] = f; return next; });
+                                                setEditFocusTouched(true);
                                                 setEditFocusAt(null);
                                             }}
                                         />
@@ -3733,8 +3738,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         ...(effectiveReach === 'peers' ? { reachPeers: editReachPeers } : {}),
                                                     } : {}),
                                                     photos: editPhotos,
-                                                    // Each photo's focus as the form now has it: null clears it (core photo-focus.ts).
-                                                    photoFocus: photoFocusList(editFocus, editPhotos.length),
+                                                    // Each photo's focus, only when the member changed one here (null clears it).
+                                                    ...(editFocusTouched ? { photoFocus: photoFocusList(editFocus, editPhotos.length) } : {}),
                                                     ...(tagsChanged ? { tags: editTags } : {}),
                                                     ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
                                                     ...(shopId !== undefined ? { shopId } : {}),

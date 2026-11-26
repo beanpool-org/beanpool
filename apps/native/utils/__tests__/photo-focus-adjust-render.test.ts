@@ -136,3 +136,25 @@ describe('PhotoFocusAdjust', () => {
         expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
     });
 });
+
+describe('usePhotoFocusList: an edit sends the focus only when the member changed it', () => {
+    it('untouched: nothing sent, so the node keeps each photo\'s focus (this phone\'s copy may be behind); touched: the list', async () => {
+        const { usePhotoFocusList } = await import('../use-photo-focus-list');
+        let hook: ReturnType<typeof usePhotoFocusList> | null = null;
+        const Probe = () => { hook = usePhotoFocusList(); return null; };
+        act(() => { root.render(createElement(Probe)); });
+        act(() => { hook!.resetFrom({ photo_focus: '[{"x":0.2,"y":0.8}]' }); });
+        expect(hook!.touched).toBe(false);
+        expect(hook!.forEdit(2)).toBeUndefined();
+        expect(hook!.at(0)).toEqual({ x: 0.2, y: 0.8 });
+        act(() => { hook!.setAt(1, { x: 0.5, y: 0 }); });
+        expect(hook!.forEdit(2)).toEqual([{ x: 0.2, y: 0.8 }, { x: 0.5, y: 0 }]);
+        act(() => { hook!.resetFrom(null); });
+        expect(hook!.forEdit(2)).toBeUndefined();
+        act(() => { hook!.resetFrom({ photoFocus: [null, { x: 1, y: 1 }] }); });
+        act(() => { hook!.removeAt(0); });
+        expect(hook!.forEdit(1)).toEqual([{ x: 1, y: 1 }]);
+        act(() => { hook!.setAt(0, null); });
+        expect(hook!.forEdit(1)).toBeNull();
+    });
+});

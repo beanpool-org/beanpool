@@ -200,3 +200,30 @@ ${env}        steps:
     assert.match(workflowProblems(four('')).join(), /jobs\.publish .*does not name environment: release/);
     assert.deepEqual(workflowProblems(four('        environment: release\n')), []);
 });
+
+test('the key vault image workflow: its inputs reach no shell, the release build waits for the throwaway checks, no secret, nothing published', () => {
+    const file = workflowFiles().find((f) => basename(f) === 'vault-image.yml');
+    const text = readFileSync(file, 'utf8');
+    // An input is read only in a job's `if:` (an expression, never text a shell runs): the values reach the builds as
+    // release-inputs' checked outputs (apps/vault/image/release-inputs.mjs reads them from the event file).
+    const refs = text.split('\n').map((line, i) => [line, i + 1])
+        .filter(([line]) => /(?<![\w-])inputs\.|github\.event\.inputs/.test(line.replace(/^\s*#.*$/, '')));
+    assert.ok(refs.length >= 1, 'the release jobs are gated on the inputs');
+    for (const [line, n] of refs) assert.match(line, /^ {4}if: github\.event_name == 'workflow_dispatch' && \(/, `line ${n}: ${line.trim()}`);
+    // The five inputs, none required, each empty by default: empty is the throwaway build, as it always was.
+    for (const name of ['custodian_keys', 'version', 'host', 'network', 'network6'])
+        assert.match(text, new RegExp(`^ {6}${name}:\\n(?: {8}.*\\n)*? {8}required: false\\n {8}default: ''\\n {8}type: string\\n`, 'm'), name);
+    // The release image is built only after build-twice (two builds the same, the boots, the test image's genesis)
+    // and the inputs' check passed.
+    assert.match(jobText(text, 'release-image'), /^ {4}needs: \[build-twice, release-inputs\]$/m);
+    assert.match(jobText(text, 'release-inputs'), /^ {8}run: node apps\/vault\/image\/release-inputs\.mjs$/m);
+    // build-twice stays the throwaway build whatever the inputs: it reads none of them and waits for nothing.
+    const buildTwice = jobText(text, 'build-twice');
+    assert.match(buildTwice, /^ {4}runs-on: ubuntu-latest$/m, 'the slice reaches into build-twice');
+    assert.match(buildTwice, /randomBytes\(32\)/);
+    assert.doesNotMatch(buildTwice, /inputs|needs:/);
+    // No secret, no write permission, no release (one is made by hand, later, with Marty's yes).
+    assert.doesNotMatch(text, /secrets\./);
+    assert.match(text, /^permissions:\n {2}contents: read\n/m);
+    assert.doesNotMatch(text, /contents: write|gh release|action-gh-release/);
+});

@@ -487,6 +487,15 @@ line naming the exact `--network` string; `DHCP=yes` there and no such lines mea
   an API-only release after it (0.0.3): the API must stage 0.0.2 and keep it staged, root's install step must install
   it (systemd-sysupdate writes it into the other slot and the ESP, and keeps the running 0.0.1), and `/v1/report`'s
   `lastInstall` must say so. (Booting into a next image is not in it: that needs a real second image and a reboot.)
+- **A release image** (the same workflow, run by hand with inputs): `custodian_keys` (the PUBLIC list,
+  `{"genesisCustodians":[…three keys…]}`), `version`, and optionally `host`, `network`, `network6`. Every input empty
+  is the run above, unchanged. Given, `image/release-inputs.mjs` checks them first, in seconds (the build's own
+  setting checks, and three different Ed25519 public keys; it reads them from the event file and never prints a
+  refused value). Then, only once the throwaway run above has passed on the same commit, the image is built twice
+  with them, must be byte-identical, and is uploaded as one artifact `vault-image-<version>-<host>`: `image.json`,
+  `host-policy.json` (with a host), `vault.efi`, `vault-root.raw`, `vault-root-verity.raw`, the qcow2, `bundles/`,
+  `SHA256SUMS`, the listings and the public list it was built with; the job summary shows every hash. It reads no
+  secret and publishes nothing (`release propose`, the signatures and the GitHub release stay by hand).
 - **test-all** (every push): the bundles are the same bytes on two builds; the manifest, chain and `imageHash` vector.
 
 The full build needs Docker; the first one downloads about 300 MB from snapshot.debian.org, which can be slow

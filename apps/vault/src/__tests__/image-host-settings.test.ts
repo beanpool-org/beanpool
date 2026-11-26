@@ -132,19 +132,33 @@ describe('--host: the Servury profile and the release host policy', () => {
         });
         // The minimum TCB is a setting: SNP 29 until Servury patches AMD-SB-3059 (then 31: the profile's notes say so).
         expect(p.minTcb).toEqual({ bootloader: 4, tee: 0, snp: 29, microcode: 222 });
+        expect(p.requireAliasCheck).toBe(true);
         expect(p.notes.join(' ')).toMatch(/Raise snp to 31/);
         expect(readHostProfile('none')).toEqual({ profile: 'none' });
     });
 
-    it('gives today\'s release parser a sev-snp host policy: the measurement, the floor and the policy as the report\'s bytes', () => {
-        const policy = hostPolicy(readHostProfile('servury'), MEASUREMENT);
-        expect(policy).toEqual({ platform: 'sev-snp', measurement: MEASUREMENT, minReportedTcb: '0400000000001dde', policy: '0000030000000000', signer: 'vcek' });
+    it('gives the release a sev-snp host policy in the design §2.4 shape: this UKI\'s computed launch, the floor, no chip yet', () => {
+        const UKI = 'cd'.repeat(32);
+        const policy = hostPolicy(readHostProfile('servury'), MEASUREMENT, UKI);
+        expect(policy).toEqual({
+            platform: 'sev-snp', signer: 'vcek',
+            hosts: [{
+                profile: 'servury', product: 'Milan',
+                launches: [{ ukiSha256: UKI, firmwareSha256: '8731846cdbcbb6aa5c624238b839544b1553f4c5af874450f043321b3ef8958b', measurement: MEASUREMENT, source: 'computed' }],
+                policies: ['0000030000000000'],
+                minTcb: { bootloader: 4, tee: 0, snp: 29, microcode: 222 },
+                requireAliasCheck: true,
+                chipIds: [],
+            }],
+        });
         expect(parseHostPolicy(policy)).toEqual(policy);
-        expect(() => hostPolicy(readHostProfile('servury'), 'ab'.repeat(32))).toThrow(/48 bytes/);
-        expect(() => hostPolicy(readHostProfile('none'), MEASUREMENT)).toThrow(/no host profile/);
-        const cli = run('host-policy', 'servury', MEASUREMENT);
+        expect(() => hostPolicy(readHostProfile('servury'), 'ab'.repeat(32), UKI)).toThrow(/48 bytes/);
+        expect(() => hostPolicy(readHostProfile('servury'), MEASUREMENT, 'ab')).toThrow(/UKI/);
+        expect(() => hostPolicy(readHostProfile('none'), MEASUREMENT, UKI)).toThrow(/no host profile/);
+        const cli = run('host-policy', 'servury', MEASUREMENT, UKI);
         expect(cli.status).toBe(0);
         expect(JSON.parse(cli.stdout)).toEqual(policy);
+        expect(run('host-policy', 'servury', MEASUREMENT).status).toBe(2);
     });
 
     // One profile per row, each with one thing wrong.
@@ -164,6 +178,8 @@ describe('--host: the Servury profile and the release host policy', () => {
         ['an unknown field', p => { p.extra = 1; }, /does not know: extra/],
         ['a missing floor', p => { delete p.minTcb; }, /lacks minTcb/],
         ['a TCB level over 255', p => { p.minTcb!.snp = 256; }, /0 to 255/],
+        ['no alias-check rule', p => { delete p.requireAliasCheck; }, /lacks requireAliasCheck/],
+        ['an alias-check rule that is not true or false', p => { p.requireAliasCheck = 'yes'; }, /requireAliasCheck is true or false/],
         ['a firmware over plain http', p => { p.firmware.url = 'http://example.org/OVMF.fd'; }, /https address/],
         ['a firmware hash that is not one', p => { p.firmware.sha256 = 'abc'; }, /SHA-256/],
         ['no vCPU', p => { p.launch.vcpus = 0; }, /1 to 64/],

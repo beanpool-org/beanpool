@@ -30,14 +30,16 @@ export { NO_HARDWARE_PROOF } from './checker.js';
  *   2. the hello, with a fresh 32-byte nonce; `bind` is computed here from what comes back;
  *   3. the vault's `releaseHash` (the image it booted) must be that release's `imageHash`, or the one a custodian named
  *      with `acceptRelease` (an older release still in the chain, while a new image waits for its restart);
- *   4. the host is checked against that release's `hostPolicy` (checker.ts), never against anything the vault offers;
+ *   4. the host is checked against the newest release's `hostPolicy` (checker.ts), never against anything the vault
+ *      offers. On `sev-snp` that is the chip check (snp-checker.ts): a genuine AMD report over this `bind`, whose
+ *      measurement is the launch of the UKI of the release from step 3. It passes or nothing is sent;
  *   5. under `none`, {@link NO_HARDWARE_PROOF} is shown and the custodian must confirm (or have passed
  *      `--no-hardware-proof`).
  *
  * Every request sent after those checks goes through the outbox, so a test can see that a refused check sent nothing.
- * The release check catches mistakes (an image nobody signed, an old one still running), not a hostile host, which can
- * answer with any hash it likes: on `none` only the reinstall-before-unlock rule and the split hosting login guard
- * against that (design §2.2, §2.5).
+ * On `none` the release check catches mistakes (an image nobody signed, an old one still running), not a hostile host,
+ * which can answer with any hash it likes: only the reinstall-before-unlock rule and the split hosting login guard
+ * against that (design §2.2, §2.5). On `sev-snp` the chip's measurement backs the hash (step 4).
  */
 
 export interface CustodianKey {
@@ -72,8 +74,13 @@ export interface CallOptions {
     trust?: ReleaseTrust;
     /** Accept the vault running this older release (its version), still in the chain; otherwise only the newest. */
     acceptRelease?: string;
-    /** The custodian has read {@link NO_HARDWARE_PROOF} and goes on (`--no-hardware-proof`). */
+    /** The custodian has read {@link NO_HARDWARE_PROOF} and goes on (`--no-hardware-proof`). Only ever on `none`. */
     acceptNoHardwareProof?: boolean;
+    /**
+     * `--accept-new-machine`: the first 8 hex characters of a chip the release does not list yet (vault comeback design
+     * §2.3 row 10). Checked only after every other part of the chip check has passed; it overrides nothing else.
+     */
+    acceptNewMachine?: string;
     /** Asked when there is no hardware proof and it wasn't accepted up front: true sends. */
     confirm?: (warning: string) => Promise<boolean>;
     /**
@@ -83,7 +90,9 @@ export interface CallOptions {
     confirmRestore?: (restore: RestorePending) => Promise<boolean>;
     /** Every request sent after the checks: its path. */
     outbox?: string[];
-    /** A checker per confidential platform (V8); none today. */
+    /** Told what the host check found, once it has passed (the command line prints it before anything is sent). */
+    onHostCheck?: (lines: string[]) => void;
+    /** A checker per confidential platform: the command line passes the SEV-SNP one (snp-checker.ts). */
     checkers?: Partial<Record<string, EvidenceChecker>>;
 }
 
@@ -138,6 +147,8 @@ export interface HelloResult {
     release: TrustedRelease;
     /** Set when there is no hardware proof: the words the custodian confirmed. */
     warning: string | null;
+    /** What the host check found, in plain words (the chip check's summary on `sev-snp`; empty on `none`). */
+    hostLines: string[];
 }
 
 /**
@@ -171,14 +182,18 @@ export async function checkedHello(baseUrl: string, key: CustodianKey, path: str
         }
         release = accepted;
     }
-    // The host policy comes from the newest release, whatever the vault's hello carries besides.
-    const host = await checkHost(newest.manifest.hostPolicy, hello, bind, opts.checkers);
+    // The host policy comes from the newest release, whatever the vault's hello carries besides. The checker is told
+    // which release the vault says it runs, so the chip's measurement must be that release's UKI.
+    const host = await checkHost(newest.manifest.hostPolicy, hello, bind, {
+        release: release.manifest.version, ukiSha256: release.manifest.image.ukiSha256, acceptNewMachine: opts.acceptNewMachine,
+    }, opts.checkers);
     if (!host.ok) refuse(host.code, host.reason);
     if (host.warning && !opts.acceptNoHardwareProof) {
         const yes = opts.confirm ? await opts.confirm(host.warning) : false;
         if (!yes) refuse('not_confirmed', `${host.warning} Nothing was sent (confirm, or pass --no-hardware-proof, to go on).`);
     }
-    return { hello, bind, release, warning: host.warning };
+    opts.onHostCheck?.(host.lines);
+    return { hello, bind, release, warning: host.warning, hostLines: host.lines };
 }
 
 export async function genesis(baseUrl: string, key: CustodianKey, opts: CallOptions = {}): Promise<CustodianCall> {

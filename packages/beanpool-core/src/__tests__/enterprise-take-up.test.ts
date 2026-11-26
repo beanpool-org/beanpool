@@ -518,7 +518,7 @@ describe('a kept sale ages: sent again for TAKE_UP_RESEND_HOURS from its FIRST s
             clock.now = T0 + 7 * 24 * H;
             // The components draw the picker whenever `get` finds nothing, and the aged line whenever `aged` finds the old one.
             expect(book.get(STALL, 'p1')).toBeNull();
-            const box = itemTakeUpBox(apples({ title: 'Eggs', unitsLeft: 6 }), { option: 'each', count: '2' }, 'Alice');
+            const box = itemTakeUpBox(apples({ title: 'Eggs', unitsLeft: 6 }), { option: 'each', count: '2' }, 'Alice')!;
             expect(box.send).toEqual(send2);
             const line = takeUpAgedLine({ stall: 'Riverside stall', seller: 'Alice' });
             expect(book.aged(STALL, 'p1')).not.toBeNull();

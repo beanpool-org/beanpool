@@ -9,13 +9,15 @@
  * unanswered sales (core takeUpUnansweredBook) from the moment it goes until the node answers: an answer that never came
  * ("Failed to fetch", "Load failed", a gateway's 5xx) says the stall may have paid already, and Confirm sends that same sale
  * again, which the node answers with the first sale, so it is never paid twice, even after Cancel or closing the listing. The
- * count picker waits until then. The node's own refusal stays in the sheet in plain words; nothing was paid on any of them.
- * Neutral greys, the commit green and the warning ink only, so dark mode comes with them.
+ * count picker waits until then, for a day at most from the first sending (core TAKE_UP_RESEND_HOURS, well inside the days
+ * the node remembers the id): after that the sale is never sent again, the picker shows the listing as it is now, and one
+ * line says the stall may have paid for the old sale. The node's own refusal stays in the sheet in plain words; nothing was
+ * paid on any of them. Neutral greys, the commit green and the warning ink only, so dark mode comes with them.
  */
 import { useReducer, useState } from 'react';
 import {
-    ITEM_BOX_START, itemTakeUpBox, takeUpAnswerOf, takeUpConfirm, takeUpListingMoved, takeUpLostLine, takeUpOutcomeOf, takeUpRefusalText,
-    takeUpSettle, takeUpSheet, takeUpUnansweredBook, t,
+    ITEM_BOX_START, itemTakeUpBox, takeUpAgedLine, takeUpAnswerOf, takeUpConfirm, takeUpListingMoved, takeUpLostLine, takeUpOutcomeOf,
+    takeUpRefusalText, takeUpSettle, takeUpSheet, takeUpUnansweredBook, t,
     type ItemBoxState, type TakeUpAnswer, type TakeUpBody, type TakeUpButton, type TakeUpRequest, type TakeUpUnansweredBook,
 } from '@beanpool/core';
 import { PerItemTakeUp } from './PerItemTakeUp';
@@ -71,6 +73,8 @@ export function EnterpriseTakeUp({ listing, postId, title, sellerName, buttons, 
     // A sale sent for this enterprise and listing whose answer hasn't come back: Confirm sends it again exactly, and the count
     // picker waits, so nothing else can be bought here until the node says whether that one went through.
     const kept = unanswered.get(open.enterprise, postId);
+    // One past its day is never sent again and never in the way: the picker shows the listing, and a line says it may have paid.
+    const aged = kept ? null : unanswered.aged(open.enterprise, postId);
     const box = kept ? null : itemTakeUpBox(listing, state, sellerName);
     // The sheet's sentence says where the Beans go; the member's own "into trust … when you release them" does not apply.
     const shown = box ? { ...box, trust: null } : null;
@@ -107,6 +111,11 @@ export function EnterpriseTakeUp({ listing, postId, title, sellerName, buttons, 
     return (
         <div data-testid="take-up-sheet" className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-3">
             <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm break-words">{open.label}</p>
+            {aged && !busy && (
+                <p data-testid="take-up-aged" role="status" className="m-0 mb-3 text-[13px] leading-snug text-bp-ink-warning font-semibold break-words">
+                    {takeUpAgedLine({ stall: open.name, seller: sellerName })}
+                </p>
+            )}
             {shown && (
                 <PerItemTakeUp listing={listing} box={shown} state={state} disabled={busy}
                     onState={(next) => { setState(next); setRefusal(null); }} />

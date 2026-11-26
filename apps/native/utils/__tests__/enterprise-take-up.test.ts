@@ -283,6 +283,96 @@ describe('an answer that never came: the stall may have paid, and Confirm sends 
     });
 });
 
+describe('a kept sale ages: sent again for a day from its first sending, never after (r2 review: the node forgets the id after 7 days)', () => {
+    // The node forgets a take-up's request id after REQUEST_ID_KEPT_DAYS; core's book sends a kept sale again for
+    // TAKE_UP_RESEND_HOURS only (pinned inside the node's days by apps/server/src/test-enterprise-take-up.ts). This checks the
+    // phone's sheet: past the day the picker shows the listing, the aged line says the stall may have paid, and Confirm sends
+    // a NEW sale with a new id, whether the page was left between or the app sat open on the sheet all week.
+    const H = 3_600_000;
+    const T0 = Date.UTC(2026, 10, 21, 9, 0);
+    const AGED_LINE = 'An earlier sale from here got no answer, so Riverside stall may have paid Alice for it already: the enterprise’s deals show whether it did. Confirm makes a new sale.';
+    const clocked = () => { const clock = { now: T0 }; return { clock, book: takeUpUnansweredBook(() => clock.now) }; };
+    const unmount = () => { act(() => root?.unmount()); host?.remove(); root = null; host = null; };
+
+    it('23 hours on: still the same sale again (red if the day is cut short)', async () => {
+        const { clock, book } = clocked();
+        const send = vi.fn().mockRejectedValueOnce(new Error('Aborted')).mockResolvedValue({ success: true, released: true, replay: true });
+        draw({ send, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        await tap('take-up-confirm');
+        await tap('take-up-cancel');
+        clock.now = T0 + 23 * H;
+        await tap(`take-up-${STALL}`);
+        expect(q('take-up-aged')).toBeNull();
+        expect(q('take-up-lost')).not.toBeNull();
+        await tap('take-up-confirm');
+        expect(send.mock.calls[1][1]).toEqual(send.mock.calls[0][1]);
+    });
+
+    it('a week on, the page left between: the picker, the aged line, and Confirm sends a new sale with a new id (red if last week\'s is sent)', async () => {
+        const { clock, book } = clocked();
+        const send = vi.fn().mockRejectedValueOnce(new Error('Network request failed')).mockResolvedValue({ success: true, released: true });
+        const onDone = vi.fn();
+        draw({ send, onDone, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        await tap('each-more');
+        await tap('take-up-confirm');
+        unmount();
+        clock.now = T0 + 7 * 24 * H;
+        draw({ send, onDone, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        expect(q('take-up-lost')).toBeNull();
+        expect(q('take-up-aged')!.textContent).toBe(AGED_LINE);
+        expect(q('each-take-up')).not.toBeNull(); // never in the way of this week's buy
+        await tap('each-more');
+        await tap('take-up-confirm');
+        const [lastWeek, thisWeek] = send.mock.calls.map((c: any[]) => c[1]);
+        expect(thisWeek).toMatchObject({ postId: 'p1', hours: 2, itemOption: 'each', expect_c: 4000 });
+        expect(thisWeek.requestId).not.toBe(lastWeek.requestId);
+        expect(onDone).toHaveBeenCalledWith(BUTTON, { released: true, held: null });
+        expect([book.get(STALL, 'p1'), book.aged(STALL, 'p1')]).toEqual([null, null]);
+    });
+
+    it('a day on, the app left open on the sheet: Confirm finds it aged, shows the picker, then sends the same count under a NEW id', async () => {
+        const { clock, book } = clocked();
+        const send = vi.fn().mockRejectedValueOnce(Object.assign(new Error('Server returned 502'), { status: 502, nodeAnswered: false }))
+            .mockResolvedValue({ success: true, released: true });
+        draw({ send, unanswered: book });
+        await tap(`take-up-${STALL}`);
+        await tap('each-more');
+        await tap('take-up-confirm');
+        expect(q('take-up-lost')).not.toBeNull();
+        clock.now = T0 + 24 * H;
+        await tap('take-up-confirm'); // drawn when it was young: this tap finds it aged and sends nothing
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(q('take-up-aged')!.textContent).toBe(AGED_LINE);
+        expect(q('take-up-sentence')!.textContent).toContain('pays Alice 40 Beans for 2 of “Apples”'); // the picker kept its 2
+        await tap('take-up-confirm');
+        const [first, second] = send.mock.calls.map((c: any[]) => c[1]);
+        expect({ ...second, requestId: 'x' }).toEqual({ ...first, requestId: 'x' });
+        expect(second.requestId).not.toBe(first.requestId);
+    });
+
+    it('light and dark: the aged line is drawn in the theme\'s warning ink, and the app\'s own book is core\'s, made once', async () => {
+        for (const dark of [false, true]) {
+            theme.dark = dark;
+            const { clock, book } = clocked();
+            draw({ send: vi.fn().mockRejectedValue(new Error('Aborted')), unanswered: book });
+            await tap(`take-up-${STALL}`);
+            await tap('take-up-confirm');
+            await tap('take-up-cancel');
+            clock.now = T0 + 2 * 24 * H;
+            await tap(`take-up-${STALL}`);
+            expect(JSON.parse(q('take-up-aged')!.getAttribute('data-style')!).color).toBe((dark ? darkColors : lightColors).feedback.warning.fg);
+            unmount();
+        }
+        const src = read('../../components/EnterpriseTakeUp.tsx');
+        expect(src).toContain('const UNANSWERED = takeUpUnansweredBook();');
+        expect(src).toContain('const aged = kept ? null : unanswered.aged(open.enterprise, postId);');
+        expect(src).not.toMatch(/new Map|AsyncStorage|SecureStore/);
+    });
+});
+
 describe('the item page and the console use core\'s rules', () => {
     const page = read('../../app/post/[id].tsx');
     const db = read('../db.ts');

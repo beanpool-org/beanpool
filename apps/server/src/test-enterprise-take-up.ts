@@ -26,6 +26,9 @@
  *  12. The gates: a standby, and the money limits.
  *  13. Trust unchanged: a sale to the enterprise counts as any finished deal, capped at 500 with it; a send adds nothing.
  *  14. Rule 7: Beans members send to an enterprise with a ceiling are never swept.
+ *  15. The apps' retry ids against the node's memory: the apps send an unanswered take-up again for TAKE_UP_RESEND_HOURS,
+ *      strictly inside REQUEST_ID_KEPT_DAYS, checked through the node's own prune; and the class table of every door that
+ *      takes a retry id against every store in the apps that keeps one.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-enterprise-take-up)
  */
@@ -34,6 +37,9 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { initTls } from './services/tls.js';
 import { db } from './db/db.js';
 import { wrapCreatePost } from './post-test-helper.js';
@@ -46,10 +52,12 @@ import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setNodeRole } from './config/node-role.js';
 import { getNodeFeatures, setSwitchOverride } from './config/node-profile.js';
-import { moneyRequestOf, recordAnswer } from './engine/money-requests.js';
+import { moneyRequestOf, priorAnswer, pruneMoneyRequests, recordAnswer, REQUEST_ID_KEPT_DAYS } from './engine/money-requests.js';
 import { TAKE_UP_ROUTE } from './routes/treasury.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { feeOf, itemTakeUpRefusalText, wordsFor, type ItemTakeUpRefusal } from '@beanpool/core';
+import {
+    feeOf, itemTakeUpRefusalText, wordsFor, TAKE_UP_REFUSALS, TAKE_UP_RESEND_HOURS, takeUpConfirm, takeUpUnansweredBook, type ItemTakeUpRefusal,
+} from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
@@ -139,8 +147,11 @@ async function call(method: 'GET' | 'POST', urlPath: string, id: Id, body?: unkn
     });
     const text = await res.text();
     let json: any; try { json = JSON.parse(text); } catch { /* empty */ }
+    if (urlPath.split('?')[0].endsWith('/take-up') && typeof json?.code === 'string') takeUpCodes.add(json.code);
     return { status: res.status, body: json, text };
 }
+/** Every code the take-up door answered in this suite: each must have its words in the apps (core TAKE_UP_REFUSALS, slice 2). */
+const takeUpCodes = new Set<string>();
 const post = (id: Id, urlPath: string, body: unknown) => call('POST', urlPath, id, body);
 const brief = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`;
 
@@ -664,6 +675,108 @@ async function main(): Promise<void> {
     assert(toCapped.status === 200 && surplus(capped) === 0 && swept === 0 && bal(capped) === hc(32) && commons() === commonsPre,
         `Beans members send to a stall with a ceiling of 10 are never swept: earned surplus 0, the stall keeps 32 (${brief(toCapped)}, swept ${swept})`);
     conserved('Rule 7');
+
+    // ── The apps' words (slice 2) ──────────────────────────────────────────────────────────────────────────────────
+    // Red if the door answers a code the apps have no line for (core enterprise-take-up.ts TAKE_UP_REFUSALS): add its line there.
+    const unworded = [...takeUpCodes].filter((code) => !Object.prototype.hasOwnProperty.call(TAKE_UP_REFUSALS, code));
+    assert(takeUpCodes.size >= 10 && unworded.length === 0,
+        `every code the take-up door answered here has its words in the apps (${[...takeUpCodes].sort().join(', ')}; none without: ${unworded.join(', ') || 'none'})`);
+
+    // ── 15. The apps' retry ids against the node's memory (r2 review of slice 2) ─────────────────────────────────────
+    // The node forgets a take-up's request id REQUEST_ID_KEPT_DAYS after it made the sale (pruneMoneyRequests, daily). The
+    // apps' book of unanswered sales (core takeUpUnansweredBook) sends a kept sale again for TAKE_UP_RESEND_HOURS from its
+    // first sending, never after. Red if either constant moves so the book could send a sale the node may have forgotten:
+    // that is a second sale, paid twice, under the line "it is never paid twice".
+    const H = 3_600_000;
+    const keptMs = REQUEST_ID_KEPT_DAYS * DAY;
+    const resendMs = TAKE_UP_RESEND_HOURS * H;
+    assert(resendMs > 0 && resendMs < keptMs && resendMs + DAY <= keptMs,
+        `the apps send an unanswered take-up again for ${TAKE_UP_RESEND_HOURS} h, strictly inside the ${REQUEST_ID_KEPT_DAYS} days the node keeps its id, with a day to spare`);
+    // Through the node's own prune: at the oldest age the book may still send a sale, the node still answers it with the first
+    // sale; past the node's days its prune has forgotten the id, and the book stopped sending it long before.
+    const ageSend = { hours: 1, itemOption: 'each' as const, expect_c: 100 };
+    const ageReq = moneyRequestOf(riverside, TAKE_UP_ROUTE, 'take-up-age-0001', { postId: 'age-post', ...ageSend })!;
+    recordAnswer(ageReq, { transactionId: 'age-tx' });
+    const ageRow = (ms: number) => db.prepare('UPDATE money_requests SET created_at = ? WHERE payer_pubkey = ? AND request_id = ?')
+        .run(new Date(Date.now() - ms).toISOString(), riverside, 'take-up-age-0001');
+    ageRow(resendMs);
+    pruneMoneyRequests();
+    const knownAtLastResend = priorAnswer<{ transactionId: string }>(ageReq)?.transactionId;
+    ageRow(keptMs + 60_000);
+    pruneMoneyRequests();
+    const knownAfterDays = priorAnswer<{ transactionId: string }>(ageReq);
+    const ageClock = { now: Date.now() };
+    const ageBook = takeUpUnansweredBook(() => ageClock.now);
+    const ageKept = takeUpConfirm({ book: ageBook, request: null, enterprise: riverside, postId: 'age-post', send: ageSend, sentence: 'the sheet' })!;
+    ageBook.keep(ageKept.sale);
+    const sentAt = ageKept.sale.sentAt;
+    const sendsAt = (age: number) => { ageClock.now = sentAt + age; return ageBook.get(riverside, 'age-post') !== null; };
+    assert(knownAtLastResend === 'age-tx' && knownAfterDays === undefined
+        && sendsAt(resendMs - 1) && !sendsAt(resendMs) && !sendsAt(keptMs - DAY) && !sendsAt(keptMs),
+        `the node still knows a take-up's id at the last moment the book sends it again (${knownAtLastResend}); after ${REQUEST_ID_KEPT_DAYS} days its prune forgets it (${JSON.stringify(knownAfterDays)}), and the book has not sent it since ${TAKE_UP_RESEND_HOURS} h`);
+
+    // THE CLASS: every door that takes a retry id (a moneyRequestOf call) and every store in the apps that keeps one. Each
+    // store either stops sending its id again inside the node's days, or the door has a row of its own that refuses the
+    // replay once the id is gone; any other is OPEN (it can outlive the node's memory), named here and in the PR. Red if a
+    // door takes a retry id with no row here, a store moves without this table following, or a store turns open unnamed.
+    const SRC = path.dirname(fileURLToPath(import.meta.url));
+    const REPO = path.resolve(SRC, '../../..');
+    const has = (rel: string, marker: string) => { try { return fs.readFileSync(path.join(REPO, rel), 'utf-8').includes(marker); } catch { return false; } };
+    type RetryStore = { door: string; stores: Array<[string, string]>; keptMs: number; guard?: [string, string]; open?: string };
+    const RETRY_STORES: Record<string, RetryStore> = {
+        TAKE_UP_ROUTE: {
+            door: 'POST /api/treasury/:treasury/take-up', keptMs: resendMs,
+            stores: [['packages/beanpool-core/src/enterprise-take-up.ts', 'export function takeUpUnansweredBook('],
+                ['apps/native/components/EnterpriseTakeUp.tsx', 'const UNANSWERED = takeUpUnansweredBook();'],
+                ['apps/pwa/src/components/EnterpriseTakeUp.tsx', 'const UNANSWERED = takeUpUnansweredBook();']],
+        },
+        PAY_ROUTE: {
+            // Held while the bill's sheet is open, with no age; once the id is gone the bill itself is no longer 'sent'.
+            door: 'POST /api/bills/:id/pay', keptMs: Infinity,
+            stores: [['apps/native/components/Bills.tsx', 'billPayRequestFor(null, bill.id)'], ['apps/pwa/src/components/Bills.tsx', 'billPayRequestFor(null, bill.id)']],
+            guard: ['apps/server/src/engine/bills.ts', "UPDATE bills SET state = 'paid', answered_at = ? WHERE id = ? AND state = 'sent' AND payer_pubkey = ?"],
+        },
+        PAY_COMMONS_ROUTE: {
+            door: 'POST /api/commons/pay', keptMs: Infinity,
+            stores: [['apps/native/app/pay-commons.tsx', 'useState<ConfirmedPayment<CommonsPayment> | null>(null)'],
+                ['apps/pwa/src/components/RepaymentCard.tsx', 'useState<ConfirmedPayment<CommonsPayment> | null>(null)']],
+            open: 'held on the pay screen with no age; past the node\'s days its Try again pays the Commons again (named in PR #3393, not fixed there)',
+        },
+    };
+    const doorsHere = new Set<string>();
+    const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(path.join(dir, e.name)) : e.name.endsWith('.ts') && !e.name.startsWith('test-') ? [path.join(dir, e.name)] : []);
+    // The route a call names: its second argument, read past nested brackets, so a call written any way is counted (one that
+    // cannot be read is listed by its file, and so is unlisted: red).
+    const secondArg = (src: string, from: number): string | null => {
+        let depth = 0, arg = 0, start = from;
+        for (let i = from; i < src.length; i++) {
+            const ch = src[i];
+            if ('([{'.includes(ch)) depth++;
+            else if (')]}'.includes(ch)) { if (depth === 0) return arg === 1 ? src.slice(start, i).trim() : null; depth--; }
+            else if (ch === ',' && depth === 0) { if (arg === 1) return src.slice(start, i).trim(); arg++; start = i + 1; }
+        }
+        return null;
+    };
+    for (const file of walk(SRC)) {
+        if (file.endsWith(path.join('engine', 'money-requests.ts'))) continue;
+        const src = fs.readFileSync(file, 'utf-8');
+        for (const m of src.matchAll(/\bmoneyRequestOf\(/g)) doorsHere.add(secondArg(src, m.index! + m[0].length) ?? `a call in ${path.relative(SRC, file)}`);
+    }
+    const unlisted = [...doorsHere].filter((d) => !(d in RETRY_STORES));
+    const gone = Object.keys(RETRY_STORES).filter((d) => !doorsHere.has(d));
+    assert(doorsHere.size >= 3 && unlisted.length === 0 && gone.length === 0,
+        `every door that takes a retry id has its row in the class table (${[...doorsHere].sort().join(', ')}; unlisted: ${unlisted.join(', ') || 'none'}; listed but gone: ${gone.join(', ') || 'none'})`);
+    for (const row of Object.values(RETRY_STORES)) {
+        const missing = row.stores.filter(([rel, marker]) => !has(rel, marker)).map(([rel]) => rel);
+        const inside = row.keptMs < keptMs;
+        const guarded = !!row.guard && has(row.guard[0], row.guard[1]);
+        assert(missing.length === 0 && (inside || guarded || !!row.open),
+            `${row.door}: its stores are where the table says (${missing.join(', ') || 'all found'}); ${inside ? `sent again for ${row.keptMs / H} h, inside the node's ${REQUEST_ID_KEPT_DAYS} days` : guarded ? 'no age, but the door\'s own row refuses a replay once the id is gone' : `OPEN: ${row.open}`}`);
+    }
+    const open = Object.entries(RETRY_STORES).filter(([, row]) => !(row.keptMs < keptMs) && !(row.guard && has(row.guard[0], row.guard[1]))).map(([route]) => route);
+    assert(JSON.stringify(open) === JSON.stringify(['PAY_COMMONS_ROUTE']),
+        `the only store that can outlive the node's memory is the one named (${open.join(', ') || 'none'}): red if another turns open, or when the Commons one is fixed (move its row)`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run && process.exitCode !== 1 ? 0 : 1);

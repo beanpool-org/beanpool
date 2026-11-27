@@ -46,7 +46,7 @@ import { readGroupInvitations, type BillView, type GroupInvitations } from '@bea
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, NOTIFY_WAITING_DAYS, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
-import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
+import { hundredthsAsDecimalText, isHundredths, perItemOf, type TakeUpBody, type TakeUpEnterprise } from '@beanpool/core';
 import { photoFocusList, storedPhotoFocus } from '@beanpool/core';
 import { DM_FROM_ADMINS_KEY, DM_NONCE_PREFIX } from '@beanpool/core';
 import { chatLetsInKey, letInByFacts, memberTookPart, type LetInChat, type LetInDeal, type LetInFacts } from '@beanpool/core';
@@ -4405,6 +4405,27 @@ export async function treasuryComplete(treasury: string, transactionId: string, 
 }
 export async function treasuryReject(treasury: string, transactionId: string) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
+}
+/**
+ * "Buy for {enterprise}" (stall slice 2): a keeper takes up a member's Offer priced for each one for the enterprise, which
+ * the node holds and releases at once (POST /api/treasury/:treasury/take-up, slice 1). The body is core takeUpBody: the
+ * member's own accept fields and a retry id, no key (the enterprise rides the path, the keeper is the signer). Always 200
+ * once Beans are held, `released` saying whether it was paid (core takeUpAnswerOf); a refusal throws with its code.
+ */
+export async function treasuryTakeUp(treasury: string, body: TakeUpBody) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/take-up`, body);
+}
+/**
+ * Every enterprise here by name and state (GET /api/enterprises/statuses: no balances, no keepers), for "Buy for
+ * {enterprise}" on a listing. Empty when it can't be read: then no such button, never one without its name.
+ */
+export async function getEnterpriseStatuses(): Promise<TakeUpEnterprise[]> {
+    try {
+        const res = await signedGet('/api/enterprises/statuses');
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data?.enterprises) ? data.enterprises : [];
+    } catch { return []; }
 }
 /**
  * An enterprise's open deals, held and asked, for its keeper reading one of its listings (deals S4): the node lets its

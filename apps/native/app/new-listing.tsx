@@ -649,7 +649,8 @@ export default function NewListingScreen() {
         if (postPhotos.length >= 5) return;
         // The shared sheet: Camera, Gallery, and Browse files on Android, closed by Back (utils/post-photo). Gallery and Browse
         // files pick up to the room left in one go, each photo handed over in the order picked.
-        askForPostPhotos(5 - postPhotos.length, (photo) => setPostPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev)));
+        // The photos this pick added open Adjust by themselves, one after another (Marty, 28 Nov 2026).
+        askForPostPhotos(5 - postPhotos.length, (photo) => setPostPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev)), undefined, photoFocus.added);
     };
 
     const showPricingGuide = () => {
@@ -1014,8 +1015,10 @@ export default function NewListingScreen() {
                                 visible={photoFocus.adjusting !== null}
                                 uri={photoFocus.adjusting}
                                 focus={photoFocus.at(photoFocus.adjusting)}
+                                step={photoFocus.step}
                                 onCancel={photoFocus.close}
-                                onDone={(f) => { if (photoFocus.adjusting !== null) photoFocus.setAt(photoFocus.adjusting, f); photoFocus.close(); }}
+                                onDone={photoFocus.done}
+                                onSkip={photoFocus.skip}
                             />
 
                             {/* Location */}

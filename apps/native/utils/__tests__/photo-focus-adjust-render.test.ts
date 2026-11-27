@@ -21,6 +21,8 @@ const size = vi.hoisted(() => ({ w: 600, h: 800 }));
 const images = vi.hoisted(() => ({ byId: new Map<string, Record<string, unknown>>() }));
 /** The stage's responder handlers, as last drawn. */
 const stage = vi.hoisted(() => ({ props: null as Record<string, any> | null }));
+/** The platform the hook reads (Android by default; iOS waits for the picker to close). */
+const platform = vi.hoisted(() => ({ OS: 'android' as string }));
 
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
@@ -39,6 +41,7 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s },
         Image: { getSize: (_uri: string, ok: (w: number, h: number) => void) => ok(size.w, size.h) },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
+        Platform: platform,
     };
 });
 vi.mock('expo-image', async () => {
@@ -65,10 +68,11 @@ let host: HTMLDivElement;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); images.byId.clear(); stage.props = null; });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-function draw(focus: PhotoFocus | null, onDone = vi.fn(), onCancel = vi.fn()) {
-    act(() => { root.render(createElement(PhotoFocusAdjust, { visible: true, uri: 'file:///photo.jpg', focus, onDone, onCancel }) as any); });
+function draw(focus: PhotoFocus | null, onDone = vi.fn(), onCancel = vi.fn(), more: { step?: { n: number; count: number; more: boolean } | null; onSkip?: ReturnType<typeof vi.fn>; uri?: string } = {}) {
+    act(() => { root.render(createElement(PhotoFocusAdjust, { visible: true, uri: more.uri ?? 'file:///photo.jpg', focus, onDone, onCancel, step: more.step, onSkip: more.onSkip }) as any); });
     return { onDone, onCancel };
 }
+const labels = () => Array.from(host.querySelectorAll('button')).map((b) => b.textContent);
 const press = (label: string) => {
     const button = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === label);
     if (!button) throw new Error(`no button ${label}`);
@@ -139,6 +143,47 @@ describe('PhotoFocusAdjust', () => {
         } finally { size.w = 600; size.h = 800; }
     });
 
+    it('opened by itself on several new photos: the button reads Next (n of count) and Skip is offered while more are to come', () => {
+        const onSkip = vi.fn();
+        const { onDone } = draw(null, vi.fn(), vi.fn(), { step: { n: 1, count: 3, more: true }, onSkip });
+        expect(labels()).toEqual(['Reset', 'Cancel', 'Skip', 'Next (1 of 3)']);
+        act(() => { stage.props!.onLayout({ nativeEvent: { layout: { width: 210, height: 280 } } }); });
+        act(() => { stage.props!.onResponderGrant({ nativeEvent: { locationX: 105, locationY: 0 } }); });
+        press('Next (1 of 3)');
+        expect(onDone).toHaveBeenCalledWith({ x: 0.5, y: 0 });
+        // Skip hands back what is chosen for the photo on screen, as Next does; the hook leaves the rest at none.
+        press('Skip');
+        expect(onSkip).toHaveBeenCalledWith({ x: 0.5, y: 0 });
+    });
+
+    it('the last photo of a walk, one new photo, and a tap: Done, and no Skip', () => {
+        const onSkip = vi.fn();
+        draw(null, vi.fn(), vi.fn(), { step: { n: 3, count: 3, more: false }, onSkip });
+        expect(labels()).toEqual(['Reset', 'Cancel', 'Done']);
+        draw(null, vi.fn(), vi.fn(), { step: null, onSkip });
+        expect(labels()).toEqual(['Reset', 'Cancel', 'Done']);
+        draw(null);
+        expect(labels()).toEqual(['Reset', 'Cancel', 'Done']);
+    });
+
+    it('the next photo of a walk opens on its own focus (none for a new photo), never the last one\'s choice', () => {
+        draw(null, vi.fn(), vi.fn(), { step: { n: 1, count: 2, more: true }, onSkip: vi.fn(), uri: 'file:///one.jpg' });
+        act(() => { stage.props!.onLayout({ nativeEvent: { layout: { width: 210, height: 280 } } }); });
+        act(() => { stage.props!.onResponderGrant({ nativeEvent: { locationX: 105, locationY: 279 } }); });
+        expect(images.byId.get('photo-focus-card')!.contentPosition).toEqual({ left: '50%', top: '100%' });
+        draw(null, vi.fn(), vi.fn(), { step: { n: 2, count: 2, more: false }, onSkip: vi.fn(), uri: 'file:///two.jpg' });
+        expect(images.byId.get('photo-focus-card')!.contentPosition).toEqual({ left: '50%', top: '33%' });
+    });
+
+    it('at 320 dp and 1.3x the four buttons wrap onto rows, each held to the row\'s width with its words centred', () => {
+        draw(null, vi.fn(), vi.fn(), { step: { n: 1, count: 3, more: true }, onSkip: vi.fn() });
+        const skip = JSON.parse(host.querySelector('[data-testid="photo-focus-skip"]')!.getAttribute('data-style')!) as Record<string, unknown>;
+        expect(skip.minHeight).toBe(48);
+        expect(skip.maxWidth).toBe('100%');
+        const row = JSON.parse(host.querySelector('[data-testid="photo-focus-skip"]')!.parentElement!.getAttribute('data-style')!) as Record<string, unknown>;
+        expect(row).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
+    });
+
     it('draws in Dark from the theme\'s tokens: no colour of its own', () => {
         theme.dark = true;
         try {
@@ -198,6 +243,84 @@ describe('usePhotoFocusList: an edit sends the focus only when the member change
             // Adjust opens on the photo itself (`.open(uri)`), never a number, and a removal moves no focus by its place.
             expect(src, form).not.toMatch(/Focus\.open\(\s*i\s*\)/);
             expect(src, form).not.toMatch(/removeAt\(/);
+        }
+    });
+});
+
+describe('usePhotoFocusList: Adjust opens by itself on the photos a pick adds, and walks through them (Marty, 28 Nov 2026)', () => {
+    /** The hook in a probe, driven as core's walk table drives it (the web's usePhotoFocusByPhoto runs the same table). */
+    async function hookDriver() {
+        const { usePhotoFocusList } = await import('../use-photo-focus-list');
+        return () => {
+            let hook: ReturnType<typeof usePhotoFocusList> | null = null;
+            let photos: string[] = [];
+            const Probe = () => { hook = usePhotoFocusList(); return null; };
+            act(() => { root.render(createElement(Probe, { key: Math.random() }) as any); });
+            return {
+                setPhotos: (next: string[]) => { photos = next; },
+                added: (added: string[]) => act(() => { hook!.added(added); }),
+                open: (photo: string) => act(() => { hook!.open(photo); }),
+                done: (f: PhotoFocus | null) => act(() => { hook!.done(f); }),
+                skip: (f: PhotoFocus | null) => act(() => { hook!.skip(f); }),
+                cancel: () => act(() => { hook!.close(); }),
+                putWhole: (next: string[], focus: unknown) => { photos = next; act(() => { hook!.resetFrom(next, { photoFocus: Array.isArray(focus) ? focus : undefined, photo_focus: focus }); }); },
+                showing: () => ({ photo: hook!.adjusting, step: hook!.step }),
+                sent: () => hook!.forPhotos(photos),
+            };
+        };
+    }
+
+    it('holds every walk in core\'s table on Android, where it opens at once', async () => {
+        const { checkPhotoFocusRunVectors } = await import('@beanpool/core/photo-focus-vectors');
+        expect(checkPhotoFocusRunVectors(await hookDriver())).toEqual([]);
+    });
+
+    it('iOS: waits for the picker to finish closing, then opens; a tap or a list put in whole in the meantime wins', async () => {
+        const { ADJUST_AFTER_PICKER_MS } = await import('../use-photo-focus-list');
+        platform.OS = 'ios';
+        vi.useFakeTimers();
+        try {
+            const form = (await hookDriver())();
+            form.setPhotos(['A', 'B']);
+            form.added(['A', 'B']);
+            expect(form.showing().photo).toBeNull();
+            act(() => { vi.advanceTimersByTime(ADJUST_AFTER_PICKER_MS - 1); });
+            expect(form.showing().photo).toBeNull();
+            act(() => { vi.advanceTimersByTime(1); });
+            expect(form.showing()).toEqual({ photo: 'A', step: { n: 1, count: 2, more: true } });
+            form.cancel();
+            // A tap while a walk waits: the photo tapped, alone; the walk never comes.
+            form.added(['A', 'B']);
+            form.open('B');
+            act(() => { vi.advanceTimersByTime(ADJUST_AFTER_PICKER_MS * 2); });
+            expect(form.showing()).toEqual({ photo: 'B', step: null });
+            form.cancel();
+            // The list put in whole (a post made, another post's edit) while a walk waits: nothing opens.
+            form.added(['A', 'B']);
+            form.putWhole([], undefined);
+            act(() => { vi.advanceTimersByTime(ADJUST_AFTER_PICKER_MS * 2); });
+            expect(form.showing().photo).toBeNull();
+            // Leaving the form while a walk waits: nothing is set after it has gone.
+            form.added(['A']);
+            act(() => root.unmount());
+            act(() => { vi.advanceTimersByTime(ADJUST_AFTER_PICKER_MS * 2); });
+            root = createRoot(host);
+        } finally {
+            vi.useRealTimers();
+            platform.OS = 'android';
+        }
+    });
+
+    it('each phone form opens the walk only from a pick (askForPostPhotos\'s `picked`), never as an edit opens, and hands Adjust its step and Skip', () => {
+        for (const [form, hook] of [['../../app/new-listing.tsx', 'photoFocus'], ['../../app/post/[id].tsx', 'editFocus']] as const) {
+            const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), form), 'utf8');
+            // `added` is named once: as the pick's listener.
+            expect(src.split(`${hook}.added`).length - 1, form).toBe(1);
+            expect(src, form).toMatch(new RegExp(`askForPostPhotos\\([\\s\\S]*?, undefined, ${hook}\\.added\\);`));
+            expect(src, form).toContain(`step={${hook}.step}`);
+            expect(src, form).toContain(`onDone={${hook}.done}`);
+            expect(src, form).toContain(`onSkip={${hook}.skip}`);
+            expect(src, form).toContain(`onCancel={${hook}.close}`);
         }
     });
 });

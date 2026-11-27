@@ -27,14 +27,24 @@ const TARGET_DP = 48;
  * `visible` is the opener's "which photo is being adjusted" alone, never the photo list: the forms set their photo list in the
  * same handler that closes another Modal (an edit's start closes the pin drop), and that must not read as opening this one
  * (modal-after-modal-guard.test.ts).
+ *
+ * Opened by itself on the photos a pick just added (Marty, 28 Nov 2026), it walks through them in place: `step` says where it
+ * stands, the button reads Next (n of count) while more are to come and Done on the last, and Skip keeps this photo's choice
+ * and closes, leaving the photos not yet shown at the card's own crop. The Modal stays open from photo to photo (only `uri`
+ * changes), so no Modal closes and opens between them. Cancel keeps nothing for the photo on screen and stops.
  */
-export function PhotoFocusAdjust({ visible, uri, focus, onDone, onCancel }: {
+export function PhotoFocusAdjust({ visible, uri, focus, step, onDone, onSkip, onCancel }: {
     /** Whether the screen is open. */
     visible: boolean;
     /** The photo to adjust (data only: nothing is drawn without one). */
     uri: string | null;
     focus: PhotoFocus | null;
+    /** A walk through several new photos: this one is `n` of `count`; `more` while photos are still to come. */
+    step?: { n: number; count: number; more: boolean } | null;
+    /** Next or Done, with the focus chosen for this photo. */
     onDone: (focus: PhotoFocus | null) => void;
+    /** Skip (offered while a walk has photos still to come), with the focus chosen for this photo. */
+    onSkip?: (focus: PhotoFocus | null) => void;
     onCancel: () => void;
 }) {
     const [aspect, setAspect] = useState<number | null>(null);
@@ -65,8 +75,9 @@ export function PhotoFocusAdjust({ visible, uri, focus, onDone, onCancel }: {
         label: { fontSize: 11, fontWeight: '800', color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 14, marginBottom: 6 },
         card: { width: '62%', aspectRatio: CARD_ASPECT, borderRadius: MARKET_CARD_SHELL.radius, overflow: 'hidden', borderWidth: 1, borderColor: colors.border.default, alignSelf: 'center' },
         row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', marginTop: 16 },
-        btn: { minHeight: TARGET_DP, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.app },
-        btnText: { fontSize: 14, fontWeight: '800', color: colors.text.body },
+        // maxWidth: a longer word (Next (2 of 3) in another language) wraps inside its own button at 320 dp and 1.3x text.
+        btn: { minHeight: TARGET_DP, maxWidth: '100%', paddingHorizontal: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.app },
+        btnText: { fontSize: 14, fontWeight: '800', color: colors.text.body, textAlign: 'center' },
         done: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
         doneText: { color: colors.text.onBrand },
     }));
@@ -81,6 +92,7 @@ export function PhotoFocusAdjust({ visible, uri, focus, onDone, onCancel }: {
         setPicked((was) => photoFocusToward(aspect, CARD_ASPECT, px, py, was ?? DEFAULT_PHOTO_FOCUS));
     };
     const onStage = (e: LayoutChangeEvent) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
+    const more = !!step?.more;
 
     return (
         <LightBarModal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -128,8 +140,13 @@ export function PhotoFocusAdjust({ visible, uri, focus, onDone, onCancel }: {
                             <Pressable style={styles.btn} accessibilityRole="button" onPress={onCancel}>
                                 <Text style={styles.btnText}>{t('Cancel')}</Text>
                             </Pressable>
+                            {more && onSkip ? (
+                                <Pressable testID="photo-focus-skip" style={styles.btn} accessibilityRole="button" onPress={() => onSkip(picked)}>
+                                    <Text style={styles.btnText}>{t('Skip')}</Text>
+                                </Pressable>
+                            ) : null}
                             <Pressable testID="photo-focus-done" style={[styles.btn, styles.done]} accessibilityRole="button" onPress={() => onDone(picked)}>
-                                <Text style={[styles.btnText, styles.doneText]}>{t('Done')}</Text>
+                                <Text style={[styles.btnText, styles.doneText]}>{more && step ? t('Next ({n} of {count})', { n: step.n, count: step.count }) : t('Done')}</Text>
                             </Pressable>
                         </View>
                     </ScrollView>

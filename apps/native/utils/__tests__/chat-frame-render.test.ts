@@ -772,6 +772,22 @@ describe('the Chat tab at 320 dp × 569 dp with text at 1.3×', () => {
         // English draws whole, at full size.
         expect(worst.filter(([lang]) => lang === 'en').map(([, , s]) => s)).toEqual([1, 1]);
     });
+
+    // Each name is one Text with numberOfLines={1}: a line broken at a space draws the first word alone and cuts the rest, as
+    // People's "🏘️ Community" did on Android (Marty, 28 Oct and 28 Nov 2026). Drawn with no-break spaces (utils/unbreakable.ts),
+    // there is no place to break it. Vietnamese has a space in three of the five names.
+    it('a name with a space (Vietnamese: "Diễn đàn", "Tin nhắn", "Mọi người") is drawn with no ordinary space, on both switches', async () => {
+        rememberProfile(WITH_FORUM);
+        await renderIn('vi');
+        const sides = tabs().map((tb) => tb.querySelector('span[data-shrinks]')!.textContent!);
+        const panes = radios().map((r) => r.querySelector('span[data-shrinks]')!.textContent!);
+        // The same words as the catalogs', each space drawn as a no-break space.
+        expect(sides.map((n) => n.replace(/\u00A0/g, ' '))).toEqual(CHAT_SIDES.map((entry) => t(entry.label)));
+        expect(panes.map((n) => n.replace(/\u00A0/g, ' '))).toEqual([t('Messages', undefined, 'talk pane'), t('Groups', undefined, 'talk pane'), t('People', undefined, 'talk pane')]);
+        const names = [...sides, ...panes];
+        expect(names.filter((n) => n.includes('\u00A0')).length, JSON.stringify(names)).toBeGreaterThanOrEqual(3);
+        for (const name of names) expect(name, JSON.stringify(name)).not.toMatch(/ /);
+    });
 });
 
 describe("Chat's own held wiring (slices S1 and S2, #3302 review F6): the rows, the block filter, the tap, the close as Chat is left", () => {

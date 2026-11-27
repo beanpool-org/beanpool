@@ -48,6 +48,7 @@ import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
 import { chatSides, chatSideShown, formatHundredths, homeTail, requestsRowCount, t, tn, word, type ChatSide, type WordKey } from '@beanpool/core';
 import { ListPhoto } from '../../components/ListPhoto';
 import { ChatFrameSwitch } from '../../components/ChatFrameSwitch';
+import { unbreakable } from '../../utils/unbreakable';
 import { OUTSIDE_CHATS_UPDATED, outsideContext, syncHeldMailNow, syncOutsideMailNow } from '../../utils/outside-chat-live';
 import { chatsShown } from '../../utils/outside-mail';
 import type { OutsideChat } from '../../utils/outside-chat-store';
@@ -969,9 +970,11 @@ export default function ChatsScreen() {
                         accessibilityState={{ selected: active }}
                         accessibilityLabel={count ? tn(count, '{label}, {n} unread', '{label}, {n} unread', { label }) : label}
                     >
-                        {/* A third of the bar each: a longer name in another language shrinks to fit rather than being cut. */}
+                        {/* A third of the bar each: a longer name in another language shrinks to fit rather than being cut. Drawn
+                            with no-break spaces (utils/unbreakable.ts): Filipino's "Mga Mensahe" or Vietnamese's "Tin nhắn" is never
+                            broken at its space, its first word alone on the line and the rest cut. */}
                         <Text style={[styles.talkTabText, active && styles.talkTabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-                            {label}
+                            {unbreakable(label)}
                         </Text>
                         {/* On the tab's corner, not beside the label: at 320dp and 1.3x text a badge in the row
                             squeezed "Groups" to "Grou…". */}

@@ -139,6 +139,7 @@ vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDA
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import PeopleScreen from '../../app/(tabs)/people';
 import { t } from '@beanpool/core';
+import { unbreakable } from '../unbreakable';
 
 const NODE = 'https://node.example';
 const LOCAL = { beans: true, invites: true, showcase: false };
@@ -201,9 +202,9 @@ describe('People → Invites opened by the notice "someone asked to join"', () =
         nav.params = { view: 'invites', from: 'notice' };
         await open();
         expect(probe()).toBe('true');
-        await press(pill(t('👫 Friends')));
+        await press(pill(unbreakable(t('👫 Friends'))));
         expect(probe()).toBeNull();
-        await press(pill(t('🎟️ Invites')));
+        await press(pill(unbreakable(t('🎟️ Invites'))));
         expect(probe()).toBe('false');
     });
 

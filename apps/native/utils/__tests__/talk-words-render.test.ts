@@ -54,7 +54,7 @@ vi.mock('react-native', () => {
         if (typeof s.fontSize === 'number') attrs['data-font'] = String(s.fontSize);
         // What Yoga lays a row out from: read by the sub-nav's 320 dp check.
         const layout: Record<string, unknown> = {};
-        for (const k of ['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'padding', 'paddingHorizontal', 'marginHorizontal', 'borderWidth']) if (s[k] !== undefined) layout[k] = s[k];
+        for (const k of ['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'padding', 'paddingHorizontal', 'marginHorizontal', 'borderWidth']) if (s[k] !== undefined) layout[k] = s[k];
         if (Object.keys(layout).length) attrs['data-layout'] = JSON.stringify(layout);
         return createElement(tag, attrs, children);
     };
@@ -198,13 +198,14 @@ vi.mock('../push-notice-switch', async (importOriginal) => {
     };
 });
 
-import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
+import { pseudoLocalise, setLanguage, tn, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import { yourGroupsStore } from '../../components/useYourGroups';
 import { joinRequestMeta, wantsToJoinTitle, WANTS_TO_JOIN_HELP } from '../knock-inbox';
 import { KNOCK_MESSAGES } from '../knock';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
+import { unbreakable } from '../unbreakable';
 // People asks where the member is to end a Show credit visit (utils/people-visit.ts; its own test and people-show-credit-visit-render.test.ts): nothing here leaves the tab.
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import ChatsScreen from '../../app/(tabs)/chats';
@@ -445,15 +446,15 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         knocks.list = KNOCKS;
         await renderIn('xx');
         await pane('People');
-        await click(buttonWithText(pseudoLocalise('👫 Friends')), 'Friends');
+        await click(buttonWithText(unbreakable(pseudoLocalise('👫 Friends'))), 'Friends');
         expect(host.textContent).toContain('Rosa');
         expect(host.textContent).toContain(pseudoLocalise('Added recently'));
         expect(bypassing(), 'friends').toEqual([]);
-        await click(buttonWithText(pseudoLocalise('🏘️ Community')), 'Community');
+        await click(buttonWithText(unbreakable(pseudoLocalise('🏘️ Community'))), 'Community');
         expect(host.textContent).toContain('Zoe');
         expect(host.textContent).toContain(pseudoLocalise('Joined today'));
         expect(bypassing(), 'community').toEqual([]);
-        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith(pseudoLocalise('🎟️ Invites ({n})').slice(0, 6))) ?? null, 'Invites');
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith(unbreakable(pseudoLocalise('🎟️ Invites ({n})')).slice(0, 6))) ?? null, 'Invites');
         expect(host.textContent).toContain('I grow tomatoes');
         expect(host.textContent).toContain(pseudoLocalise('📤 Invite Someone'));
         expect(bypassing(), 'invites').toEqual([]);
@@ -463,7 +464,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         knocks.list = KNOCKS;
         await renderIn('en');
         await pane('People');
-        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith('🎟️ Invites')) ?? null, 'Invites');
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith(unbreakable('🎟️ Invites'))) ?? null, 'Invites');
         expect(host.textContent).toContain(`🚪 ${wantsToJoinTitle(1)}`);
         expect(host.textContent).toContain(WANTS_TO_JOIN_HELP);
         expect(host.textContent).toContain(joinRequestMeta(KNOCKS[0]));
@@ -473,7 +474,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         knocks.unreachable = true;
         await renderIn('xx');
         await pane('People');
-        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith(pseudoLocalise('🎟️ Invites').slice(0, 6))) ?? null, 'Invites');
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.startsWith(unbreakable(pseudoLocalise('🎟️ Invites')).slice(0, 6))) ?? null, 'Invites');
         expect(host.textContent).toContain(pseudoLocalise("Couldn't reach your community. Check your connection and try again."));
         expect(bypassing()).toEqual([]);
     });
@@ -508,7 +509,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         membership.isMember = false;
         await renderIn('xx');
         await pane('People');
-        await click(buttonWithText(pseudoLocalise('🎟️ Register')), 'Register');
+        await click(buttonWithText(unbreakable(pseudoLocalise('🎟️ Register'))), 'Register');
         expect(host.textContent).toContain(pseudoLocalise('⚠️ Guest Connection Mode'));
         expect(host.textContent).toContain(pseudoLocalise('🛠️ Connection Troubleshooting'));
         expect(bypassing(), 'a guest').toEqual([]);
@@ -520,7 +521,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         globalDoor.entry = 'join';
         await renderIn('xx');
         await pane('People');
-        await click(buttonWithText(pseudoLocalise('🎟️ Register')), 'Register');
+        await click(buttonWithText(unbreakable(pseudoLocalise('🎟️ Register'))), 'Register');
         expect(host.textContent).toContain(pseudoLocalise('🌍 Join with 12 words or a sign-in'));
         expect(bypassing(), 'the global door').toEqual([]);
     });
@@ -670,7 +671,7 @@ describe('Talk at 320 dp with 1.3× text, in the pseudo-locale', () => {
         rememberProfile('local', { ...LOCAL, membersOnDemand: false });
         await renderIn('xx');
         await pane('People');
-        const row = buttonWithText(pseudoLocalise('🏘️ Community'))!.parentElement!;
+        const row = buttonWithText(unbreakable(pseudoLocalise('🏘️ Community')))!.parentElement!;
         const pills = Array.from(row.children);
         expect(pills.length).toBe(3);
         const labels = pills.map((p) => p.querySelector(':scope > span[data-shrinks]')!);
@@ -690,7 +691,7 @@ describe('Talk at 320 dp with 1.3× text, in the pseudo-locale', () => {
             expect(widthOf(longest, 11 * SCALE) * Number(label.getAttribute('data-min-scale')), longest).toBeLessThanOrEqual(scales[i] * dp[i]);
             expect(scales[i], `name ${i + 1}`).toBeGreaterThanOrEqual(Number(label.getAttribute('data-min-scale')) - PSEUDO_SLACK);
         });
-        await click(buttonWithText(pseudoLocalise('🏘️ Community')), 'Community');
+        await click(buttonWithText(unbreakable(pseudoLocalise('🏘️ Community'))), 'Community');
         const sorts = buttonWithText(pseudoLocalise('Newest'))?.parentElement ?? Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes(pseudoLocalise('Newest')))!.parentElement!;
         expect(sorts.getAttribute('data-wrap')).toBe('wrap');
     });
@@ -729,10 +730,10 @@ describe('People\'s sub-nav at 320 dp with 1.3× text, in every language', () =>
         rememberProfile('local', { ...LOCAL, membersOnDemand: false });
         await renderIn('en');
         await pane('People');
-        const rows: Array<{ row: Element; pills: Element[]; texts: string[]; lines: string[]; minScale: number[] }> = [];
+        const rows: Array<{ row: Element; pills: Element[]; texts: string[]; lines: string[]; minScale: number[]; stretched: boolean[] }> = [];
         for (const name of ['👫 Friends', '🏘️ Community', '🎟️ Invites']) {
-            await click(buttonWithText(name), name);
-            const live = buttonWithText(name)!.parentElement!;
+            await click(buttonWithText(unbreakable(name)), name);
+            const live = buttonWithText(unbreakable(name))!.parentElement!;
             const labels = Array.from(live.children).map((p) => p.querySelector(':scope > span[data-shrinks]')!);
             const row = live.cloneNode(true) as Element;
             const pills = Array.from(row.children);
@@ -741,6 +742,7 @@ describe('People\'s sub-nav at 320 dp with 1.3× text, in every language', () =>
                 texts: labels.map((l) => l.textContent!),
                 lines: labels.map((l) => l.getAttribute('data-lines')!),
                 minScale: labels.map((l) => Number(l.getAttribute('data-min-scale'))),
+                stretched: labels.map((l) => layoutOf(l).alignSelf === 'stretch'),
             });
         }
         // The selected tab carries the 1 dp border (+ 2 dp of frame). Read after the last click, each copy must still show its own.
@@ -756,14 +758,60 @@ describe('People\'s sub-nav at 320 dp with 1.3× text, in every language', () =>
     };
 
     it('English: all three names whole, on one line, at full size, whichever tab is selected', async () => {
-        for (const { row, pills, texts, lines } of await drawnRows()) {
-            expect(texts).toEqual(['👫 Friends', '🏘️ Community', '🎟️ Invites']);
+        for (const { row, pills, texts, lines, stretched } of await drawnRows()) {
+            // Drawn with no-break spaces (utils/unbreakable.ts): the same words, with no place to break them.
+            expect(texts).toEqual(['👫\u00A0Friends', '🏘️\u00A0Community', '🎟️\u00A0Invites']);
+            // Each name's box is its pill's width, not only its own words' measured width (the spare room absorbs a fraction of
+            // a dp between Android's measuring and drawing).
+            expect(stretched).toEqual([true, true, true]);
             // The third tab also reads "🎟️ Invites ({n})" with requests waiting, and "🎟️ Register" for a guest: the widest of them.
             const invites = Math.max(...['🎟️ Invites', COUNT, '🎟️ Register'].map((l) => emOf('en', l)));
             const dp = [emOf('en', '👫 Friends'), emOf('en', '🏘️ Community'), invites].map((em) => em * FONT);
             // Each name has the width it needs, so none wraps (the emoji alone on a line) or shrinks.
             expect(scalesInRow(row, pills, dp)).toEqual([1, 1, 1]);
             expect(lines).toEqual(['1', '1', '1']);
+        }
+    });
+
+    /**
+     * Marty, 28 Nov 2026 (Android 1.4.8; the second time after 28 Oct): the unselected middle tab read "🏘️" alone. One
+     * Text with numberOfLines={1} drew "🏘️ Community", Android broke the line at the ordinary space after the emoji, and the
+     * word on the second line was cut. Every name the sub-nav draws carries no ordinary space, so there is no place to break it.
+     */
+    it('every name it draws is one unbreakable string: no ordinary space between the emoji and its words (Friends, Community, Invites, Invites with a count, Register)', async () => {
+        // The row found by the Friends pill whichever space it draws, so a plain space fails the assertions below, not the lookup.
+        const friends = () => Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.replace(/\u00A0/g, ' ') === '👫 Friends') ?? null;
+        const drawn = () => Array.from(friends()!.parentElement!.children).map((p) => p.querySelector(':scope > span[data-shrinks]')!.textContent!);
+        const names: string[] = [];
+        rememberProfile('local', { ...LOCAL, membersOnDemand: false });
+        await renderIn('en');
+        await pane('People');
+        names.push(...drawn());
+        expect(names).toEqual(['👫\u00A0Friends', '🏘️\u00A0Community', '🎟️\u00A0Invites']);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        knocks.list = KNOCKS;
+        await renderIn('en');
+        await pane('People');
+        const withCount = drawn();
+        expect(withCount[2]).toBe(unbreakable(tn(KNOCKS.length, '🎟️ Invites ({n})', '🎟️ Invites ({n})')));
+        names.push(...withCount);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        knocks.list = [];
+        membership.isMember = false;
+        await renderIn('en');
+        await pane('People');
+        const asGuest = drawn();
+        expect(asGuest[2]).toBe('🎟️\u00A0Register');
+        names.push(...asGuest);
+
+        for (const name of names) {
+            expect(name, JSON.stringify(name)).not.toMatch(/ /);
+            // The emoji and its first word are joined by a no-break space, as one unit.
+            expect(name, JSON.stringify(name)).toMatch(/^\p{Extended_Pictographic}\uFE0F?\u00A0\S/u);
         }
     });
 

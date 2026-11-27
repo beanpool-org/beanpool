@@ -22,6 +22,7 @@ import { normaliseInviteCode, redeemTargetUrl } from '../../utils/invite-parser'
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
+import { unbreakable } from '../../utils/unbreakable';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
@@ -118,7 +119,9 @@ export default function PeopleScreen() {
         // "🏘️ Community" is ~96 dp at 11 sp × 1.3, more than the ~94 dp a third of 320 dp gives it.
         pill: { flexGrow: 1, flexShrink: 1, paddingVertical: 10, paddingHorizontal: 2, alignItems: 'center', borderRadius: 12, marginHorizontal: 2 },
         pillActive: { backgroundColor: colors.surface.subtle, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, borderWidth: 1, borderColor: colors.border.default },
-        pillText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
+        // The name's box is the pill's whole width (stretch), not just its own words' measured width, so a fraction of a dp
+        // between how Android measures the words and how it draws them comes out of the pill's spare room, never the words.
+        pillText: { alignSelf: 'stretch', fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         pillTextActive: { color: colors.text.body, fontWeight: '800' },
         
         emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
@@ -1181,11 +1184,12 @@ export default function PeopleScreen() {
                             onPress={() => { setView(v); setFromNotice(false); router.setParams({ view: v }); }}
                         >
                             {/* One line each: a name too long for the row in another language shrinks, all three together. It never
-                                wraps (the emoji would sit alone on the first line) and never breaks a word. */}
+                                wraps and never breaks a word: its spaces are no-break spaces (utils/unbreakable.ts), so Android cannot
+                                put the emoji alone on a first line and cut the word below it (Marty, 28 Oct and 28 Nov 2026). */}
                             <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.pillText, isActive && styles.pillTextActive, { textAlign: 'center' }]}>
-                                {v === 'invites'
+                                {unbreakable(v === 'invites'
                                     ? (isGuest ? t('🎟️ Register') : knockCount > 0 ? tn(knockCount, '🎟️ Invites ({n})', '🎟️ Invites ({n})') : t('🎟️ Invites'))
-                                    : t(PANE_WORDS[v])}
+                                    : t(PANE_WORDS[v]))}
                             </Text>
                         </Pressable>
                     );

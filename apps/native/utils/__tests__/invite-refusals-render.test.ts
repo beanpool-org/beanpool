@@ -132,6 +132,7 @@ vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDA
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import PeopleScreen from '../../app/(tabs)/people';
 import { billLines, busyWords, inviteBillLines, inviteFolds, t } from '@beanpool/core';
+import { unbreakable } from '../unbreakable';
 
 const NODE = 'https://node.example';
 const FEATURES = { beans: true, invites: true, showcase: false, bills: true };
@@ -320,8 +321,8 @@ describe('D: an invite is in Pending once, by its code (the whole table)', () =>
             expect(alerts.said).toEqual([[t('No answer'), inviteBillLines.answerLost()]]);
             // The node made it; back to Invites, the phone reads it from the node.
             node.mine = [X, OLD];
-            await pressText(t('👫 Friends'));
-            await pressText(t('🎟️ Invites'));
+            await pressText(unbreakable(t('👫 Friends')));
+            await pressText(unbreakable(t('🎟️ Invites')));
         }
         expect(await pendingCodes(), 'Pending before').toEqual(before);
         // The node answers with the invite it made: a new one, or the one already listed.
@@ -332,8 +333,8 @@ describe('D: an invite is in Pending once, by its code (the whole table)', () =>
         expect(q('invites-pending-fold')?.textContent).toContain(`Pending (${after.length})`);
         // What the phone keeps for the next read holds it once too: a later read of mine keeps one row.
         expect(saved(), 'the list saved on the phone').toEqual(after);
-        await pressText(t('👫 Friends'));
-        await pressText(t('🎟️ Invites'));
+        await pressText(unbreakable(t('👫 Friends')));
+        await pressText(unbreakable(t('🎟️ Invites')));
         expect(await pendingCodes(), 'Pending after the next read of mine').toHaveLength(after.length);
     });
 });

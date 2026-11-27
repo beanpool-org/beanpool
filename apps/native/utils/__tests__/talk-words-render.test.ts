@@ -774,7 +774,7 @@ describe('People\'s sub-nav at 320 dp with 1.3× text, in every language', () =>
     });
 
     /**
-     * Marty, 28 Nov 2026 (Android 1.4.8, Byron; the second time after 28 Oct): the unselected middle tab read "🏘️" alone. One
+     * Marty, 28 Nov 2026 (Android 1.4.8; the second time after 28 Oct): the unselected middle tab read "🏘️" alone. One
      * Text with numberOfLines={1} drew "🏘️ Community", Android broke the line at the ordinary space after the emoji, and the
      * word on the second line was cut. Every name the sub-nav draws carries no ordinary space, so there is no place to break it.
      */

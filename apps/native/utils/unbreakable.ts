@@ -13,5 +13,5 @@
  * has none to change.
  */
 export function unbreakable(words: string): string {
-    return words.replace(/ /g, ' ');
+    return words.replace(/ /g, '\u00A0');
 }

@@ -22,12 +22,12 @@ function namesIn(lang: string): string[] {
 
 describe('unbreakable: a one-line label with no place to break it', () => {
     it('makes every ordinary space a no-break space and leaves the rest as it was', () => {
-        expect(unbreakable('🏘️ Community')).toBe('🏘️ Community');
-        expect(unbreakable('🎟️ Invites (3)')).toBe('🎟️ Invites (3)');
+        expect(unbreakable('🏘️ Community')).toBe('🏘️\u00A0Community');
+        expect(unbreakable('🎟️ Invites (3)')).toBe('🎟️\u00A0Invites\u00A0(3)');
         expect(unbreakable('Community')).toBe('Community');
         expect(unbreakable('')).toBe('');
         // A zero-width non-joiner shapes a Persian word and is no break: it stays.
-        expect(unbreakable('🎟️ دعوت‌ها')).toBe('🎟️ دعوت‌ها');
+        expect(unbreakable('🎟️ دعوت\u200Cها')).toBe('🎟️\u00A0دعوت\u200Cها');
     });
 
     it('every People sub-nav name, in all 25 languages: no ordinary space, the emoji joined to its words, the same words', () => {
@@ -40,10 +40,10 @@ describe('unbreakable: a one-line label with no place to break it', () => {
                 expect(typeof name, where).toBe('string');
                 const drawn = unbreakable(name);
                 expect(drawn, where).not.toMatch(/ /);
-                expect(drawn, where).toMatch(/^\p{Extended_Pictographic}️? \S/u);
+                expect(drawn, where).toMatch(/^\p{Extended_Pictographic}\uFE0F?\u00A0\S/u);
                 // Only the spaces changed: same length, and back to the catalog's words when the no-break spaces are undone.
                 expect(drawn.length, where).toBe(name.length);
-                expect(drawn.replace(/ /g, ' '), where).toBe(name);
+                expect(drawn.replace(/\u00A0/g, ' '), where).toBe(name);
                 checked += 1;
             }
         }

@@ -111,8 +111,8 @@ describe('the form holds the member to the node\'s limits, as the phone does', (
     // Marty, 27 Nov 2026: at least 20 characters, core's one constant (the node's and the phone's too), counted as the most
     // is: in characters, so an emoji or an accented letter is one; spaces at the ends and control characters are not.
     const SHORT = 'Please say a little more about yourself: at least 20 characters.';
-    it.each([
-        ...['x', 'é', '🌱', '鸡'].flatMap(u => [
+    const TABLE: Array<[what: string, message: string, problem: string | null]> = [
+        ...['x', 'é', '🌱', '鸡'].flatMap((u): Array<[string, string, string | null]> => [
             [`${u} × 0`, u.repeat(0), 'Please say a few words about yourself.'],
             [`${u} × 1`, u.repeat(1), SHORT],
             [`${u} × 19`, u.repeat(19), SHORT],
@@ -125,7 +125,8 @@ describe('the form holds the member to the node\'s limits, as the phone does', (
         ['nothing but control characters', '\u0000\u0001', 'Please say a few words about yourself.'],
         ['"pls"', 'pls', SHORT],
         ['"hello community"', 'hello community', SHORT],
-    ] as const)('a message of %s', (_what, message, problem) => {
+    ];
+    it.each(TABLE)('a message of %s', (_what, message, problem) => {
         expect(knockLib.KNOCK_MESSAGE_MIN_CHARS).toBe(CORE_MIN);
         expect(knockLib.knockFormProblem({ callsign: 'Ana', message })).toBe(problem);
     });

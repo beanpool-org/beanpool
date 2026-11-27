@@ -28,7 +28,7 @@ export const DROP_MICROSOFT_APT_SCRIPT = 'scripts/ci/drop-microsoft-apt-source.s
 
 const APT_COMMAND = /\bapt-get\b[^\n]*\b(?:update|install)\b|\bapt\s+(?:-\S+\s+)*(?:update|install)\b|\bplaywright\s+(?:install\b[^\n]*--with-deps|install-deps)\b/;
 const NEEDS_MICROSOFT_APT = /#\s*needs-microsoft-apt\b/;
-const STANDALONE_DROP = /^\s*(?:bash\s+)?scripts\/ci\/drop-microsoft-apt-source\.sh\s*$/m;
+const STANDALONE_DROP = /^\s*(?:bash[ \t]+)?scripts\/ci\/drop-microsoft-apt-source\.sh\s*$/;
 
 const USES = /^\s*(?:-\s+)?uses:\s*(['"]?)([^\s'"#]+)\1(.*)$/;
 const PINNED = /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/;
@@ -100,7 +100,7 @@ function environmentOf(job) {
     return undefined;
 }
 
-/** The steps of one job as { line, indent, lines }. */
+/** The steps of one job as { line, indent, lines, comments }. */
 function stepsOf(job) {
     const first = job.lines.find(isContent);
     if (!first) return [];
@@ -108,50 +108,86 @@ function stepsOf(job) {
     const start = job.lines.findIndex((l) => indentOf(l) === keyIndent && /^\s*steps:\s*$/.test(withoutComment(l)));
     if (start === -1) return [];
     const firstStep = job.lines.slice(start + 1).find(isContent);
-    if (!firstStep || indentOf(firstStep) <= keyIndent) return [];
+    if (!firstStep || indentOf(firstStep) < keyIndent || !/^\s*-(?:\s|$)/.test(withoutComment(firstStep))) return [];
     const stepIndent = indentOf(firstStep);
     const steps = [];
     let current = null;
+    let pendingComments = [];
     for (let i = start + 1; i < job.lines.length; i++) {
         const line = job.lines[i];
-        if (isContent(line) && indentOf(line) < stepIndent) break;
-        if (isContent(line) && indentOf(line) === stepIndent && /^\s*-\s/.test(line)) {
-            steps.push((current = { line: job.line + i + 1, indent: stepIndent, lines: [line] }));
-        } else if (current) {
-            current.lines.push(line);
+        const isStepStart = isContent(line) && indentOf(line) === stepIndent && /^\s*-(?:\s|$)/.test(withoutComment(line));
+        if (isContent(line) && (indentOf(line) < stepIndent || (indentOf(line) === stepIndent && !isStepStart))) break;
+        if (!isContent(line) && line.trim().startsWith('#') && indentOf(line) <= stepIndent) {
+            pendingComments.push(line);
+            continue;
+        }
+        if (isStepStart) {
+            steps.push((current = { line: job.line + i + 1, indent: stepIndent, lines: [line], comments: pendingComments }));
+            pendingComments = [];
+        } else {
+            if (line.trim() === '') {
+                pendingComments = [];
+            } else if (pendingComments.length) {
+                if (current) current.lines.push(...pendingComments);
+                pendingComments = [];
+            }
+            if (current) current.lines.push(line);
         }
     }
     return steps;
 }
 
-/** The shell text of a step's `run:` key (inline or block scalar), or '' when the step has no `run:`. */
+/** Column of a step's mapping keys (e.g. `step.indent + 2` for `- name:`). */
+function stepKeyIndent(step) {
+    const first = /^(\s*-\s+)\S/.exec(withoutComment(step.lines[0]));
+    if (first) return first[1].length;
+    const next = step.lines.slice(1).find(isContent);
+    return next ? indentOf(next) : step.indent + 2;
+}
+
+/** The shell text of a step's `run:` key (inline, plain multi-line, or block scalar), or '' when the step has no `run:`. */
 function stepRunText(step) {
+    const mapIndent = stepKeyIndent(step);
     for (let i = 0; i < step.lines.length; i++) {
         const line = step.lines[i];
         const m = /^(\s*)(?:(-\s+))?run:\s*(.*)$/.exec(line);
         if (!m) continue;
+        if (m[2] ? m[1].length !== step.indent : m[1].length !== mapIndent) continue;
         const keyIndent = m[2] ? m[1].length + m[2].length : m[1].length;
-        if (m[1].length !== step.indent && m[1].length !== step.indent + 2) continue;
         const rest = m[3].trim();
-        if (/^[|>][+-]?(?:\s+#.*)?$/.test(rest)) {
+        const block = /^([|>])(?:[+-]?[1-9]?|[1-9]?[+-]?)(?:\s+#.*)?$/.exec(rest);
+        if (block || rest === '') {
             const out = [];
             for (const next of step.lines.slice(i + 1)) {
                 if (!next.trim()) { out.push(''); continue; }
                 if (indentOf(next) <= keyIndent) break;
+                if (!block && next.trim().startsWith('#')) {
+                    if (out.some(Boolean)) break;
+                    continue;
+                }
                 out.push(next);
             }
-            return out.join('\n');
+            if (block?.[1] === '|') return out.join('\n');
+            return out.map((l) => l.trim()).join('\n').replace(/([^\n])\n(?=[^\n])/g, '$1 ');
         }
-        return rest;
+        const out = [rest];
+        for (const next of step.lines.slice(i + 1)) {
+            if (!next.trim()) { out.push(''); continue; }
+            if (indentOf(next) <= keyIndent) break;
+            if (next.trim().startsWith('#')) break;
+            out.push(next.trim());
+        }
+        return out.join('\n').replace(/([^\n])\n(?=[^\n])/g, '$1 ');
     }
     return '';
 }
 
 /** True when a step carries an `if:` condition. */
 function stepHasIf(step) {
+    const mapIndent = stepKeyIndent(step);
     return step.lines.some((line) => {
-        const m = /^(\s*)(?:-\s+)?if:\s*/.exec(withoutComment(line));
-        return m && (m[1].length === step.indent || m[1].length === step.indent + 2);
+        const m = /^(\s*)(?:(-\s+))?if:\s*/.exec(withoutComment(line));
+        return m && (m[2] ? m[1].length === step.indent : m[1].length === mapIndent);
     });
 }
 
@@ -191,7 +227,7 @@ export function workflowProblems(text) {
             const active = runText.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
             const aptMatch = APT_COMMAND.exec(active);
             const dropIdx = active.indexOf(DROP_MICROSOFT_APT_SCRIPT);
-            if (aptMatch && !step.lines.some((l) => NEEDS_MICROSOFT_APT.test(l))) {
+            if (aptMatch && ![...step.comments, ...step.lines].some((l) => NEEDS_MICROSOFT_APT.test(l))) {
                 const droppedInStep = dropIdx !== -1 && dropIdx < aptMatch.index;
                 if (!droppedUnconditionally && !droppedInStep) {
                     problems.push(`jobs.${job.id} (line ${step.line}): runs ${aptMatch[0]} without calling ${DROP_MICROSOFT_APT_SCRIPT} first`);

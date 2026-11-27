@@ -246,6 +246,16 @@ test('every apt-get/playwright --with-deps step in workflows must drop the Micro
         `      - run: |\n          sudo apt-get update\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n`,
         // A conditional earlier step does not cover a later apt step.
         `      - if: matrix.other\n        run: bash ${DROP_MICROSOFT_APT_SCRIPT}\n      - run: sudo apt-get update\n`,
+        // A drop script inside a shell conditional or after an early exit is not an unconditional drop.
+        `      - run: |\n          if [ -n "$NEED_DROP" ]; then\n            bash ${DROP_MICROSOFT_APT_SCRIPT}\n          fi\n      - run: sudo apt-get update\n`,
+        `      - run: |\n          command -v expect && exit 0\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n      - run: sudo apt-get update\n`,
+        // Folded block scalars, explicit indentation indicators, and plain multi-line scalars.
+        '      - run: >-\n          playwright install\n          --only-shell --with-deps chromium\n',
+        '      - run: >\n          sudo apt-get\n          install -y expect\n',
+        '      - run: |2\n          sudo apt-get update\n',
+        '      - run: >-2\n          sudo apt-get\n          install -y expect\n',
+        '      - run:\n          sudo apt-get update\n',
+        '      - run: sudo apt-get\n          install -y expect\n',
     ]) {
         assert.match(workflowProblems(withStep(bad)).join('\n'), /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/, bad);
     }
@@ -254,10 +264,57 @@ test('every apt-get/playwright --with-deps step in workflows must drop the Micro
         `      - run: bash ${DROP_MICROSOFT_APT_SCRIPT} && sudo apt-get update && sudo apt-get install -y expect\n`,
         `      - run: |\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n          pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium\n`,
         `      - run: bash ${DROP_MICROSOFT_APT_SCRIPT}\n      - run: sudo apt-get update\n`,
+        `      - run: |\n          # Drop flaky Microsoft source\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n      - run: sudo apt-get update\n`,
         '      - name: Install dotnet\n        # needs-microsoft-apt: installs dotnet from packages.microsoft.com\n        run: sudo apt-get update && sudo apt-get install -y dotnet-sdk-8.0\n',
+        '      # needs-microsoft-apt: installs dotnet from packages.microsoft.com\n      - name: Install dotnet\n        run: sudo apt-get update && sudo apt-get install -y dotnet-sdk-8.0\n',
     ]) {
         assert.deepEqual(workflowProblems(withStep(good)), [], good);
     }
+    // A `# needs-microsoft-apt` comment above a step opts out ONLY that step, never the preceding step.
+    const commentBetweenSteps = withStep([
+        '      - name: Install expect',
+        '        run: sudo apt-get update && sudo apt-get install -y expect',
+        '',
+        '      # needs-microsoft-apt: installs dotnet',
+        '      - name: Install dotnet',
+        '        run: sudo apt-get update && sudo apt-get install -y dotnet-sdk-8.0',
+        '',
+    ].join('\n'));
+    const betweenProblems = workflowProblems(commentBetweenSteps);
+    assert.equal(betweenProblems.length, 1, betweenProblems.join('\n'));
+    assert.match(betweenProblems[0], /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/);
+    // And a `# needs-microsoft-apt` above the very first step applies to that first step.
+    const commentAboveFirst = `name: t
+on: push
+permissions: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # needs-microsoft-apt: installs dotnet
+      - name: Install dotnet
+        run: sudo apt-get update && sudo apt-get install -y dotnet-sdk-8.0
+`;
+    assert.deepEqual(workflowProblems(commentAboveFirst), []);
+    // Sequence items at the same indentation as `steps:` are checked, stopping at subsequent job-level keys.
+    const unindentedSteps = `name: t
+on: push
+permissions: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install expect
+      run: sudo apt-get update && sudo apt-get install -y expect
+    outputs:
+      done: 'true'
+`;
+    assert.match(workflowProblems(unindentedSteps).join('\n'), /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/);
+    const unindentedStepsOk = unindentedSteps.replace(
+        '      run: sudo apt-get',
+        `      run: bash ${DROP_MICROSOFT_APT_SCRIPT} && sudo apt-get`,
+    );
+    assert.deepEqual(workflowProblems(unindentedStepsOk), []);
     // Mutation check on real ci.yml and vault-image.yml: removing any drop call fails.
     const ci = readFileSync(workflowFiles().find((f) => basename(f) === 'ci.yml'), 'utf8');
     assert.match(workflowProblems(ci.replace(`bash ${DROP_MICROSOFT_APT_SCRIPT} && `, '')).join('\n'), /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/);

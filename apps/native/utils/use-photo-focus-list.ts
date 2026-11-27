@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import {
-    NO_PHOTO_FOCUS, photoFocusByPhoto, photoFocusForPhotos, photoFocusOfPhoto, photoFocusShowingNext, photoFocusShowingOf,
+    NO_PHOTO_FOCUS, photoFocusByPhoto, photoFocusForPhotos, photoFocusOf, photoFocusOfPhoto, photoFocusShowingNext, photoFocusShowingOf,
     photoFocusShowingPhoto, photoFocusShowingStep, withPhotoFocus, type PhotoFocus, type PhotoFocusByPhoto, type PhotoFocusShowing,
 } from '@beanpool/core';
 
@@ -74,6 +74,17 @@ export function usePhotoFocusList() {
     /** An edit's `photoFocus`: the list for `photos` when the member touched it, else nothing (undefined: not sent). */
     const forEdit = useCallback((photos: readonly string[]) => (touched ? photoFocusForPhotos(photos, held) : undefined), [touched, held]);
     const adjusting = photoFocusShowingPhoto(showing);
+    /**
+     * Next, Done or Skip on the photo on screen: its focus set only when the member changed it. Adjust now opens by itself on
+     * every photo added, so a Done with nothing moved is common; it must not mark an edit touched, or the edit would send this
+     * phone's focus list (perhaps behind the node's) for a change nobody made.
+     */
+    const keep = (photo: string | null, focus: PhotoFocus | null) => {
+        if (photo === null) return;
+        const was = photoFocusOfPhoto(held, photo);
+        const now = photoFocusOf(focus);
+        if (was?.x !== now?.x || was?.y !== now?.y) setAt(photo, focus);
+    };
     return {
         touched,
         at: (photo: string | null | undefined) => photoFocusOfPhoto(held, photo),
@@ -84,12 +95,12 @@ export function usePhotoFocusList() {
         open: (photo: string) => { stopPending(); setShowing(photoFocusShowingOf([photo])); },
         /** Next or Done: the photo on screen keeps `focus`, then the next new photo, or closed after the last. */
         done: (focus: PhotoFocus | null) => {
-            if (adjusting !== null) setAt(adjusting, focus);
+            keep(adjusting, focus);
             setShowing(photoFocusShowingNext(showing));
         },
         /** Skip: the photo on screen keeps `focus`; the photos not yet shown keep none; closed. */
         skip: (focus: PhotoFocus | null) => {
-            if (adjusting !== null) setAt(adjusting, focus);
+            keep(adjusting, focus);
             setShowing(null);
         },
         /** Cancel (and Back): nothing kept for the photo on screen; closed. */

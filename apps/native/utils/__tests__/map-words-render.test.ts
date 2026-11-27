@@ -473,6 +473,12 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         await click(byLabel(xx('Add photo')), 'Add photo');
         await pressAlert(xx('Gallery'));
         expect(host.textContent).toContain(upperCase(xx('{n}/5 photos').replace('{n}', '1'), 'xx'));
+        // The photo just added opens Choose what the card shows by itself (Marty, 28 Nov 2026), its words through t() too; Done.
+        await settle(2);
+        expect(host.textContent).toContain(xx('Choose what the card shows'));
+        expect(bypassing(), 'the Adjust screen over the form').toEqual([]);
+        await click(host.querySelector('[data-testid="photo-focus-done"]'), 'Done');
+        expect(host.textContent).not.toContain(xx('Choose what the card shows'));
         alerts.said.length = 0;
         await click(byText(xx('Post Need')), 'Post Need');
         expect(said()).toEqual([xx('Error'), xx('Could not publish post.')]);

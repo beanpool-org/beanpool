@@ -119,7 +119,7 @@ export function nativeMock(said: Said) {
     return {
         Platform: platformStandIn(34),
         View: el('div'), Text: el('span'), Pressable: el('button'), TouchableOpacity: el('button'), ScrollView: el('div'), TextInput: el('input'),
-        SafeAreaView: el('div'), Switch: el('button'), Image: el('img'), KeyboardAvoidingView: el('div'),
+        SafeAreaView: el('div'), Switch: el('button'), Image: Object.assign(el('img'), { getSize: (_uri: string, ok: (w: number, h: number) => void) => ok(600, 800) }), KeyboardAvoidingView: el('div'),
         ActivityIndicator: (props: { accessibilityLabel?: string }) => createElement('span', { 'data-spinner': 'true', ...(props.accessibilityLabel ? { 'aria-label': props.accessibilityLabel } : {}) }),
         RefreshControl: () => null,
         FlatList, SectionList: FlatList,

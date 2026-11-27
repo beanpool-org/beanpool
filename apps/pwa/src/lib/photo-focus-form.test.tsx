@@ -86,6 +86,21 @@ describe('usePhotoFocusByPhoto: Adjust opens by itself on the photos a pick adds
         expect(wrong).toEqual([]);
     });
 
+    it('an edit: Done or Skip with nothing moved marks nothing; a real change marks it touched', () => {
+        const { result } = renderHook(() => usePhotoFocusByPhoto());
+        act(() => { result.current.resetFrom(['u1'], [{ x: 0.2, y: 0.8 }]); });
+        act(() => { result.current.added(['n1', 'n2']); });
+        act(() => { result.current.done(null); });
+        act(() => { result.current.skip(null); });
+        act(() => { result.current.open('u1'); });
+        act(() => { result.current.done({ x: 0.2, y: 0.8 }); });
+        expect(result.current.touched).toBe(false);
+        act(() => { result.current.added(['n3']); });
+        act(() => { result.current.done({ x: 0.5, y: 0 }); });
+        expect(result.current.touched).toBe(true);
+        expect(result.current.forPhotos(['u1', 'n1', 'n2', 'n3'])).toEqual([{ x: 0.2, y: 0.8 }, null, null, { x: 0.5, y: 0 }]);
+    });
+
     it('each web form opens the walk only from a pick (after the photos land), never as an edit opens, and hands the dialog its step and Skip', () => {
         for (const [form, hook] of [['../pages/MapPage.tsx', 'newPostFocus'], ['../pages/MarketplacePage.tsx', 'editFocus']] as const) {
             const src = readFileSync(resolve(here, form), 'utf8');

@@ -270,6 +270,25 @@ describe('usePhotoFocusList: Adjust opens by itself on the photos a pick adds, a
         };
     }
 
+    it('an edit: Done or Skip with nothing moved marks nothing, so nothing is sent; a real change marks it touched', async () => {
+        const { usePhotoFocusList } = await import('../use-photo-focus-list');
+        let hook: ReturnType<typeof usePhotoFocusList> | null = null;
+        const Probe = () => { hook = usePhotoFocusList(); return null; };
+        act(() => { root.render(createElement(Probe) as any); });
+        act(() => { hook!.resetFrom(['u1'], { photoFocus: [{ x: 0.2, y: 0.8 }] }); });
+        act(() => { hook!.added(['n1', 'n2']); });
+        act(() => { hook!.done(null); });
+        act(() => { hook!.skip(null); });
+        act(() => { hook!.open('u1'); });
+        act(() => { hook!.done({ x: 0.2, y: 0.8 }); });
+        expect(hook!.touched).toBe(false);
+        expect(hook!.forEdit(['u1', 'n1', 'n2'])).toBeUndefined();
+        act(() => { hook!.added(['n3']); });
+        act(() => { hook!.done({ x: 0.5, y: 0 }); });
+        expect(hook!.touched).toBe(true);
+        expect(hook!.forEdit(['u1', 'n1', 'n2', 'n3'])).toEqual([{ x: 0.2, y: 0.8 }, null, null, { x: 0.5, y: 0 }]);
+    });
+
     it('holds every walk in core\'s table on Android, where it opens at once', async () => {
         const { checkPhotoFocusRunVectors } = await import('@beanpool/core/photo-focus-vectors');
         expect(checkPhotoFocusRunVectors(await hookDriver())).toEqual([]);

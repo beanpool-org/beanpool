@@ -30,10 +30,13 @@ import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
     deadlineDaysRemaining, formatDate, formatHundredths, formatNumber, groupKindLine, isSampleId, keeperWords, parseHundredths, t, tn, word, amountRefusalWords, ANY_DECIMALS,
     isAmbiguousAmount, parseAmount, type WordKey, BANNER_PICTURE, releaseAsksHours,
+    carryTotalToEach, perItemCreateFields, perItemLines, priceUnitsOffered, upperCase, type PerItemField,
 } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { ReportModal } from '../components/ReportModal';
 import { PostPhotoPicker, MAX_POST_PHOTOS } from '../components/PostPhotoPicker';
+import { PerItemFields } from '../components/PerItemFields';
+import { useCommunityInfo } from '../lib/features';
 import { TagPicker } from '../components/TagPicker';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
 import { afterBlockWords } from '../lib/blocked-here';
@@ -300,6 +303,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [postCategory, setPostCategory] = useState('food');
     const [postCredits, setPostCredits] = useState('');
     const [postPriceType, setPostPriceType] = useState('fixed');
+    // A price for each one (stall slice 5), as the member's own create form has it (pages/MapPage.tsx): Each on an Offer only,
+    // and only where the node says it takes them up (core priceUnitsOffered); the info is read once the Offer form opens.
+    const postInfo = useCommunityInfo(postModalMode === 'offer');
+    const eachOffered = postModalMode === 'offer' && priceUnitsOffered(postInfo?.features, 'offer').includes('each');
+    /** The unit in force: Each only where it is offered (a Need, or a node that doesn't say so, is Total). */
+    const postUnit = postPriceType === 'each' && !eachOffered ? 'fixed' : postPriceType;
+    const eachChosen = postUnit === 'each';
+    const [postItemCount, setPostItemCount] = useState('');
+    const [postItemLot, setPostItemLot] = useState('');
+    const [postItemRefusal, setPostItemRefusal] = useState<{ field: PerItemField; text: string } | null>(null);
+    const postPriceRef = useRef<HTMLInputElement>(null);
     const [postDescription, setPostDescription] = useState('');
     const [postRepeatable, setPostRepeatable] = useState(true);
     const [postTags, setPostTags] = useState<string[]>([]);
@@ -990,6 +1004,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setPostError(t('Please enter a valid credit amount'));
             return;
         }
+        // Each: how many, and the optional price for all of them, held to the node's own rules (core per-item-form).
+        const item = eachChosen ? perItemCreateFields({ price: postCredits, count: postItemCount, lot: postItemLot }) : null;
+        setPostItemRefusal(item && !item.ok ? { field: item.refusal.field, text: item.refusal.text } : null);
+        if (item && !item.ok) {
+            setPostError(item.refusal.text);
+            return;
+        }
         if (postPhotos.length === 0) {
             setPostError(t('Add a photo first'));
             return;
@@ -1002,10 +1023,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 await treasuryPostOffer(pubkey, {
                     title: postTitle.trim(),
                     category: postCategory,
+                    // On Each, the price for one.
                     price_c: creditsNum,
-                    priceType: postPriceType,
+                    priceType: postUnit,
                     description: postDescription.trim() || undefined,
-                    repeatable: postRepeatable,
+                    // Each has no Recurring: the count takes its place (the node makes it so whatever is sent).
+                    repeatable: postRepeatable && !eachChosen,
+                    ...(item && item.ok ? { unitsLeft: item.fields.unitsLeft, ...(item.fields.lot ? { lot: item.fields.lot } : {}) } : {}),
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
                     ...(postTags.length > 0 ? { tags: postTags } : {}),
                     ...(postFreeTags.length > 0 ? { freeTags: postFreeTags } : {}),
@@ -1015,7 +1039,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     title: postTitle.trim(),
                     category: postCategory,
                     price_c: creditsNum,
-                    priceType: postPriceType,
+                    priceType: postUnit,
                     description: postDescription.trim() || undefined,
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
                     ...(postTags.length > 0 ? { tags: postTags } : {}),
@@ -1026,6 +1050,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setPostTitle('');
             setPostDescription('');
             setPostCredits('');
+            setPostItemCount('');
+            setPostItemLot('');
+            setPostItemRefusal(null);
             setPostPhotos([]);
             setPostTags([]);
             setPostFreeTags([]);
@@ -2924,7 +2951,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         aria-modal="true"
                         aria-labelledby="post-modal-title"
                         onClick={(e) => e.stopPropagation()}
-                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4 animate-in zoom-in-95 duration-200"
+                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl space-y-4 animate-in zoom-in-95 duration-200"
                     >
                         <div className="flex justify-between items-center">
                             <h2 id="post-modal-title" className="text-lg font-black text-nature-900 dark:text-white">
@@ -2985,11 +3012,26 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         {t('Price Type')}
                                     </label>
                                     <select
-                                        value={postPriceType}
-                                        onChange={(e) => setPostPriceType(e.target.value)}
+                                        value={postUnit}
+                                        onChange={(e) => {
+                                            const next = e.target.value;
+                                            // Total -> Each, as on the member's form: the figure typed as the Total moves to "Or all of them for",
+                                            // and the price for one is emptied and focused (core carryTotalToEach).
+                                            if (next === 'each' && postUnit === 'fixed') {
+                                                const moved = carryTotalToEach({ price: postCredits, count: postItemCount, lot: postItemLot });
+                                                if (moved.price !== postCredits) {
+                                                    setPostCredits(moved.price);
+                                                    setPostItemLot(moved.lot);
+                                                    setTimeout(() => postPriceRef.current?.focus(), 0);
+                                                }
+                                            }
+                                            setPostItemRefusal(null);
+                                            setPostPriceType(next);
+                                        }}
                                         className="w-full bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                     >
                                         <option value="fixed">{t('Fixed Total')}</option>
+                                        {eachOffered && <option value="each">{perItemLines.unitEach()}</option>}
                                         <option value="hourly">{t('Hourly (/hr)')}</option>
                                     </select>
                                 </div>
@@ -3009,11 +3051,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-1">
-                                    {t('Credits (🫘 Beans)')}
+                                <label htmlFor="treasury-post-price" className="block text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-1">
+                                    {eachChosen ? upperCase(perItemLines.priceForOne()) : t('Credits (🫘 Beans)')}
                                 </label>
                                 {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                                 <input
+                                    id="treasury-post-price"
+                                    ref={postPriceRef}
                                     type="text"
                                     inputMode="decimal"
                                     required
@@ -3022,6 +3066,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     onChange={(e) => setPostCredits(e.target.value)}
                                     className="w-full bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 />
+                                {/* Each: how many, and the optional price for all of them, with their live line (core per-item-form) */}
+                                {eachChosen && (
+                                    <PerItemFields
+                                        text={{ price: postCredits, count: postItemCount, lot: postItemLot }}
+                                        onCount={(v) => { setPostItemCount(v); setPostItemRefusal(null); }}
+                                        onLot={(v) => { setPostItemLot(v); setPostItemRefusal(null); }}
+                                        refusal={postItemRefusal}
+                                    />
+                                )}
                             </div>
 
                             <div>
@@ -3040,7 +3093,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             <PostPhotoPicker photos={postPhotos} onChange={setPostPhotos}
                                 label={t('Photos ({n}/{max})', { n: postPhotos.length, max: MAX_POST_PHOTOS })} />
 
-                            {postModalMode === 'offer' && (
+                            {/* Recurring: not on Each, where the count takes its place. */}
+                            {postModalMode === 'offer' && !eachChosen && (
                                 <label className="flex items-center gap-2 cursor-pointer pt-1">
                                     <input
                                         type="checkbox"

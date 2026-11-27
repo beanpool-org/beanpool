@@ -39,7 +39,7 @@ import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import { copyBody, copyUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
 import { COPY_CONFIRM_MOST } from '../engine/copy-lease.js';
 import { standbyWritesNothing } from '../config/node-role.js';
-import { itemRefusalOf } from '../engine/per-item.js';
+import { respondItemRefusal } from './item-refusal.js';
 import { respondCopyNoDeal, respondDealOpen, respondItemTakeUpRefusal } from './deal-refusals.js';
 import { directoryStamp } from '../engine/directory-cache.js';
 import type { EventTimeOut } from '../engine/posts.js';
@@ -1574,18 +1574,6 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
 });
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
-
-/**
- * A create or an edit of a listing priced for each one refused (engine/per-item.ts): 400, or 409 `units_changed` with how many
- * are left now, and the refusal's code, so an app can say which field and refresh the count.
- */
-function respondItemRefusal(ctx: any, err: any, fallback: string): boolean {
-    const r = itemRefusalOf(err);
-    if (!r) return false;
-    ctx.status = r.status;
-    ctx.body = { error: memberErrorText(err, fallback), code: r.code, ...(r.unitsLeft !== undefined ? { unitsLeft: r.unitsLeft } : {}) };
-    return true;
-}
 
 /**
  * A standing deal's `standing` from a body (DESIGN-standing-deals-fable §2.3), with the host this request came to: never the

@@ -11,18 +11,27 @@ import { StatusBar } from 'expo-status-bar';
 import { treasuryPostOffer, treasuryPostNeed } from '../utils/db';
 import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
 import { PostPhotoRow } from '../components/PostPhotoRow';
+import { PerItemFields } from '../components/PerItemFields';
 import { TagPicker } from '../components/TagPicker';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
-import { amountRefusalWords, formatNumber, inCapitalsOf, isAmbiguousAmount, isHundredths, isShopCategory, parseHundredths, t, word, type WordKey } from '@beanpool/core';
+import { useNodeProfile } from '../utils/use-node-profile';
+import {
+    amountRefusalWords, carryTotalToEach, formatNumber, inCapitalsOf, isAmbiguousAmount, isHundredths, isShopCategory, parseHundredths, perItemCreateFields,
+    perItemLines, priceUnitsOffered, t, upperCase, word, type PerItemField, type WordKey,
+} from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 // Operator form to post a treasury's Offer (what the enterprise sells, e.g. a dozen eggs) or a
 // Need (a tender the treasury pays for, e.g. tending the flock). Mirrors propose-project.tsx.
 // The treasury id rides the params → the signed operator route; the operator signs on the
 // treasury's behalf.
-const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
-/** The price box's unit, and the type a screen reader says: marked here, translated where shown. */
+//
+// The units the price button cycles are core's (priceUnitsOffered): Total, per hour, day, week and month, and on an Offer,
+// where the node says it takes them up (`perItem`), Each right after Total: a price for one, how many the enterprise has, and
+// an optional price for all of them, the member's own create form's boxes and rules (components/PerItemFields, core
+// per-item-form), so a keeper prices the enterprise's own goods for each one exactly as a member prices theirs (stall slice 5).
+/** The price box's unit, and the type a screen reader says: marked here, translated where shown. Each says core's own word. */
 const PRICE_TYPE_LABEL: Record<string, WordKey> = {
     fixed: word('Total', 'price unit'), hourly: word('/hr'), daily: word('/day'), weekly: word('/wk'), monthly: word('/mo'),
 };
@@ -80,7 +89,17 @@ export default function TreasuryPostScreen() {
     const [tags, setTags] = useState<string[]>([]);
     const [freeTags, setFreeTags] = useState<string[]>([]);
     const [credits, setCredits] = useState('');
-    const [priceType, setPriceType] = useState<string>('fixed');
+    /** The unit the keeper picked; `priceType` below is the one in force (Total where core's list lacks it). */
+    const [pickedPriceType, setPickedPriceType] = useState<string>('fixed');
+    // Each only on an Offer, and only once the node says it takes them up; a Need never offers it.
+    const priceUnits: readonly string[] = priceUnitsOffered(useNodeProfile()?.features, isNeed ? 'need' : 'offer');
+    const priceType = priceUnits.includes(pickedPriceType) ? pickedPriceType : 'fixed';
+    const eachChosen = priceType === 'each';
+    // A price for each one: how many the enterprise has, and the optional price for all of them, with the box a refusal is about.
+    const [itemCount, setItemCount] = useState('');
+    const [itemLot, setItemLot] = useState('');
+    const [itemRefusal, setItemRefusal] = useState<{ field: PerItemField; text: string } | null>(null);
+    const priceInputRef = useRef<TextInput>(null);
     const [footerHeight, setFooterHeight] = useState(0);
     const [description, setDescription] = useState('');
     // Its photos, added while posting it, as the member's own composer adds them (Damo, 26 Oct: the only way was to post it,
@@ -98,9 +117,22 @@ export default function TreasuryPostScreen() {
     };
     const fieldBorder = (field: string) => errors.has(field) ? styles.fieldError : null;
 
+    /**
+     * The unit button: the next unit in core's list. Into Each from Total, the figure typed as the Total moves to "Or all of them
+     * for" and the price for one is emptied and focused, as on the member's own form (core carryTotalToEach).
+     */
     const cyclePriceType = () => {
-        const idx = PRICE_TYPES.indexOf(priceType as any);
-        setPriceType(PRICE_TYPES[(idx + 1) % PRICE_TYPES.length]);
+        const next = priceUnits[(priceUnits.indexOf(priceType) + 1) % priceUnits.length];
+        if (next === 'each' && priceType === 'fixed') {
+            const moved = carryTotalToEach({ price: credits, count: itemCount, lot: itemLot });
+            if (moved.price !== credits) {
+                setCredits(moved.price);
+                setItemLot(moved.lot);
+                setTimeout(() => priceInputRef.current?.focus(), 60);
+            }
+        }
+        setItemRefusal(null);
+        setPickedPriceType(next);
     };
 
     const handleSubmit = async () => {
@@ -113,11 +145,18 @@ export default function TreasuryPostScreen() {
         const price = parseHundredths(credits);
         const priceValue = price.ok ? price.value : NaN;
         if (!credits.trim() || !isHundredths(priceValue) || priceValue <= 0) errs.add('credits');
+        // Each: how many, and the optional price for all of them, held to the node's own rules (core per-item-form).
+        const item = eachChosen ? perItemCreateFields({ price: credits, count: itemCount, lot: itemLot }) : null;
+        setItemRefusal(item && !item.ok ? { field: item.refusal.field, text: item.refusal.text } : null);
+        if (item && !item.ok) errs.add(item.refusal.field === 'lot' ? 'itemLot' : 'itemCount');
         if (photos.length === 0) errs.add('photos');
         setErrors(errs);
         if (errs.size > 0) {
             if (errs.has('photos') && errs.size === 1) {
                 setToast(t('📷 Add a photo'));
+            } else if (item && !item.ok && errs.size === 1) {
+                // Only the count or the price for all: its own sentence (it is under the box too, which may be off screen).
+                setToast(item.refusal.text);
             } else {
                 setToast(!price.ok && (isAmbiguousAmount(price.refusal) || price.refusal === 'too-many-decimals') ? amountRefusalWords(price.refusal) : t('⚠️ Add a title, category and price'));
             }
@@ -137,10 +176,12 @@ export default function TreasuryPostScreen() {
             category,
             title: title.trim(),
             description: description.trim(),
-            // Whole hundredths of a Bean, as the node takes a listing's price (price_c).
+            // Whole hundredths of a Bean, as the node takes a listing's price (price_c). On Each, the price for one.
             price_c: priceValue,
             priceType,
-            repeatable,
+            // Each has no Recurring: the count takes its place (the node makes it so whatever is sent).
+            repeatable: repeatable && !eachChosen,
+            ...(item && item.ok ? { unitsLeft: item.fields.unitsLeft, ...(item.fields.lot ? { lot: item.fields.lot } : {}) } : {}),
             ...(photos.length > 0 ? { photos } : {}),
             ...(tags.length > 0 ? { tags } : {}),
             ...(freeTags.length > 0 ? { freeTags } : {}),
@@ -248,11 +289,12 @@ export default function TreasuryPostScreen() {
                         />
                     </View>
 
-                    {/* Price */}
+                    {/* Price: on Each, the price for one */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>{t('PRICE (🫘 BEANS)')}</Text>
+                        <Text style={styles.label}>{eachChosen ? upperCase(perItemLines.priceForOne()) : t('PRICE (🫘 BEANS)')}</Text>
                         <View style={styles.priceRow}>
                             <TextInput
+                                ref={priceInputRef}
                                 accessibilityLabel={t('Price in Beans')}
                                 style={[styles.input, styles.priceInput, fieldBorder('credits')]}
                                 placeholder={formatNumber(0)}
@@ -262,11 +304,20 @@ export default function TreasuryPostScreen() {
                                 onChangeText={(v) => { setCredits(v); clearError('credits'); }}
                                 maxLength={6}
                             />
-                            <Pressable style={styles.priceTypeBtn} onPress={cyclePriceType} accessibilityRole="button" accessibilityLabel={t('Price type: {type}. Tap to change.', { type: t(PRICE_TYPE_SPOKEN[priceType]) })}>
-                                <Text style={styles.priceTypeText}>{t(PRICE_TYPE_LABEL[priceType])}</Text>
+                            <Pressable style={styles.priceTypeBtn} onPress={cyclePriceType} accessibilityRole="button" accessibilityLabel={t('Price type: {type}. Tap to change.', { type: eachChosen ? perItemLines.unitEach() : t(PRICE_TYPE_SPOKEN[priceType]) })}>
+                                <Text style={styles.priceTypeText}>{eachChosen ? perItemLines.unitEach() : t(PRICE_TYPE_LABEL[priceType])}</Text>
                             </Pressable>
                         </View>
                         <Text style={styles.hint}>{t('Tap the box on the right to switch between a fixed total and hourly/daily rates.')}</Text>
+                        {/* Each: how many, and the optional price for all of them, with their live line (core per-item-form) */}
+                        {eachChosen && (
+                            <PerItemFields
+                                text={{ price: credits, count: itemCount, lot: itemLot }}
+                                onCount={(v) => { setItemCount(v); setItemRefusal(null); clearError('itemCount'); }}
+                                onLot={(v) => { setItemLot(v); setItemRefusal(null); clearError('itemLot'); }}
+                                refusal={itemRefusal}
+                            />
+                        )}
                     </View>
 
                     {/* Description */}
@@ -289,7 +340,8 @@ export default function TreasuryPostScreen() {
                         <PostPhotoRow photos={photos} onChange={setPhotos} testID="treasury-post-photos" required />
                     </View>
 
-                    {/* Recurring */}
+                    {/* Recurring: not on Each, where the count takes its place */}
+                    {!eachChosen && (
                     <View style={styles.field}>
                         <Pressable style={styles.toggleRow} onPress={() => setRepeatable(!repeatable)} accessibilityRole="checkbox" accessibilityState={{ checked: repeatable }}>
                             <View style={[styles.checkbox, repeatable && styles.checkboxOn]}>
@@ -303,6 +355,7 @@ export default function TreasuryPostScreen() {
                                 : t('Leave on so the offer stays available for the next buyer (e.g. eggs every week).')}
                         </Text>
                     </View>
+                    )}
                 </KeyboardAwareScrollView>
 
                 <KeyboardStickyView onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>

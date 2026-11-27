@@ -83,6 +83,7 @@ import { seedOwnerForTests, ownerPhoneSessionHeaders } from './admin-auth-test-h
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
+import { KNOCK_MESSAGE_MIN_CHARS } from '@beanpool/core';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
@@ -264,6 +265,38 @@ async function main(): Promise<void> {
         const r = await knock(probe, extra);
         assert(r.status === 400, `${what} → 400 (${r.status} ${r.body?.error})`);
     }
+    // The fewest (Marty, 27 Nov 2026): 20 characters, core's one constant that both apps' forms hold to, counted as the most is
+    // (characters, not bytes; spaces at the ends and control characters don't count). An older app shows these words.
+    assert(KNOCK_MESSAGE_MIN_CHARS === 20, `the fewest is core's 20 (${KNOCK_MESSAGE_MIN_CHARS})`);
+    const SHORT = 'Please say a little more about yourself: at least 20 characters.';
+    const tooShort: Array<[string, string]> = [
+        ['"pls"', 'pls'],
+        ['"hello community"', 'hello community'],
+        ['1 character', 'x'],
+        ['19 characters', 'x'.repeat(19)],
+        ['19 accented letters', 'é'.repeat(19)],
+        ['19 emoji', '🌿'.repeat(19)],
+        ['19 Chinese characters', '鸡'.repeat(19)],
+        ['19 with spaces and control characters round them', `  \u0000${'a'.repeat(19)}\u0007  `],
+    ];
+    for (const [what, message] of tooShort) {
+        const r = await knock(probe, { message });
+        assert(r.status === 400 && r.body?.code === 'bad_request' && r.body?.error === SHORT,
+            `a message of ${what} → 400, the fewest said (${r.status} ${r.body?.error})`);
+    }
+    const empty = await knock(probe, { message: '' });
+    assert(empty.status === 400 && empty.body?.error === 'Please say a few words about yourself.', `an empty message keeps its own line (${empty.body?.error})`);
+    const over = await knock(probe, { message: 'é'.repeat(281) });
+    assert(over.status === 400 && over.body?.error === 'Please keep your message to 280 characters.', `281 accented letters is over the most (${over.body?.error})`);
+    assert(rowsFor(probe.pk).length === 0, 'nothing is written for a message too short or too long');
+    // Exactly the fewest is enough. Each from a key of its own, its row taken away again, so the address's three a day
+    // (section 5) and the counts after this section are as they were.
+    for (const [what, message] of [['20 characters', 'x'.repeat(20)], ['20 emoji', '🌿'.repeat(20)], ['20 Chinese characters', `  ${'鸡'.repeat(20)}  `]] as const) {
+        const twenty = newId(`Twenty ${what.split(' ')[1]}`);
+        const ok = await knock(twenty, { message, avatar: null, fromNode: null });
+        assert(ok.status === 201 && rowsFor(twenty.pk)[0]?.message === message.trim(), `a message of ${what} is enough (${ok.status} ${ok.body?.error})`);
+        db.prepare('DELETE FROM join_requests WHERE pubkey = ?').run(twenty.pk);
+    }
     const emojiName = await knock(probe, { callsign: '🌿'.repeat(20), message: '🌿'.repeat(280), avatar: null, fromNode: null });
     assert(emojiName.status === 201, `20 emoji as a name and 280 as a message fit: characters, not bytes (${emojiName.status} ${emojiName.body?.error})`);
 
@@ -414,9 +447,9 @@ async function main(): Promise<void> {
     const lateAnswer = await approve(mia, deeId);
     assert(lateAnswer.status === 409 && lateAnswer.body?.code === 'lapsed', `and can't be answered: lapsed (${lateAnswer.status})`);
     assert((await status(dee)).body?.status === 'none', 'Dee\'s status is none');
-    const deeAgain = await knock(dee, { message: 'Still keen to join!' });
+    const deeAgain = await knock(dee, { message: 'Still keen to join, please!' });
     const deeRows = rowsFor(dee.pk);
-    assert(deeAgain.status === 201 && deeRows.length === 1 && deeRows[0].id === deeId && deeRows[0].message === 'Still keen to join!'
+    assert(deeAgain.status === 201 && deeRows.length === 1 && deeRows[0].id === deeId && deeRows[0].message === 'Still keen to join, please!'
         && Date.now() - Date.parse(deeRows[0].created_at) < 60_000, `her next knock reopens the same row with what she sent (${deeAgain.status})`);
     assert((await list(mia)).body?.knocks?.some((k: any) => k.pubkey === dee.pk), 'and she is back on the list');
 
@@ -915,7 +948,7 @@ async function main(): Promise<void> {
         .get(ago(3 * DAY_MS)) as { n: number }).n;
     let lastAddress = 0;
     /** A knock from an address nobody has knocked from (the tunnel's header names it; loopback is a trusted proxy). */
-    const knockFromNew = (id: Id) => call(id, 'POST', '/api/join/knock', { callsign: id.name, message: `Hello from ${id.name}.` },
+    const knockFromNew = (id: Id) => call(id, 'POST', '/api/join/knock', { callsign: id.name, message: `Hello from ${id.name}, I live nearby.` },
         { headers: { 'CF-Connecting-IP': `198.51.${100 + Math.floor(++lastAddress / 250)}.${lastAddress % 250 + 1}` } });
     // Sol's knock is still open from section 15: made four days ago, so on the list and not counted.
     setKnock(idOf.get(sol.pk)!, { created_at: ago(4 * DAY_MS) });

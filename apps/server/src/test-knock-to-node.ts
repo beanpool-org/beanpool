@@ -61,7 +61,7 @@ async function knock(id: Id, extra: Record<string, unknown>, old = false): Promi
     // A new day for the address limit (3 a day from one network): every case here comes from the test's one address.
     try { db.prepare('UPDATE join_requests SET ip_hash = NULL').run(); } catch { /* no table yet */ }
     const path = '/api/join/knock';
-    const raw = JSON.stringify({ callsign: id.name, message: `Hello from ${id.name}.`, ...extra });
+    const raw = JSON.stringify({ callsign: id.name, message: `Hello from ${id.name}, I live nearby.`, ...extra });
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const res = await fetch(`${BASE}${path}`, {

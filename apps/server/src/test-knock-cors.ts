@@ -152,7 +152,7 @@ async function main(): Promise<void> {
     assert(knock.res.status === 201 && knock.body?.knock?.status === 'pending', `a signed knock from the web app: 201 pending (${knock.res.status} ${JSON.stringify(knock.body)})`);
     assert(header(knock.res, 'access-control-allow-origin') === '*' && header(knock.res, 'access-control-allow-credentials') === null,
         `the knock's answer is readable from the web app, with no credentials (ACAO ${header(knock.res, 'access-control-allow-origin')})`);
-    const again = await signedCall(applicant, 'POST', '/api/join/knock', WEB, { message: 'Again', callsign: 'River' });
+    const again = await signedCall(applicant, 'POST', '/api/join/knock', WEB, { message: 'Asking again from the web app.', callsign: 'River' });
     assert(again.res.status === 409 && again.body?.code === 'knock_open' && header(again.res, 'access-control-allow-origin') === '*',
         `a second knock from the web app: its refusal readable, in the node's words (${again.res.status} ${JSON.stringify(again.body)})`);
     const pending = await signedCall(applicant, 'GET', '/api/join/knock/status', WEB);

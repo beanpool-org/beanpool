@@ -262,7 +262,7 @@ async function main(): Promise<void> {
     // Knocks are answered with an invite: off with invites, even with their own switch on.
     setOverride('knocks', 'true');
     const knocker = newId('Kit');
-    const knock = await call(knocker, 'POST', '/api/join/knock', { callsign: 'Kit', message: 'Hello, may I join?', fromNode: 'https://example.org/' });
+    const knock = await call(knocker, 'POST', '/api/join/knock', { callsign: 'Kit', message: 'Hello, may I join you all?', fromNode: 'https://example.org/' });
     const withKnocksOn = await info();
     assert(invitesOff(knock) && withKnocksOn?.features?.knocks === false && !db.prepare('SELECT 1 FROM join_requests WHERE pubkey = ?').get(knocker.pk),
         `with the operator's knocks override on, a knock is still 404, in the invites' words, and info says knocks false (${show(knock)})`);
@@ -340,7 +340,7 @@ async function main(): Promise<void> {
     setOverride('invites', 'false');
     const localOff = await info();
     const offGenerate = await generate(nia);
-    const offKnock = await call(newId('Lou'), 'POST', '/api/join/knock', { callsign: 'Lou', message: 'Hello there.', fromNode: 'https://global.beanpool.org/' });
+    const offKnock = await call(newId('Lou'), 'POST', '/api/join/knock', { callsign: 'Lou', message: 'Hello there, I live nearby.', fromNode: 'https://global.beanpool.org/' });
     assert(localOff?.features?.invites === false && localOff?.features?.knocks === false && offGenerate.status === 404
         && offGenerate.body?.feature === 'invites' && offKnock.status === 404 && offKnock.body?.feature === 'invites',
         `local + nodeProfile.invites=false: no invites and no knocks there either (${show(offGenerate)} | ${show(offKnock)})`);

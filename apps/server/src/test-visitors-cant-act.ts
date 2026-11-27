@@ -717,7 +717,7 @@ async function main(): Promise<void> {
         conversationId: veraDm.id, messageId: aliceLine.id, transactionId: miaBuys.id, projectId: project,
         category: 'produce', title: `Swept ${a.name}`, description: 'Swept for the rule', price_c: hc(1), priceType: 'fixed', amount_c: hc(1),
         ...lockedDm(), emoji: '👍', stars: 5, reason: 'spam', callsign: `Swept ${a.name}`,
-        bio: 'Swept', text: 'Swept line', message: 'Swept line', status: 'going', support: true, choice: 'yes', optionId: 'a', enabled: false,
+        bio: 'Swept', text: 'Swept line', message: 'Swept line, asking to join', status: 'going', support: true, choice: 'yes', optionId: 'a', enabled: false,
         duration: '8h', offsets: [60], lat: -28.5, lng: 153.5, radiusKm: 10, name: `Swept ${a.name}`, goalAmount_c: hc(10), requestedAmount_c: hc(10),
         platform: 'youtube', url: `https://www.youtube.com/@swept${a.name.toLowerCase()}`, touches: 'member', effect: 'freeze_credit', subject: bob.pk,
         token: 'ExponentPushToken[swept]', preferences: { chat: true },

@@ -70,6 +70,7 @@ import { useCreditGiver } from '../../utils/use-credit-giver';
 import { CREDIT_FILTERS, type CreditFilter } from '../../utils/credit-view';
 import { usePeopleVisitEnds } from '../../utils/people-visit';
 import { useShowCredit } from '../../utils/use-show-credit';
+import { useCommunityOnline } from '../../utils/use-community-online';
 
 type SubView = PeopleView;
 type SortOption = MemberSort;
@@ -271,7 +272,10 @@ export default function PeopleScreen() {
     const { on: creditOn, start: creditStart, open: openCredit, close: closeCredit } = credit;
     const [tierName, setTierName] = useState('');
     const [isGuest, setIsGuest] = useState(false);
-    const [isOnline, setIsOnline] = useState(true);
+    // Whether the community answers, for Invites (utils/use-community-online.ts): asked each time Invites is shown and the app
+    // comes back to the front, a failed ask tried again before it says offline (Marty, 28 Nov: one slow answer greyed the
+    // voucher box for the whole visit while the bean menu said Connected).
+    const isOnline = useCommunityOnline(view === 'invites');
     const [vouchersData, setVouchersData] = useState<{ vouchers: VoucherSummaryRow[]; waiting?: WaitingVoucherRow[]; candidates?: VoucherCandidates; settings: VoucherSettings } | null>(null);
     // Whether the node said this member is on the credit committee (it answers GET /api/names/vouchers only for them; a 403 is
     // its no). Undefined while not heard, or when the ask failed: never read as a no.
@@ -459,11 +463,16 @@ export default function PeopleScreen() {
             }
         }, [view, listNote, sortOption, membersOnDemand, reloadVouchers])
     );
+    // The connection back on Invites (it said offline, then the community answered): the committee's answer, unheard while
+    // offline, is asked again, so "Make them a voucher" isn't left greyed for the rest of the visit.
+    const wasOnline = useRef(isOnline);
+    useEffect(() => {
+        const back = isOnline && !wasOnline.current;
+        wasOnline.current = isOnline;
+        if (back && view === 'invites') void reloadVouchers();
+    }, [isOnline, view, reloadVouchers]);
 
     useEffect(() => {
-        if (view === 'invites') {
-            checkOnlineStatus();
-        }
         AsyncStorage.getItem('beanpool_anchor_url').then(async val => {
             if (val) {
                 setAnchorUrl(val);
@@ -582,26 +591,6 @@ export default function PeopleScreen() {
             }
         } catch (e) {
             console.warn('[People] Failed to sync invites from server:', e);
-        }
-    };
-
-    const checkOnlineStatus = async () => {
-        try {
-            const url = await AsyncStorage.getItem('beanpool_anchor_url');
-            if (!url) {
-                setIsOnline(false);
-                return;
-            }
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2000);
-            const res = await fetch(`${url}/api/community/health`, {
-                method: 'GET',
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            setIsOnline(res.ok);
-        } catch {
-            setIsOnline(false);
         }
     };
 

@@ -70,7 +70,7 @@ import { useCreditGiver } from '../../utils/use-credit-giver';
 import { CREDIT_FILTERS, type CreditFilter } from '../../utils/credit-view';
 import { usePeopleVisitEnds } from '../../utils/people-visit';
 import { useShowCredit } from '../../utils/use-show-credit';
-import { useCommunityOnline } from '../../utils/use-community-online';
+import { useCommunityOnline, ONLINE_RETRY_MS } from '../../utils/use-community-online';
 
 type SubView = PeopleView;
 type SortOption = MemberSort;
@@ -438,21 +438,38 @@ export default function PeopleScreen() {
         }
     }, [view]);
 
+    // The committee read gets the same tries as the online check (ONLINE_RETRY_MS): a phone just woken fails this read and the
+    // first health ask together, the health retry answers, and without these tries "Make them a voucher" stayed greyed for the
+    // visit (#3403 review). Only an unanswered read (status 0) or a server error is tried again, never a 403 (not on the
+    // committee). A newer read, or leaving Invites, ends the older one's tries (vouchersTurn).
+    const vouchersTurn = useRef(0);
     const reloadVouchers = useCallback(async (url?: string) => {
         const u = url || anchorUrl;
         if (!u || !identity) return;
-        const res = await fetchVouchers(u, identity);
-        if (res.ok) setVouchersData(res.value);
-        else setVouchersData(null);
-        setOnCommittee(res.ok ? true : res.status === 403 ? false : undefined);
+        const turn = ++vouchersTurn.current;
+        for (let i = 0; ; i++) {
+            const res = await fetchVouchers(u, identity);
+            if (turn !== vouchersTurn.current) return;
+            const again = !res.ok && (res.status === 0 || res.status >= 500) && i < ONLINE_RETRY_MS.length;
+            if (!again) {
+                if (res.ok) setVouchersData(res.value);
+                else setVouchersData(null);
+                setOnCommittee(res.ok ? true : res.status === 403 ? false : undefined);
+                return;
+            }
+            await new Promise(resolve => setTimeout(resolve, ONLINE_RETRY_MS[i]));
+            if (turn !== vouchersTurn.current) return;
+        }
     }, [anchorUrl, identity]);
 
     useEffect(() => {
         if (view !== 'invites') {
+            vouchersTurn.current++;
             setVouchersData(null);
             setOnCommittee(undefined);
         }
     }, [view]);
+    useEffect(() => () => { vouchersTurn.current++; }, []);
 
     useFocusEffect(
         useCallback(() => {

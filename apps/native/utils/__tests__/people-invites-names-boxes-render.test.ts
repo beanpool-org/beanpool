@@ -132,6 +132,9 @@ const node = vi.hoisted(() => ({
     inviteDown: false,
     inviteRefusal: null as string | null,
     vouchersDown: false,
+    /** Committee reads that go unanswered (a network error) before the community answers them, even while `online`. */
+    vouchersMisses: 0,
+    vouchersAsks: 0,
     /** What GET /api/names/vouchers answers in `waiting` (invites-vouching I4). */
     waiting: [] as Array<Record<string, unknown>>,
     generated: [] as Array<Record<string, unknown>>,
@@ -254,7 +257,7 @@ beforeEach(() => {
     nav.on = true;
     Object.assign(node, {
         role: null, committee: false, voucher: true, budgetLeft: 55000, budgetLevel: 100000, voucherBudget: 100000, online: true, healthMisses: 0, healthAsks: 0, inviteDown: false, inviteRefusal: null,
-        vouchersDown: false, waiting: [], generated: [], bound: [], mine: [],
+        vouchersDown: false, vouchersMisses: 0, vouchersAsks: 0, waiting: [], generated: [], bound: [], mine: [],
     });
     inviteFolds.clear();
 
@@ -269,7 +272,9 @@ beforeEach(() => {
         }
         // GET /api/names/vouchers answers owners and committee admins only (routes/names-list.ts).
         if (u === `${NODE}/api/names/vouchers`) {
+            node.vouchersAsks++;
             if (!node.online) throw new TypeError('Network request failed');
+            if (node.vouchersMisses > 0) { node.vouchersMisses--; throw new TypeError('Network request failed'); }
             if (node.vouchersDown) return json({ error: 'Something went wrong.' }, 500);
             return node.committee
                 ? json({ vouchers: [], waiting: node.waiting, settings: { voucherBudget: node.voucherBudget, voucherMaxVouch: 10000 } })
@@ -444,6 +449,35 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         expect(generateWords()).toBe(t('✨ Generate Ticket'));
         await press('invite-voucher-box');
         expect(q('invite-voucher-box')?.getAttribute('aria-checked')).toBe('true');
+    });
+
+    // #3403 review: a phone just woken fails the first committee read together with the first health ask. The health retry
+    // answers, so "online" never turns false; the committee read must be tried again too, or the box stays greyed.
+    it('just woken: the first committee read fails with the first health ask, and the box still comes back', async () => {
+        clocks();
+        node.role = 'owner';
+        node.committee = true;
+        node.healthMisses = 1;
+        node.vouchersMisses = 1;
+        await open();
+        await press('invite-names-box');
+        await after(1000);
+        expect(node.healthAsks).toBe(2);
+        expect(node.vouchersAsks).toBe(2);
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(false);
+        expect(q('invite-voucher-why')).toBeNull();
+        expect(generateWords()).toBe(t('✨ Generate Ticket'));
+    });
+
+    it('not on the committee (403): asked once, never tried again, and says why', async () => {
+        clocks();
+        node.role = 'admin';
+        node.committee = false;
+        await open();
+        await press('invite-names-box');
+        await after(5000);
+        expect(node.vouchersAsks).toBe(1);
+        expect(q('invite-voucher-why')?.textContent).toBe(t(COMMITTEE_ONLY));
     });
 
     it('offline, then the community answers: the box comes back and Generate drops Offline, without leaving the screen', async () => {

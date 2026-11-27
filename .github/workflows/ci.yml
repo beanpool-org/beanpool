@@ -123,7 +123,7 @@ jobs:
       # expect; on CI the test fails rather than skips when expect is missing. Vault's vitest is in vitest-rest.
       - name: Install expect
         if: matrix.expect
-        run: command -v expect || (sudo apt-get update && sudo apt-get install -y expect)
+        run: command -v expect || (bash scripts/ci/drop-microsoft-apt-source.sh && sudo apt-get update && sudo apt-get install -y expect)
 
       # Chromium and its system libraries for the browser checks, in the shards that run them, before any check starts:
       # apt lets one install hold dpkg's lock at a time, and checks each installing --with-deps side by side failed on it
@@ -131,7 +131,9 @@ jobs:
       - name: Install Chromium for the browser checks
         if: matrix.browser
         timeout-minutes: 15
-        run: pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium
+        run: |
+          bash scripts/ci/drop-microsoft-apt-source.sh
+          pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium
 
       # Built once before the checks fan out, so two tsc processes never write packages/beanpool-core/dist at once
       # (PR #2533 run 40547765597).
@@ -244,7 +246,7 @@ jobs:
         if: matrix.part == 'tests'
         env:
           BASE: ${{ github.base_ref }}
-        run: git diff --quiet "origin/$BASE...HEAD" -- apps/vault || command -v expect || (sudo apt-get update && sudo apt-get install -y expect)
+        run: git diff --quiet "origin/$BASE...HEAD" -- apps/vault || command -v expect || (bash scripts/ci/drop-microsoft-apt-source.sh && sudo apt-get update && sudo apt-get install -y expect)
 
       - name: Draft check (${{ matrix.part }})
         timeout-minutes: 20

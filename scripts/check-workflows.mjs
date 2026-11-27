@@ -9,6 +9,9 @@
  *     says write-all.
  *   - a job that moves the image's :latest (type=raw, flavor latest=true, a tags: or -t value ending :latest) or a semver tag, or makes a GitHub Release, names the `release`
  *     environment, which waits for Marty's approval ("approve each release", board, 2026-10-01).
+ *   - every step that runs apt-get/apt update or install (or `playwright install --with-deps` / `install-deps`) drops
+ *     the runner's flaky Microsoft apt source via `scripts/ci/drop-microsoft-apt-source.sh` first (unless the step
+ *     explicitly opts out with `# needs-microsoft-apt`).
  * apps/registrar/scripts/check-deploy-workflow.mjs adds the registrar deploy's own rules on top of these.
  *
  * It reads the files as lines, like check-compose-log-caps.mjs, so it needs no YAML parser from node_modules.
@@ -21,6 +24,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const RELEASE_ENVIRONMENT = 'release';
+export const DROP_MICROSOFT_APT_SCRIPT = 'scripts/ci/drop-microsoft-apt-source.sh';
+
+const APT_COMMAND = /\bapt-get\b[^\n]*\b(?:update|install)\b|\bapt\s+(?:-\S+\s+)*(?:update|install)\b|\bplaywright\s+(?:install\b[^\n]*--with-deps|install-deps)\b/;
+const NEEDS_MICROSOFT_APT = /#\s*needs-microsoft-apt\b/;
+const STANDALONE_DROP = /^\s*(?:bash[ \t]+)?scripts\/ci\/drop-microsoft-apt-source\.sh\s*$/;
 
 const USES = /^\s*(?:-\s+)?uses:\s*(['"]?)([^\s'"#]+)\1(.*)$/;
 const PINNED = /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/;
@@ -92,6 +100,97 @@ function environmentOf(job) {
     return undefined;
 }
 
+/** The steps of one job as { line, indent, lines, comments }. */
+function stepsOf(job) {
+    const first = job.lines.find(isContent);
+    if (!first) return [];
+    const keyIndent = indentOf(first);
+    const start = job.lines.findIndex((l) => indentOf(l) === keyIndent && /^\s*steps:\s*$/.test(withoutComment(l)));
+    if (start === -1) return [];
+    const firstStep = job.lines.slice(start + 1).find(isContent);
+    if (!firstStep || indentOf(firstStep) < keyIndent || !/^\s*-(?:\s|$)/.test(withoutComment(firstStep))) return [];
+    const stepIndent = indentOf(firstStep);
+    const steps = [];
+    let current = null;
+    let pendingComments = [];
+    for (let i = start + 1; i < job.lines.length; i++) {
+        const line = job.lines[i];
+        const isStepStart = isContent(line) && indentOf(line) === stepIndent && /^\s*-(?:\s|$)/.test(withoutComment(line));
+        if (isContent(line) && (indentOf(line) < stepIndent || (indentOf(line) === stepIndent && !isStepStart))) break;
+        if (!isContent(line) && line.trim().startsWith('#') && indentOf(line) <= stepIndent) {
+            pendingComments.push(line);
+            continue;
+        }
+        if (isStepStart) {
+            steps.push((current = { line: job.line + i + 1, indent: stepIndent, lines: [line], comments: pendingComments }));
+            pendingComments = [];
+        } else {
+            if (line.trim() === '') {
+                pendingComments = [];
+            } else if (pendingComments.length) {
+                if (current) current.lines.push(...pendingComments);
+                pendingComments = [];
+            }
+            if (current) current.lines.push(line);
+        }
+    }
+    return steps;
+}
+
+/** Column of a step's mapping keys (e.g. `step.indent + 2` for `- name:`). */
+function stepKeyIndent(step) {
+    const first = /^(\s*-\s+)\S/.exec(withoutComment(step.lines[0]));
+    if (first) return first[1].length;
+    const next = step.lines.slice(1).find(isContent);
+    return next ? indentOf(next) : step.indent + 2;
+}
+
+/** The shell text of a step's `run:` key (inline, plain multi-line, or block scalar), or '' when the step has no `run:`. */
+function stepRunText(step) {
+    const mapIndent = stepKeyIndent(step);
+    for (let i = 0; i < step.lines.length; i++) {
+        const line = step.lines[i];
+        const m = /^(\s*)(?:(-\s+))?run:\s*(.*)$/.exec(line);
+        if (!m) continue;
+        if (m[2] ? m[1].length !== step.indent : m[1].length !== mapIndent) continue;
+        const keyIndent = m[2] ? m[1].length + m[2].length : m[1].length;
+        const rest = m[3].trim();
+        const block = /^([|>])(?:[+-]?[1-9]?|[1-9]?[+-]?)(?:\s+#.*)?$/.exec(rest);
+        if (block || rest === '' || rest.startsWith('#')) {
+            const out = [];
+            for (const next of step.lines.slice(i + 1)) {
+                if (!next.trim()) { out.push(''); continue; }
+                if (indentOf(next) <= keyIndent) break;
+                if (!block && next.trim().startsWith('#')) {
+                    if (out.some(Boolean)) break;
+                    continue;
+                }
+                out.push(next);
+            }
+            if (block?.[1] === '|') return out.join('\n');
+            return out.map((l) => l.trim()).join('\n').replace(/([^\n])\n(?=[^\n])/g, '$1 ');
+        }
+        const out = [rest];
+        for (const next of step.lines.slice(i + 1)) {
+            if (!next.trim()) { out.push(''); continue; }
+            if (indentOf(next) <= keyIndent) break;
+            if (next.trim().startsWith('#')) break;
+            out.push(next.trim());
+        }
+        return out.join('\n').replace(/([^\n])\n(?=[^\n])/g, '$1 ');
+    }
+    return '';
+}
+
+/** True when a step carries an `if:` condition. */
+function stepHasIf(step) {
+    const mapIndent = stepKeyIndent(step);
+    return step.lines.some((line) => {
+        const m = /^(\s*)(?:(-\s+))?if:\s*/.exec(withoutComment(line));
+        return m && (m[2] ? m[1].length === step.indent : m[1].length === mapIndent);
+    });
+}
+
 /** What is wrong with one workflow's text: [] when nothing. */
 export function workflowProblems(text) {
     const problems = [];
@@ -120,6 +219,26 @@ export function workflowProblems(text) {
         const publishes = PUBLISHES_RELEASE.some((re) => body.some((l) => re.test(l))) || tagsInputNamesLatest(body);
         if (publishes && environmentOf(job) !== RELEASE_ENVIRONMENT)
             problems.push(`jobs.${job.id} (line ${job.line}): publishes a release (:latest, a semver tag or a GitHub Release) but does not name environment: ${RELEASE_ENVIRONMENT}`);
+
+        let droppedUnconditionally = false;
+        for (const step of stepsOf(job)) {
+            const runText = stepRunText(step);
+            if (!runText) continue;
+            const active = runText
+                .split('\n')
+                .filter((l) => !/^\s*#/.test(l))
+                .join('\n')
+                .replace(/[ \t]*\\\r?\n[ \t]*/g, ' ');
+            const aptMatch = APT_COMMAND.exec(active);
+            const dropIdx = active.indexOf(DROP_MICROSOFT_APT_SCRIPT);
+            if (aptMatch && ![...step.comments, ...step.lines].some((l) => NEEDS_MICROSOFT_APT.test(l))) {
+                const droppedInStep = dropIdx !== -1 && dropIdx < aptMatch.index;
+                if (!droppedUnconditionally && !droppedInStep) {
+                    problems.push(`jobs.${job.id} (line ${step.line}): runs ${aptMatch[0]} without calling ${DROP_MICROSOFT_APT_SCRIPT} first`);
+                }
+            }
+            if (!stepHasIf(step) && STANDALONE_DROP.test(active)) droppedUnconditionally = true;
+        }
     }
     return problems;
 }

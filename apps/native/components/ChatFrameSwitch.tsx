@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { t, type ChatSide, type ChatSideEntry } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
+import { unbreakable } from '../utils/unbreakable';
 
 /**
  * The Chat tab's top where this community's forum is on (slice T0; DESIGN-forums-messaging-joint-fable.md §2.1): Chats ·
@@ -59,7 +60,8 @@ export function ChatFrameSwitch({ sides, side, onChange, testID }: {
                         accessibilityState={{ selected: active }}
                         accessibilityLabel={t(entry.label)}
                     >
-                        {/* Half the row each: a longer name in another language shrinks to fit rather than being cut. */}
+                        {/* Half the row each: a longer name in another language shrinks to fit rather than being cut. Drawn with
+                            no-break spaces (utils/unbreakable.ts), so Vietnamese's "Diễn đàn" is never broken at its space and cut. */}
                         <Text
                             style={[styles.label, active && styles.labelActive]}
                             numberOfLines={1}
@@ -67,7 +69,7 @@ export function ChatFrameSwitch({ sides, side, onChange, testID }: {
                             minimumFontScale={0.7}
                             maxFontSizeMultiplier={1.3}
                         >
-                            {t(entry.label)}
+                            {unbreakable(t(entry.label))}
                         </Text>
                         {active && <View style={styles.underline} pointerEvents="none" />}
                     </Pressable>

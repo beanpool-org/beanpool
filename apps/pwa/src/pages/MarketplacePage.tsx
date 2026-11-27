@@ -3678,6 +3678,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         const before = editPhotos.length;
                                                         void pickedPostPhotos(files, 5 - before).then((picked) => {
                                                             if (picked.photos.length > 0) setEditPhotos(prev => [...prev, ...picked.photos].slice(0, 5));
+                                                            // The photos this pick added open Adjust by themselves (Marty, 28 Nov 2026); the post's own never do.
+                                                            editFocus.added(picked.photos);
                                                             noteEditPhotosLeftOut(picked.leftOut, Math.min(5, before + picked.photos.length));
                                                         });
                                                     }}
@@ -3693,12 +3695,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <PhotoFocusDialog
                                             src={editFocus.adjusting}
                                             focus={editFocus.at(editFocus.adjusting)}
+                                            step={editFocus.step}
                                             onCancel={editFocus.close}
-                                            onDone={(f) => {
-                                                const photo = editFocus.adjusting;
-                                                if (photo !== null) editFocus.setAt(photo, f);
-                                                editFocus.close();
-                                            }}
+                                            onDone={editFocus.done}
+                                            onSkip={editFocus.skip}
                                         />
                                     )}
                                 </div>

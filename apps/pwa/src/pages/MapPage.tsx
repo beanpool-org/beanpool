@@ -2340,6 +2340,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                     const before = newPostPhotos.length;
                                     void pickedPostPhotos(files, 5 - before).then((picked) => {
                                         if (picked.photos.length > 0) setNewPostPhotos(prev => [...prev, ...picked.photos].slice(0, 5));
+                                        // The photos this pick added open Adjust by themselves, one after another (Marty, 28 Nov 2026).
+                                        newPostFocus.added(picked.photos);
                                         notePhotosLeftOut(picked.leftOut, Math.min(5, before + picked.photos.length));
                                     });
                                 }}
@@ -2360,12 +2362,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     <PhotoFocusDialog
                         src={newPostFocus.adjusting}
                         focus={newPostFocus.at(newPostFocus.adjusting)}
+                        step={newPostFocus.step}
                         onCancel={newPostFocus.close}
-                        onDone={(f) => {
-                            const photo = newPostFocus.adjusting;
-                            if (photo !== null) newPostFocus.setAt(photo, f);
-                            newPostFocus.close();
-                        }}
+                        onDone={newPostFocus.done}
+                        onSkip={newPostFocus.skip}
                     />
                 )}
                 {visitorNote && (

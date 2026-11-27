@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkPhotoFocusVectors } from '@beanpool/core/photo-focus-vectors';
+import { checkPhotoFocusRunVectors, checkPhotoFocusVectors } from '@beanpool/core/photo-focus-vectors';
 import { usePhotoFocusByPhoto } from './photo-focus';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -62,6 +62,40 @@ describe('usePhotoFocusByPhoto: each photo keeps its own focus', () => {
             // Adjust opens on the photo itself: `.open(photo)`, never a number.
             expect(src, form).not.toMatch(/Focus\.open\(\s*i\s*\)/);
             expect(src, form).not.toMatch(/setFocusAdjusting|setEditFocusAt/);
+        }
+    });
+});
+
+describe('usePhotoFocusByPhoto: Adjust opens by itself on the photos a pick adds, and walks through them (Marty, 28 Nov 2026)', () => {
+    it('holds every walk in core\'s table (the phone\'s usePhotoFocusList runs the same one)', () => {
+        const wrong = checkPhotoFocusRunVectors(() => {
+            const { result } = renderHook(() => usePhotoFocusByPhoto());
+            let photos: string[] = [];
+            return {
+                setPhotos: (next) => { photos = next; },
+                added: (added) => act(() => { result.current.added(added); }),
+                open: (photo) => act(() => { result.current.open(photo); }),
+                done: (f) => act(() => { result.current.done(f); }),
+                skip: (f) => act(() => { result.current.skip(f); }),
+                cancel: () => act(() => { result.current.close(); }),
+                putWhole: (next, focus) => { photos = next; act(() => { result.current.resetFrom(next, focus); }); },
+                showing: () => ({ photo: result.current.adjusting, step: result.current.step }),
+                sent: () => result.current.forPhotos(photos),
+            };
+        });
+        expect(wrong).toEqual([]);
+    });
+
+    it('each web form opens the walk only from a pick (after the photos land), never as an edit opens, and hands the dialog its step and Skip', () => {
+        for (const [form, hook] of [['../pages/MapPage.tsx', 'newPostFocus'], ['../pages/MarketplacePage.tsx', 'editFocus']] as const) {
+            const src = readFileSync(resolve(here, form), 'utf8');
+            // `added` is named once, in the pick's handler, right after the photos are appended.
+            expect(src.split(`${hook}.added(`).length - 1, form).toBe(1);
+            expect(src, form).toMatch(new RegExp(`void pickedPostPhotos\\(files, 5 - before\\)\\.then\\(\\(picked\\) => \\{\\s*if \\(picked\\.photos\\.length > 0\\) set\\w+Photos\\(prev => \\[\\.\\.\\.prev, \\.\\.\\.picked\\.photos\\]\\.slice\\(0, 5\\)\\);\\s*//[^\\n]*\\n\\s*${hook}\\.added\\(picked\\.photos\\);`));
+            expect(src, form).toContain(`step={${hook}.step}`);
+            expect(src, form).toContain(`onDone={${hook}.done}`);
+            expect(src, form).toContain(`onSkip={${hook}.skip}`);
+            expect(src, form).toContain(`onCancel={${hook}.close}`);
         }
     });
 });

@@ -2951,7 +2951,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         aria-modal="true"
                         aria-labelledby="post-modal-title"
                         onClick={(e) => e.stopPropagation()}
-                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4 animate-in zoom-in-95 duration-200"
+                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl space-y-4 animate-in zoom-in-95 duration-200"
                     >
                         <div className="flex justify-between items-center">
                             <h2 id="post-modal-title" className="text-lg font-black text-nature-900 dark:text-white">

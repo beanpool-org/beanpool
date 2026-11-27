@@ -218,6 +218,7 @@ vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDA
 vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import PeopleScreen from '../../app/(tabs)/people';
 import { inviteFolds, t } from '@beanpool/core';
+import { unbreakable } from '../unbreakable';
 import { NAMES_COPY } from '../names-list';
 import { keyLineWords } from '../../components/key-lines';
 
@@ -602,9 +603,9 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
         it('another of People’s views and back to Invites: a new id', async () => {
             const tegans = await tegansEntryRefused();
             const pill = (words: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === words) as HTMLElement;
-            await act(async () => { pill(t('👫 Friends')).click(); });
+            await act(async () => { pill(unbreakable(t('👫 Friends'))).click(); });
             await settle();
-            await act(async () => { pill(t('🎟️ Invites')).click(); });
+            await act(async () => { pill(unbreakable(t('🎟️ Invites'))).click(); });
             await settle();
             expect(q('invite-names-name')).toBeTruthy();
             await generate();

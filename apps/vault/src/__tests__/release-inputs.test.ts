@@ -102,9 +102,24 @@ describe('the release image\'s inputs', () => {
         expect(refusal(() => releaseInputs({ ...RELEASE, network6: 'static:2001:db8::1/64' }))).toMatch(/--network6/);
         // Static IPv6 with DHCP IPv4: build.sh refuses it, so this does.
         expect(refusal(() => releaseInputs({ ...RELEASE, network: '' }))).toMatch(/network6 static needs network static/);
-        // A gateway outside the /64 that is not link-local: refused by the image's own check (an on-link gateway like
-        // that is a setting the image does not have yet).
-        expect(refusal(() => releaseInputs({ ...RELEASE, network6: 'static:2001:db8:0:39c::1/64,2001:db8::1' }))).toMatch(/not inside .*nor link-local/);
+        // A gateway outside the /64 that is not link-local: refused by the image's own check unless it is said to be
+        // on-link (,onlink), and the refusal says so.
+        expect(refusal(() => releaseInputs({ ...RELEASE, network6: 'static:2001:db8:0:39c::1/64,2001:db8::1' }))).toMatch(/not inside .*nor link-local.*,onlink/);
+        // ,onlink where it does not belong (a gateway inside the prefix, or link-local), and a gateway that is not global.
+        expect(refusal(() => releaseInputs({ ...RELEASE, network6: 'static:2001:db8:0:39c::1/64,2001:db8:0:39c::2,onlink' }))).toMatch(/drop ,onlink/);
+        expect(refusal(() => releaseInputs({ ...RELEASE, network6: 'static:2001:db8:0:39c::1/64,fe80::1,onlink' }))).toMatch(/drop ,onlink/);
+        expect(refusal(() => releaseInputs({ ...RELEASE, network6: 'static:2001:db8:0:39c::1/64,fd00::1,onlink' }))).toMatch(/neither global unicast nor link-local/);
+    });
+
+    it('Servury\'s IPv6, refused by run 45912732149 (27 Nov), passes said as on-link; its gateway is outside the /64', () => {
+        // The live box: `default via 2602:f41c::1 dev ens18 proto static metric 1024 onlink`; the vault's address
+        // 2602:f41c:0:39c::1/64 (its DNS AAAA).
+        const refused = 'static:2602:f41c:0:39c::1/64,2602:f41c::1';
+        expect(refusal(() => releaseInputs({ ...RELEASE, network6: refused })))
+            .toMatch(/the gateway 2602:f41c::1 is not inside 2602:f41c:0:39c::1\/64 \(nor link-local\)/);
+        const r = releaseInputs({ ...RELEASE, network6: `${refused},onlink` });
+        expect(r).toMatchObject({ host: 'servury', network6: `${refused},onlink` });
+        expect(outputLines(r!)).toContain(`\nnetwork6=${refused},onlink\n`);
     });
 });
 

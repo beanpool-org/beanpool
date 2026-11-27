@@ -28,7 +28,10 @@
 // `static:<ipv6>/<prefix>,<gateway>` for a host that sets its IPv6 address by hand too (Servury, measured 2026-11-26:
 // netplan with dhcp6 false). It needs the static IPv4 form (a host with static IPv6 and DHCP IPv4 is not one we have),
 // adds the address and gateway to the same file and stops taking router advertisements. The gateway is inside the
-// prefix or link-local (fe80::/10, common for a host's router).
+// prefix or link-local (fe80::/10, common for a host's router). A global gateway OUTSIDE the prefix, reached on the
+// link, is said with `,onlink` after it: `static:<ipv6>/<prefix>,<gateway>,onlink` (Servury again, measured on the live
+// box 27 Nov 2026: `default via 2602:f41c::1 dev ens18 ... onlink`, outside 2602:f41c:0:39c::/64). Its file has the
+// default route in a [Route] section with GatewayOnLink=yes; a setting without `,onlink` writes the same file as before.
 //
 // <name> is the vault's own DNS name: Caddy's site (etc/caddy/Caddyfile) and the API's `hosts` (etc/beanpool-vault/
 // api.json), which phones sign their requests for. The default, vault.beanpool.org, leaves both files untouched, so a
@@ -105,16 +108,23 @@ function ipv6Groups(text) {
 const toBig6 = (groups) => groups.reduce((n, g) => (n << 16n) | BigInt(g), 0n);
 
 function refuse6(value, why) {
-    throw new Error(`--network6 ${JSON.stringify(value)}: ${why}. It is ra or static:<ipv6>/<prefix>,<gateway> (e.g. static:2001:db8::10/64,2001:db8::1).`);
+    throw new Error(`--network6 ${JSON.stringify(value)}: ${why}. It is ra or static:<ipv6>/<prefix>,<gateway>, with ,onlink after a`
+        + ' global gateway outside the prefix (e.g. static:2001:db8::10/64,2001:db8::1 or static:2001:db8:0:1::10/64,2001:db8::1,onlink).');
 }
 
-/** `ra` or `static:<ipv6>/<prefix>,<gateway>`, strictly (lower case, no zone, no embedded IPv4); anything else throws. */
+/**
+ * `ra` or `static:<ipv6>/<prefix>,<gateway>[,onlink]`, strictly (lower case, no zone, no embedded IPv4); anything else
+ * throws. `,onlink` is said, never assumed: it is for a global gateway outside the prefix, and refused for any other
+ * (a gateway outside the prefix without it is still a refusal, so a typo in the gateway stays one). The result has
+ * `onLink: true` only then, so every setting without it gives the same object, and the same file, as before.
+ */
 export function parseNetwork6(value) {
     if (value === 'ra') return { kind: 'ra', value };
     if (typeof value !== 'string' || !value.startsWith('static:')) refuse6(value, 'not an IPv6 setting');
-    const m = /^static:([0-9a-f:]+)\/([1-9][0-9]{0,2}),([0-9a-f:]+)$/.exec(value);
-    if (!m) refuse6(value, 'not static:<ipv6>/<prefix 1-128>,<ipv6 gateway>');
-    const [, address, prefixText, gateway] = m;
+    const m = /^static:([0-9a-f:]+)\/([1-9][0-9]{0,2}),([0-9a-f:]+)(,onlink)?$/.exec(value);
+    if (!m) refuse6(value, 'not static:<ipv6>/<prefix 1-128>,<ipv6 gateway>[,onlink]');
+    const [, address, prefixText, gateway, onLinkText] = m;
+    const onLink = onLinkText === ',onlink';
     const prefix = Number(prefixText);
     if (prefix > 128) refuse6(value, 'the prefix is 1 to 128');
     const a = ipv6Groups(address);
@@ -124,13 +134,21 @@ export function parseNetwork6(value) {
     const A = toBig6(a);
     const G = toBig6(g);
     const top = (n, bits) => n >> BigInt(128 - bits);
-    // The address: global unicast (2000::/3). The gateway: inside the prefix, or link-local (fe80::/10).
+    // The address: global unicast (2000::/3). The gateway: inside the prefix, or link-local (fe80::/10), or, said with
+    // ,onlink, global unicast outside the prefix (the host's router reached on the link: Servury, measured 27 Nov 2026).
     if (top(A, 3) !== 1n) refuse6(value, `${address} is not a global unicast address (2000::/3)`);
     const linkLocal = top(G, 10) === 0x3fan;
     if (!linkLocal && top(G, 3) !== 1n) refuse6(value, `${gateway} is neither global unicast nor link-local`);
-    if (!linkLocal && top(A, prefix) !== top(G, prefix)) refuse6(value, `the gateway ${gateway} is not inside ${address}/${prefix} (nor link-local)`);
     if (A === G) refuse6(value, `the gateway ${gateway} is the address itself`);
-    return { kind: 'static', value, address, prefix, gateway };
+    const inside = top(A, prefix) === top(G, prefix);
+    if (onLink) {
+        if (linkLocal) refuse6(value, `the gateway ${gateway} is link-local, always on the link: drop ,onlink`);
+        if (inside) refuse6(value, `the gateway ${gateway} is inside ${address}/${prefix}: drop ,onlink (it is for a gateway outside the prefix)`);
+    } else if (!linkLocal && !inside) {
+        refuse6(value, `the gateway ${gateway} is not inside ${address}/${prefix} (nor link-local); a router outside the prefix that the`
+            + ' host reaches on the link is given with ,onlink after it');
+    }
+    return { kind: 'static', value, address, prefix, gateway, ...(onLink ? { onLink: true } : {}) };
 }
 
 /** The default vault name: a setting, not logic. */
@@ -264,10 +282,15 @@ export function networkFile(network, network6 = { kind: 'ra', value: 'ra' }) {
         return null;
     }
     if (network6.kind === 'static') {
+        // ,onlink: the IPv6 default route is its own [Route] section with GatewayOnLink=yes, since [Network]'s Gateway=
+        // has no on-link setting and a gateway outside every address's prefix needs one (the host's own `ip -6 route`
+        // shows `default via <gateway> ... onlink`). Without it, the file is the one it always was.
+        const onLink = network6.onLink === true;
         return [
             `# Written by build.sh --network ${network.value} --network6 ${network6.value}, over the DHCP file: the`,
             '# host has no DHCP and sets IPv6 by hand too. The addresses are public and part of the image and its hash. The',
             '# vault\'s own resolver and time come from its config, not from the network.',
+            ...(onLink ? ['# The IPv6 gateway is outside the prefix: the default route reaches it on the link (GatewayOnLink=yes).'] : []),
             '[Match]',
             'Type=ether',
             'Kind=!*',
@@ -276,10 +299,11 @@ export function networkFile(network, network6 = { kind: 'ra', value: 'ra' }) {
             `Address=${network.address}/${network.prefix}`,
             `Gateway=${network.gateway}`,
             `Address=${network6.address}/${network6.prefix}`,
-            `Gateway=${network6.gateway}`,
+            ...(onLink ? [] : [`Gateway=${network6.gateway}`]),
             'IPv6AcceptRA=no',
             'LinkLocalAddressing=ipv6',
             '',
+            ...(onLink ? ['[Route]', 'Destination=::/0', `Gateway=${network6.gateway}`, 'GatewayOnLink=yes', ''] : []),
         ].join('\n');
     }
     return [

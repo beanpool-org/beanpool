@@ -3463,8 +3463,9 @@ export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: 
 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer). `photos`: JPEG data URLs, at most five
-// (lib/photo-resize.ts), checked by the node as a member's own listing's are.
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
+// (lib/photo-resize.ts), checked by the node as a member's own listing's are. An Offer priced `each` carries `unitsLeft`, how many,
+// and `lot`, an optional price for all of them (core per-item-form), held by the node to a member's own listing's rules.
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; repeatable?: boolean; unitsLeft?: number; lot?: { price_c: number }; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
 export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {

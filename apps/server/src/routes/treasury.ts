@@ -54,6 +54,7 @@ import { assertNotMuted } from '../engine/auto-moderation.js';
 import { assertMayAddPhotos } from '../engine/probation.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { respondShopRefusal } from './shop-refusal.js';
+import { respondItemRefusal } from './item-refusal.js';
 import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
@@ -991,13 +992,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
             const limit = enterprisePostLimit(treasury, actor);
             // `shopId`: the enterprise's own shop, raw: the engine refuses any other (engine/shops.ts assertShopForPost).
-            const post = createPost('offer', String(category), String(b.title), String(b.description || ''), b.price_c ?? 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId, tags: b.tags, freeTags: b.freeTags, photoFocus: b.photoFocus });
+            // `unitsLeft` and `lot`: a price for each one, how many and a price for all of them, raw, as the member's own route
+            // passes them: the engine holds them to the same rules (engine/per-item.ts itemColumnsOnCreate) and makes an Offer
+            // priced `each` never Repeatable, whatever `repeatable` says (the count takes its place).
+            const post = createPost('offer', String(category), String(b.title), String(b.description || ''), b.price_c ?? 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId, unitsLeft: b.unitsLeft, lot: b.lot, tags: b.tags, freeTags: b.freeTags, photoFocus: b.photoFocus });
             if (!post) { ctx.status = 400; ctx.body = { error: word('Failed to create offer') }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
             if (respondShopRefusal(ctx, e)) return;
+            // A count or a price for all refused: its code beside its words, in the member route's own shape (routes/item-refusal.ts).
+            if (respondItemRefusal(ctx, e, word('Failed to create offer'))) return;
             ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
@@ -1031,6 +1037,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
             if (respondShopRefusal(ctx, e)) return;
+            // A Need priced for each one: refused `each_offer_only`, as the member's own route answers it.
+            if (respondItemRefusal(ctx, e, word('Failed to create need'))) return;
             ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });

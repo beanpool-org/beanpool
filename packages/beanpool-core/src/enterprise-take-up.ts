@@ -15,6 +15,7 @@ import { EACH, ITEM_TAKE_UP_REFUSALS, sellerReceives } from './per-item.js';
 import { itemTakeUpRefusalIn, type ItemTakeUpSend } from './per-item-deal.js';
 import { billAnswerLost, billNewId } from './bills.js';
 import { isBusyError } from './busy-answer.js';
+import { MONEY_RESEND_HOURS, moneyResendable } from './money-retry.js';
 
 export const TAKE_UP_WORDS = {
     /** The button, one for each enterprise the reader keeps. */
@@ -174,11 +175,10 @@ export function takeUpBody(postId: string, send: ItemTakeUpSend, request: TakeUp
  * the sale, which is never before the first sending; after that it no longer knows the id, so the same sale sent again
  * would be a second sale, paid twice. A day is plenty for "the answer was lost just now" and leaves days to spare for a
  * device clock that is out. The node's suite (apps/server/src/test-enterprise-take-up.ts) reads both and pins this inside.
+ * It is core money-retry.ts's one rule for every money retry store (MONEY_RESEND_HOURS, moneyResendable), which Pay the
+ * Commons keeps too.
  */
-export const TAKE_UP_RESEND_HOURS = 24;
-const RESEND_MS = TAKE_UP_RESEND_HOURS * 3_600_000;
-/** A clock set back a little since the stamp (a network time fix) still reads as just sent; set back further, the age is unknown. */
-const CLOCK_SLACK_MS = 10 * 60_000;
+export const TAKE_UP_RESEND_HOURS = MONEY_RESEND_HOURS;
 
 /** A sale sent whose answer hasn't come back: exactly what was sent (its id with it), the sheet's sentence, and when. */
 export interface TakeUpUnanswered {
@@ -218,10 +218,8 @@ export interface TakeUpUnansweredBook {
 export function takeUpUnansweredBook(now: () => number = () => Date.now()): TakeUpUnansweredBook {
     const sales = new Map<string, TakeUpUnanswered>();
     const at = (enterprise: string, postId: string) => JSON.stringify([enterprise, postId]);
-    const sendable = (sale: TakeUpUnanswered) => {
-        const age = now() - sale.sentAt;
-        return Number.isFinite(age) && age >= -CLOCK_SLACK_MS && age < RESEND_MS;
-    };
+    // Sent again for a day from its first sending, never after, a clock set back past the slack read as aged (money-retry.ts).
+    const sendable = (sale: TakeUpUnanswered) => moneyResendable(sale.sentAt, now());
     return {
         get: (enterprise, postId) => {
             const sale = sales.get(at(enterprise, postId));

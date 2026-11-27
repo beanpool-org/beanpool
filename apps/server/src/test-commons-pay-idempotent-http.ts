@@ -11,6 +11,10 @@
  *   6. a refused payment (more than they hold) records nothing, so its retry with the same id is judged afresh and paid
  *   7. an id that isn't one (a number, too short, a space): refused (400) before anything moves
  *   8. the record is the payer's, written with the payment; a week-old one goes at the daily prune, a 6-day one stays
+ *   9. the apps' held payment against the node's memory (core money-retry.ts): the apps send a lost payment again for
+ *      MONEY_RESEND_HOURS from its first sending, strictly inside REQUEST_ID_KEPT_DAYS; at the last moment they may, the
+ *      node still answers it with the first payment; past the node's days the same id would pay again, and the apps
+ *      stopped sending it long before (both pay screens send a held payment only through core heldResend)
  *   Every step: conservation, the whole node sums to what it summed to before
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-commons-pay-idempotent-http.ts
@@ -33,6 +37,9 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -228,6 +235,53 @@ async function main(): Promise<void> {
         const young = await pay(sam, { amount_c: hc(1), requestId: youngId });
         assert(young.status === 200 && young.body?.transactionId === JSON.parse(recordOf(sam, youngId)?.answer ?? '{}').transactionId, `8. the 6-day id still answers its first answer (${show(young)})`);
         conserved('8');
+    }
+
+    // ── 9. The apps' held payment against the node's memory (core money-retry.ts; the class PR #3393 named open) ──
+    // The node forgets an id REQUEST_ID_KEPT_DAYS after it paid (the prune above). Both pay screens hold a lost payment for
+    // Try again, and send it again only through core heldResend: for MONEY_RESEND_HOURS from its first sending. Red if either
+    // moves so an app could send an id the node may have forgotten: a second payment to the Commons, under "never paid twice".
+    {
+        const mod = await import('./engine/money-requests.js').catch(() => null);
+        const keptDays = (mod as any)?.REQUEST_ID_KEPT_DAYS as number | undefined;
+        // Read at run time, so on a tree without core's money-retry.ts the suite still runs to the end and says what fails.
+        const core = (await import('@beanpool/core')) as Record<string, any>;
+        const MONEY_RESEND_HOURS = Number(core.MONEY_RESEND_HOURS);
+        const firstSending = (core.firstSending ?? ((payment: unknown, sentAt: number) => ({ payment, sentAt }))) as (p: unknown, at: number) => { payment: unknown; sentAt: number };
+        const heldResend = (core.heldResend ?? (() => undefined)) as (held: unknown, now: number) => unknown;
+        const H = 3_600_000;
+        const resendMs = MONEY_RESEND_HOURS * H;
+        assert(typeof keptDays === 'number' && resendMs > 0 && resendMs + DAY <= keptDays * DAY,
+            `9. the apps send a held payment again for ${MONEY_RESEND_HOURS} h, strictly inside the ${keptDays} days the node keeps its id, with a day to spare`);
+        // Through the door and the node's own prune: at the last moment the apps may send it, the node answers the first payment.
+        const id = uuid();
+        const first = await pay(sam, { amount_c: hc(2), requestId: id });
+        const count = paymentsBy(sam);
+        const age = (ms: number) => { try { db.prepare('UPDATE money_requests SET created_at = ? WHERE request_id = ?').run(ago(ms), id); } catch { /* no table */ } };
+        age(resendMs);
+        (mod as any)?.pruneMoneyRequests?.();
+        const atLastResend = await pay(sam, { amount_c: hc(2), requestId: id });
+        assert(first.status === 200 && atLastResend.status === 200 && JSON.stringify(atLastResend.body) === JSON.stringify(first.body) && paymentsBy(sam) === count,
+            `9. at ${MONEY_RESEND_HOURS} h the node still answers a resend with the first payment, and pays nothing (${show(atLastResend)})`);
+        // Past the node's days the prune forgets it, and the same id would be a new payment: the apps never send it by then.
+        age((keptDays ?? 7) * DAY + 60_000);
+        (mod as any)?.pruneMoneyRequests?.();
+        const t0 = Date.now() - ((keptDays ?? 7) * DAY + 60_000);
+        const held = firstSending({ requestId: id }, t0);
+        assert(recordOf(sam, id) === null && heldResend(held, Date.now()) === null && heldResend(held, t0 + resendMs - 1) === held && heldResend(held, t0 + resendMs) === null,
+            `9. after ${keptDays} days the node has forgotten the id, and the apps have not sent it since ${MONEY_RESEND_HOURS} h`);
+        // Both pay screens hold their payment as core's HeldPayment and send it again only through heldResend.
+        const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+        const has = (rel: string, marker: string) => { try { return fs.readFileSync(path.join(repo, rel), 'utf-8').includes(marker); } catch { return false; } };
+        const stores: Array<[string, string]> = [
+            ['apps/native/app/pay-commons.tsx', 'useState<HeldPayment<ConfirmedPayment<CommonsPayment>> | null>(null)'],
+            ['apps/native/app/pay-commons.tsx', 'const again = heldResend(held, Date.now());'],
+            ['apps/pwa/src/components/RepaymentCard.tsx', 'useState<HeldPayment<ConfirmedPayment<CommonsPayment>> | null>(null)'],
+            ['apps/pwa/src/components/RepaymentCard.tsx', 'let going = heldResend(held, Date.now());'],
+        ];
+        const missing = stores.filter(([rel, marker]) => !has(rel, marker)).map(([rel, marker]) => `${rel}: ${marker}`);
+        assert(missing.length === 0, `9. both pay screens send a held payment again only through core heldResend (${missing.join('; ') || 'both found'})`);
+        conserved('9');
     }
 
     console.log(`\n${passed}/${run} passed`);

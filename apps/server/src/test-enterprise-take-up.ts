@@ -56,7 +56,7 @@ import { moneyRequestOf, priorAnswer, pruneMoneyRequests, recordAnswer, REQUEST_
 import { TAKE_UP_ROUTE } from './routes/treasury.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import {
-    feeOf, itemTakeUpRefusalText, wordsFor, TAKE_UP_REFUSALS, TAKE_UP_RESEND_HOURS, takeUpConfirm, takeUpUnansweredBook, type ItemTakeUpRefusal,
+    feeOf, itemTakeUpRefusalText, wordsFor, MONEY_RESEND_HOURS, TAKE_UP_REFUSALS, TAKE_UP_RESEND_HOURS, takeUpConfirm, takeUpUnansweredBook, type ItemTakeUpRefusal,
 } from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -737,10 +737,14 @@ async function main(): Promise<void> {
             guard: ['apps/server/src/engine/bills.ts', "UPDATE bills SET state = 'paid', answered_at = ? WHERE id = ? AND state = 'sent' AND payer_pubkey = ?"],
         },
         PAY_COMMONS_ROUTE: {
-            door: 'POST /api/commons/pay', keptMs: Infinity,
-            stores: [['apps/native/app/pay-commons.tsx', 'useState<ConfirmedPayment<CommonsPayment> | null>(null)'],
-                ['apps/pwa/src/components/RepaymentCard.tsx', 'useState<ConfirmedPayment<CommonsPayment> | null>(null)']],
-            open: 'held on the pay screen with no age; past the node\'s days its Try again pays the Commons again (named in PR #3393, not fixed there)',
+            // Held on the pay screen with its first sending's stamp (core HeldPayment), and sent again only through core
+            // heldResend: for MONEY_RESEND_HOURS from then (test-commons-pay-idempotent-http step 9 runs it through the door).
+            door: 'POST /api/commons/pay', keptMs: MONEY_RESEND_HOURS * H,
+            stores: [['packages/beanpool-core/src/money-retry.ts', 'export function heldResend<P>('],
+                ['apps/native/app/pay-commons.tsx', 'useState<HeldPayment<ConfirmedPayment<CommonsPayment>> | null>(null)'],
+                ['apps/native/app/pay-commons.tsx', 'const again = heldResend(held, Date.now());'],
+                ['apps/pwa/src/components/RepaymentCard.tsx', 'useState<HeldPayment<ConfirmedPayment<CommonsPayment>> | null>(null)'],
+                ['apps/pwa/src/components/RepaymentCard.tsx', 'let going = heldResend(held, Date.now());']],
         },
     };
     const doorsHere = new Set<string>();
@@ -775,8 +779,11 @@ async function main(): Promise<void> {
             `${row.door}: its stores are where the table says (${missing.join(', ') || 'all found'}); ${inside ? `sent again for ${row.keptMs / H} h, inside the node's ${REQUEST_ID_KEPT_DAYS} days` : guarded ? 'no age, but the door\'s own row refuses a replay once the id is gone' : `OPEN: ${row.open}`}`);
     }
     const open = Object.entries(RETRY_STORES).filter(([, row]) => !(row.keptMs < keptMs) && !(row.guard && has(row.guard[0], row.guard[1]))).map(([route]) => route);
-    assert(JSON.stringify(open) === JSON.stringify(['PAY_COMMONS_ROUTE']),
-        `the only store that can outlive the node's memory is the one named (${open.join(', ') || 'none'}): red if another turns open, or when the Commons one is fixed (move its row)`);
+    assert(open.length === 0,
+        `no store can outlive the node's memory: every money door says No (open: ${open.join(', ') || 'none'})`);
+    // One rule for every store that sends again: the take-up book and Pay the Commons read core's MONEY_RESEND_HOURS.
+    assert(TAKE_UP_RESEND_HOURS === MONEY_RESEND_HOURS && has('packages/beanpool-core/src/enterprise-take-up.ts', 'moneyResendable(sale.sentAt, now())'),
+        `the take-up book and Pay the Commons keep one rule: ${TAKE_UP_RESEND_HOURS} h = ${MONEY_RESEND_HOURS} h, through core moneyResendable`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run && process.exitCode !== 1 ? 0 : 1);

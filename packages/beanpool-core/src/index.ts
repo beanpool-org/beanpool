@@ -243,6 +243,8 @@ export * from './calendar-month.js';
 export * from './share-says.js';
 export * from './requests-cleared-words.js';
 export * from './bills.js';
+// One rule for every money write an app sends again with its retry id: a day from its first sending, inside the node's days.
+export * from './money-retry.js';
 // A price for each one, a count, and a price for all of them (DESIGN-per-item-price-fable.md, slice P0).
 export * from './per-item.js';
 // The seller's fields for it: the boxes, the live line, the carry-over, what a create and an edit send (slice P4).

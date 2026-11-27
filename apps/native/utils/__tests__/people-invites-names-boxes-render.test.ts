@@ -126,9 +126,15 @@ const node = vi.hoisted(() => ({
     budgetLevel: 100000,
     voucherBudget: 100000,
     online: true,
+    /** Health asks that go unanswered before the community answers again, even while `online` (the phone just woke). */
+    healthMisses: 0,
+    healthAsks: 0,
     inviteDown: false,
     inviteRefusal: null as string | null,
     vouchersDown: false,
+    /** Committee reads that go unanswered (a network error) before the community answers them, even while `online`. */
+    vouchersMisses: 0,
+    vouchersAsks: 0,
     /** What GET /api/names/vouchers answers in `waiting` (invites-vouching I4). */
     waiting: [] as Array<Record<string, unknown>>,
     generated: [] as Array<Record<string, unknown>>,
@@ -251,8 +257,8 @@ beforeEach(() => {
     pushed.length = 0;
     nav.on = true;
     Object.assign(node, {
-        role: null, committee: false, voucher: true, budgetLeft: 55000, budgetLevel: 100000, voucherBudget: 100000, online: true, inviteDown: false, inviteRefusal: null,
-        vouchersDown: false, waiting: [], generated: [], bound: [], mine: [],
+        role: null, committee: false, voucher: true, budgetLeft: 55000, budgetLevel: 100000, voucherBudget: 100000, online: true, healthMisses: 0, healthAsks: 0, inviteDown: false, inviteRefusal: null,
+        vouchersDown: false, vouchersMisses: 0, vouchersAsks: 0, waiting: [], generated: [], bound: [], mine: [],
     });
     inviteFolds.clear();
 
@@ -267,7 +273,9 @@ beforeEach(() => {
         }
         // GET /api/names/vouchers answers owners and committee admins only (routes/names-list.ts).
         if (u === `${NODE}/api/names/vouchers`) {
+            node.vouchersAsks++;
             if (!node.online) throw new TypeError('Network request failed');
+            if (node.vouchersMisses > 0) { node.vouchersMisses--; throw new TypeError('Network request failed'); }
             if (node.vouchersDown) return json({ error: 'Something went wrong.' }, 500);
             return node.committee
                 ? json({ vouchers: [], waiting: node.waiting, settings: { voucherBudget: node.voucherBudget, voucherMaxVouch: 10000 } })
@@ -285,6 +293,8 @@ beforeEach(() => {
             return json({ success: true, invite: { code: `INV-TEST-000${node.generated.length}` } });
         }
         if (u.endsWith('/api/community/health')) {
+            node.healthAsks++;
+            if (node.healthMisses > 0) { node.healthMisses--; throw new TypeError('Network request failed'); }
             if (!node.online) throw new TypeError('Network request failed');
             return json({ ok: true });
         }
@@ -292,9 +302,15 @@ beforeEach(() => {
         return never();
     }) as typeof fetch;
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); });
+afterEach(() => { act(() => root.unmount()); host.remove(); vi.useRealTimers(); });
 
 const settle = async () => { for (let i = 0; i < 10; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+// Whether the community answers is asked by the screen's own rounds (utils/use-community-online.ts): a failed ask is tried again
+// after 1 s and then 3 s before it says offline, and again every 30 s while offline. A test that waits on them runs on clocks
+// that also move with real time (so `settle` still turns), and passes those waits at once.
+const clocks = () => vi.useFakeTimers({ shouldAdvanceTime: true });
+const after = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); await settle(); };
+const generateWords = () => Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Generate'))?.textContent ?? '';
 const open = async () => { await act(async () => { root.render(createElement(PeopleScreen) as any); }); await settle(); };
 const q = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 const press = async (id: string) => { const el = q(id); expect(el, id).toBeTruthy(); await act(async () => { el!.click(); }); await settle(); };
@@ -402,13 +418,105 @@ describe('People → Invites: the owners’ and admins’ names-list boxes (amen
     });
 
     it('no connection: the voucher box greyed, "Needs a connection…", never the committee sentence', async () => {
+        clocks();
         node.role = 'owner';
         node.committee = true;
         node.online = false;
         await open();
+        await after(4000); // offline only once its three tries failed (at 0, 1 s and 4 s)
+        expect(node.healthAsks).toBe(3);
         await press('invite-names-box');
         expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(true);
         expect(q('invite-voucher-why')?.textContent).toBe(t('Needs a connection. You can make them a voucher from the list once they’ve joined.'));
+        expect(generateWords()).toBe(t('✨ Generate Offline Ticket'));
+    });
+
+    // Marty, 28 Nov 2026 (phone 1.4.8, just woken): one unanswered ask greyed the box, with "Needs a connection…", for the whole
+    // visit while the bean menu said "Connected"; only a restart cleared it.
+    it('one unanswered ask, then the community answers: the voucher box is never greyed and Generate never says Offline', async () => {
+        clocks();
+        node.role = 'owner';
+        node.committee = true;
+        node.healthMisses = 1;
+        await open();
+        await press('invite-names-box');
+        expect(node.healthAsks).toBe(1);
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(false);
+        expect(q('invite-voucher-why')).toBeNull();
+        expect(generateWords()).toBe(t('✨ Generate Ticket'));
+        await after(1000);
+        expect(node.healthAsks).toBe(2);
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(false);
+        expect(generateWords()).toBe(t('✨ Generate Ticket'));
+        await press('invite-voucher-box');
+        expect(q('invite-voucher-box')?.getAttribute('aria-checked')).toBe('true');
+    });
+
+    // #3403 review: a phone just woken fails the first committee read together with the first health ask. The health retry
+    // answers, so "online" never turns false; the committee read must be tried again too, or the box stays greyed.
+    it('just woken: the first committee read fails with the first health ask, and the box still comes back', async () => {
+        clocks();
+        node.role = 'owner';
+        node.committee = true;
+        node.healthMisses = 1;
+        node.vouchersMisses = 1;
+        await open();
+        await press('invite-names-box');
+        await after(1000);
+        expect(node.healthAsks).toBe(2);
+        expect(node.vouchersAsks).toBe(2);
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(false);
+        expect(q('invite-voucher-why')).toBeNull();
+        expect(generateWords()).toBe(t('✨ Generate Ticket'));
+    });
+
+    it('not on the committee (403): asked once, never tried again, and says why', async () => {
+        clocks();
+        node.role = 'admin';
+        node.committee = false;
+        await open();
+        await press('invite-names-box');
+        await after(5000);
+        expect(node.vouchersAsks).toBe(1);
+        expect(q('invite-voucher-why')?.textContent).toBe(t(COMMITTEE_ONLY));
+    });
+
+    it('offline, then the community answers: the box comes back and Generate drops Offline, without leaving the screen', async () => {
+        clocks();
+        node.role = 'owner';
+        node.committee = true;
+        node.online = false;
+        await open();
+        await after(4000);
+        await press('invite-names-box');
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(true);
+        node.online = true;
+        await after(30_000);
+        expect(node.healthAsks).toBe(4);
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(false);
+        expect(q('invite-voucher-why')).toBeNull();
+        expect(generateWords()).toBe(t('✨ Generate Ticket'));
+    });
+
+    it('offline, then the tab shown again: asked at once, and the box comes back', async () => {
+        clocks();
+        node.role = 'owner';
+        node.committee = true;
+        node.online = false;
+        await open();
+        await after(4000);
+        await press('invite-names-box');
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(true);
+        await act(async () => { nav.blur(); });
+        await settle();
+        node.online = true;
+        const before = node.healthAsks;
+        await act(async () => { nav.focus(); });
+        await settle();
+        expect(node.healthAsks).toBe(before + 1);
+        expect(q('invite-names-name'), 'the names box still ticked').toBeTruthy();
+        expect(q('invite-voucher-box')?.hasAttribute('disabled')).toBe(false);
+        expect(generateWords()).toBe(t('✨ Generate Ticket'));
     });
 
     it('the committee’s answer not heard (the read failed): greyed, and no sentence that would be untrue', async () => {

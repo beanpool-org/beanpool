@@ -23,14 +23,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { getPublicKey } from '@noble/ed25519';
-import { toEd25519Pkcs8, KNOCK_ANSWERABLE_DAYS as coreKnockAnswerableDays, knockStillAnswerable as coreKnockStillAnswerable, NAME_BOX_WORDS } from '@beanpool/core';
+import { toEd25519Pkcs8, KNOCK_ANSWERABLE_DAYS as coreKnockAnswerableDays, KNOCK_MESSAGE_MIN_CHARS as CORE_MIN, knockStillAnswerable as coreKnockStillAnswerable, NAME_BOX_WORDS, setLanguage } from '@beanpool/core';
 import { findLineWords } from '../../components/find-community-lines';
 import { bytesToHex } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import {
     sendKnock, readKnockStatus, readStatus, knockCardState, knockFormProblem, knockBody, knockAvatar,
     rememberKnock, rememberedKnocks, forgetKnock, cardKnockLines, cancelKnock, cancelledKnocks, KNOCK_MESSAGES, KNOCK_FROM_NODE, KNOCK_CANCEL_BLOCK_HOURS,
-    KNOCK_ANSWERABLE_DAYS, knockStillAnswerable, withVisitCancelled,
+    KNOCK_ANSWERABLE_DAYS, KNOCK_MESSAGE_MIN_CHARS, knockStillAnswerable, withVisitCancelled,
     type KnockStatusResult,
 } from '../knock';
 import { GLOBAL_NODE_URL } from '../node-profile';
@@ -323,11 +323,43 @@ describe('the form', () => {
         expect(knockFormProblem({ callsign: 'Robin', message: '🌱'.repeat(280) })).toBeNull();
     });
 
+    // Marty, 27 Nov 2026: at least 20 characters, core's one constant (the node's and the web app's too), counted as the most
+    // is: in characters, so an emoji or an accented letter is one; spaces at the ends and control characters are not.
+    const SHORT = 'Please say a little more about yourself: at least 20 characters.';
+    it.each([
+        ...['x', 'é', '🌱', '鸡'].flatMap(u => [
+            [`${u} × 0`, u.repeat(0), 'Please say a few words about yourself.'],
+            [`${u} × 1`, u.repeat(1), SHORT],
+            [`${u} × 19`, u.repeat(19), SHORT],
+            [`${u} × 20`, u.repeat(20), null],
+            [`${u} × 280`, u.repeat(280), null],
+            [`${u} × 281`, u.repeat(281), 'Please keep your message to 280 characters.'],
+        ]),
+        ['19 with spaces round them', `   ${'a'.repeat(19)}   `, SHORT],
+        ['19 with control characters', `${'a'.repeat(19)}\u0000\u0007`, SHORT],
+        ['nothing but control characters', '\u0000\u0001', 'Please say a few words about yourself.'],
+        ['"pls"', 'pls', SHORT],
+        ['"hello community"', 'hello community', SHORT],
+    ] as const)('a message of %s', (_what, message, problem) => {
+        expect(KNOCK_MESSAGE_MIN_CHARS).toBe(CORE_MIN);
+        expect(knockFormProblem({ callsign: 'Robin', message })).toBe(problem);
+    });
+
+    it('says the fewest in the member\'s language, with its number', () => {
+        expect(findLineWords(SHORT)).toBe(SHORT);
+        setLanguage('xx');
+        try {
+            expect(findLineWords(SHORT)).toMatch(/^\[[\s\S]*20[\s\S]*\]$/);
+        } finally {
+            setLanguage('en');
+        }
+    });
+
     it('refuses an invite or a web address as the name, in English as its other lines, shown in the member\'s language', () => {
         // Card callsign-link-guard: a yes joins under this name, and the community refuses one that is a link.
         expect(knockFormProblem({ callsign: 'https://riverside.ex', message: 'Hi' })).toBe(NAME_BOX_WORDS.webLink);
         expect(knockFormProblem({ callsign: 'INV-ABCD-EFGH', message: 'Hi' })).toBe(NAME_BOX_WORDS.inviteCode);
-        expect(knockFormProblem({ callsign: 'J.R. St.Kilda', message: 'Hi' })).toBeNull();
+        expect(knockFormProblem({ callsign: 'J.R. St.Kilda', message: 'Hi, I live by the river.' })).toBeNull();
         expect(findLineWords(NAME_BOX_WORDS.webLink)).toBe(NAME_BOX_WORDS.webLink);
     });
 

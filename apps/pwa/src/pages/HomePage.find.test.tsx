@@ -459,10 +459,10 @@ describe('Ask to join from the web find card (front doors S2)', () => {
         expect(screen.getByRole('link', { name: /Sleepy Hollow/ })).toHaveAttribute('href', 'https://sleepy.example.org');
 
         fireEvent.click(ask);
-        fireEvent.change(screen.getByTestId('home-find-ask-q-message'), { target: { value: 'I fix bikes.' } });
+        fireEvent.change(screen.getByTestId('home-find-ask-q-message'), { target: { value: 'I fix bikes in my shed.' } });
         fireEvent.click(screen.getByTestId('home-find-ask-q-send'));
         expect(await screen.findByTestId('home-waiting-card-https://sleepy.example.org')).toBeTruthy();
-        expect(sendSpy).toHaveBeenCalledWith('https://sleepy.example.org', ME, { callsign: 'Ana', message: 'I fix bikes.' });
+        expect(sendSpy).toHaveBeenCalledWith('https://sleepy.example.org', ME, { callsign: 'Ana', message: 'I fix bikes in my shed.' });
         // Cancel comes with the card's status read (it says "Checking…" until then).
         expect(await screen.findByTestId('home-cancel-knock-https://sleepy.example.org')).toHaveTextContent('Cancel my request');
         // The card is the one place that says how it fares: the row has no line of its own beside it, which would outlive a
@@ -513,7 +513,7 @@ describe('Ask to join from the web find card (front doors S2)', () => {
     /** Ask Sleepy Hollow from its row; resolves with Home's waiting card for it. */
     async function askSleepy() {
         fireEvent.click(await screen.findByTestId('home-find-ask-q'));
-        fireEvent.change(screen.getByTestId('home-find-ask-q-message'), { target: { value: 'I fix bikes.' } });
+        fireEvent.change(screen.getByTestId('home-find-ask-q-message'), { target: { value: 'I fix bikes in my shed.' } });
         fireEvent.click(screen.getByTestId('home-find-ask-q-send'));
         return screen.findByTestId('home-waiting-card-https://sleepy.example.org');
     }

@@ -7,7 +7,7 @@
  * lib/api.ts's (signedFetchAt): the member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import { DEFAULT_GLOBAL_COMMUNITY_HOST, isPeekTicket, isPublicIpv4, knockStillAnswerable, notANameLine, retryAfterSecondsOf, t, tn, word, type ForumAskSend } from '@beanpool/core';
+import { DEFAULT_GLOBAL_COMMUNITY_HOST, KNOCK_MESSAGE_MIN_CHARS, isPeekTicket, isPublicIpv4, knockMessageChars, knockStillAnswerable, notANameLine, retryAfterSecondsOf, t, tn, word, type ForumAskSend } from '@beanpool/core';
 import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
 import { isNodeTooOldError } from './node-version-gate';
@@ -16,7 +16,12 @@ export const KNOCK_PATH = '/api/join/knock';
 export const KNOCK_STATUS_PATH = '/api/join/knock/status';
 export const KNOCK_CANCEL_PATH = '/api/join/knock/cancel';
 export const KNOCK_CANCEL_BLOCK_HOURS = 24;
-/** The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending, as the phone's. */
+/**
+ * The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending, as the phone's. The
+ * fewest characters a message may have is core's KNOCK_MESSAGE_MIN_CHARS (knock-message.ts), the node's and the phone's
+ * too; re-exported.
+ */
+export { KNOCK_MESSAGE_MIN_CHARS };
 export const KNOCK_MESSAGE_CHARS = 280;
 export const KNOCK_CALLSIGN_CHARS = 20;
 const KNOCK_AVATAR_CHARS = 150_000;
@@ -126,9 +131,11 @@ export function knockFormProblem(req: KnockRequest): string | null {
     const notAName = notANameLine(req.callsign);
     if (notAName) return notAName;
     if (chars(name) > KNOCK_CALLSIGN_CHARS) return tn(KNOCK_CALLSIGN_CHARS, 'Please keep your name to {n} character.', 'Please keep your name to {n} characters.');
-    const message = req.message.trim();
-    if (!message) return t('Please say a few words about yourself.');
-    if (chars(message) > KNOCK_MESSAGE_CHARS) return tn(KNOCK_MESSAGE_CHARS, 'Please keep your message to {n} character.', 'Please keep your message to {n} characters.');
+    // Counted as the node counts it (core knock-message.ts): control characters out, the ends trimmed, in characters.
+    const length = knockMessageChars(req.message);
+    if (length === 0) return t('Please say a few words about yourself.');
+    if (length < KNOCK_MESSAGE_MIN_CHARS) return tn(KNOCK_MESSAGE_MIN_CHARS, 'Please say a little more about yourself: at least {n} character.', 'Please say a little more about yourself: at least {n} characters.');
+    if (length > KNOCK_MESSAGE_CHARS) return tn(KNOCK_MESSAGE_CHARS, 'Please keep your message to {n} character.', 'Please keep your message to {n} characters.');
     return null;
 }
 

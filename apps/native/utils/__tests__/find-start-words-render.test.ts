@@ -220,7 +220,7 @@ describe('Find a community in the pseudo-locale: every word came through t() (wo
         expect(host.textContent).toContain(xx('Please say a few words about yourself.'));
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
         const box = byLabel(xx('A few words about yourself'));
-        await type(box, 'I grow tomatoes.');
+        await type(box, 'I grow tomatoes by the creek.');
         world.send = { kind: 'refused', status: 403, code: null, message: 'We only take members from the valley.' };
         await click(buttonReading(xx('Send')), 'Send');
         // The knock's send is a chain of awaits (the ask, the avatar, the request): wait for its answer, not a tick count.
@@ -228,7 +228,7 @@ describe('Find a community in the pseudo-locale: every word came through t() (wo
             await settle(1);
             expect(host.textContent).toContain('We only take members from the valley.');
         }, { timeout: 20_000, interval: 50 });
-        expect(bypassing(host, [...WRITTEN, 'I grow tomatoes.'], alerts.said)).toEqual([]);
+        expect(bypassing(host, [...WRITTEN, 'I grow tomatoes by the creek.'], alerts.said)).toEqual([]);
     });
 
     it('the requests asked: waiting, a yes with Join, unreachable with Check again; joining and its nudge; a join that failed', async () => {

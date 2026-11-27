@@ -298,7 +298,7 @@ describe("a member's request to join, on the community's card", () => {
         const message = host.querySelectorAll('input')[1] as HTMLInputElement;
         await act(async () => {
             const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-            set.call(message, 'Asking again.');
+            set.call(message, 'Asking again, from up the road.');
             message.dispatchEvent(new Event('input', { bubbles: true }));
         });
         let release!: () => void;

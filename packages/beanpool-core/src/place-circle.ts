@@ -6,6 +6,7 @@
  */
 
 import { t, tn, word } from './words.js';
+import { KNOCK_MESSAGE_MIN_CHARS, knockMessageChars } from './knock-message.js';
 
 /** The fewest people a circle is made for, and the smallest number any count here says. */
 export const CIRCLE_MIN_PEOPLE = 3;
@@ -134,6 +135,17 @@ export function circleKnockReady(card: Pick<CircleCard, 'community'> | null | un
 
 /** Why Ask to join didn't go: `later` keeps the button for another tap, `refused` is the community's answer and final. */
 export type CircleKnockTrouble = 'later' | 'refused';
+
+/**
+ * What a tap on {@link PLACE_CIRCLE_WORDS.askToJoin} sends as the request's message: {@link PLACE_CIRCLE_WORDS.knockMessage}
+ * in the member's language, or in English where that is shorter than a request may be ({@link KNOCK_MESSAGE_MIN_CHARS}
+ * characters: the Chinese drafts are 15), so a community never refuses the request for its length and the wish is never
+ * ended by our own words. The English is 49 characters.
+ */
+export function circleKnockMessage(): string {
+    const said = t(PLACE_CIRCLE_WORDS.knockMessage);
+    return knockMessageChars(said) >= KNOCK_MESSAGE_MIN_CHARS ? said : PLACE_CIRCLE_WORDS.knockMessage;
+}
 
 /**
  * What a knock's answer means for the button, or null when nothing went wrong (it went, or the person is already known there).

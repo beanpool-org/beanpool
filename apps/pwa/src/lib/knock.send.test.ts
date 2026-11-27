@@ -4,7 +4,7 @@
  * (`toNode`), and the community's refusals carried in its own words. Fails before S2: lib/knock.ts had no sendKnock.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { t } from '@beanpool/core';
+import { KNOCK_MESSAGE_MIN_CHARS as CORE_MIN, setLanguage, t } from '@beanpool/core';
 import * as knockLib from './knock';
 import type { BeanPoolIdentity } from './identity';
 import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
@@ -100,12 +100,43 @@ describe('sendKnock: a signed POST to the community it asks', () => {
 });
 
 describe('the form holds the member to the node\'s limits, as the phone does', () => {
-    it('a name of 2 to 20 characters and a message of 1 to 280', () => {
+    it('a name of 2 to 20 characters and a message of 20 to 280', () => {
         expect(knockLib.knockFormProblem({ callsign: 'A', message: 'hi' })).toBe('Please give a name of at least 2 characters.');
         expect(knockLib.knockFormProblem({ callsign: 'x'.repeat(21), message: 'hi' })).toBe('Please keep your name to 20 characters.');
         expect(knockLib.knockFormProblem({ callsign: 'Ana', message: '   ' })).toBe('Please say a few words about yourself.');
         expect(knockLib.knockFormProblem({ callsign: 'Ana', message: 'x'.repeat(281) })).toBe('Please keep your message to 280 characters.');
         expect(knockLib.knockFormProblem({ callsign: '  Ana  ', message: 'x'.repeat(280) })).toBeNull();
+    });
+
+    // Marty, 27 Nov 2026: at least 20 characters, core's one constant (the node's and the phone's too), counted as the most
+    // is: in characters, so an emoji or an accented letter is one; spaces at the ends and control characters are not.
+    const SHORT = 'Please say a little more about yourself: at least 20 characters.';
+    it.each([
+        ...['x', 'é', '🌱', '鸡'].flatMap(u => [
+            [`${u} × 0`, u.repeat(0), 'Please say a few words about yourself.'],
+            [`${u} × 1`, u.repeat(1), SHORT],
+            [`${u} × 19`, u.repeat(19), SHORT],
+            [`${u} × 20`, u.repeat(20), null],
+            [`${u} × 280`, u.repeat(280), null],
+            [`${u} × 281`, u.repeat(281), 'Please keep your message to 280 characters.'],
+        ]),
+        ['19 with spaces round them', `   ${'a'.repeat(19)}   `, SHORT],
+        ['19 with control characters', `${'a'.repeat(19)}\u0000\u0007`, SHORT],
+        ['nothing but control characters', '\u0000\u0001', 'Please say a few words about yourself.'],
+        ['"pls"', 'pls', SHORT],
+        ['"hello community"', 'hello community', SHORT],
+    ] as const)('a message of %s', (_what, message, problem) => {
+        expect(knockLib.KNOCK_MESSAGE_MIN_CHARS).toBe(CORE_MIN);
+        expect(knockLib.knockFormProblem({ callsign: 'Ana', message })).toBe(problem);
+    });
+
+    it('says the fewest in the member\'s language, with its number', () => {
+        setLanguage('xx');
+        try {
+            expect(knockLib.knockFormProblem({ callsign: 'Ana', message: 'pls' })).toMatch(/^\[[\s\S]*20[\s\S]*\]$/);
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('an avatar only as the node takes it', () => {

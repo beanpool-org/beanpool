@@ -282,9 +282,9 @@ export function networkFile(network, network6 = { kind: 'ra', value: 'ra' }) {
         return null;
     }
     if (network6.kind === 'static') {
-        // ,onlink: the IPv6 default route is its own [Route] section with GatewayOnLink=yes, the only way networkd
-        // installs a route through a gateway outside every address's prefix (what the host's own `ip -6 route` shows:
-        // `default via <gateway> ... onlink`). Without it, the file is the one it always was.
+        // ,onlink: the IPv6 default route is its own [Route] section with GatewayOnLink=yes, since [Network]'s Gateway=
+        // has no on-link setting and a gateway outside every address's prefix needs one (the host's own `ip -6 route`
+        // shows `default via <gateway> ... onlink`). Without it, the file is the one it always was.
         const onLink = network6.onLink === true;
         return [
             `# Written by build.sh --network ${network.value} --network6 ${network6.value}, over the DHCP file: the`,

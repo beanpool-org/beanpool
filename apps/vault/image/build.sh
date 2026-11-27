@@ -41,8 +41,9 @@
 #
 # `--network6 ra|static:<ipv6>/<prefix>,<gateway>[,onlink]` (default ra: router advertisements, the image as it always
 # was): a host that sets IPv6 by hand too (Servury) gets its address and gateway in the same file; it needs the static
-# IPv4 form. `,onlink` says the gateway is outside the prefix and reached on the link (Servury's is). `--name <dns name>` (default vault.beanpool.org, the image as it always was) is the vault's own name, in Caddy's
-# site and the API's hosts. Both are checked strictly, public, change the image, and image.json records them.
+# IPv4 form. `,onlink` says the gateway is outside the prefix and reached on the link (Servury's is). `--name <dns name>`
+# (default vault.beanpool.org, the image as it always was) is the vault's own name, in Caddy's site and the API's
+# hosts. Both are checked strictly, public, change the image, and image.json records them.
 #
 # `--host <profile>` (default none: the image as it always was) builds for a confidential host
 # (image/host-profiles/<profile>.json; vault comeback design §2.5, §2.6, §3.2): the keyholder's attestor becomes

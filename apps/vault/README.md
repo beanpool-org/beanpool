@@ -440,9 +440,9 @@ apps/vault/image/build.sh --custodian-keys <keys.json> --version <x.y.z> --out <
 
 Its IPv6 gateway, `2602:f41c::1`, is outside the vault's `/64` and reached on the link: read off the live box on
 27 Nov 2026 (`ip -6 route show default`: `default via 2602:f41c::1 dev ens18 proto static metric 1024 onlink`), after
-the first release run (45912732149) refused it without `,onlink`. Servury takes the install image by URL and SHA-256 (`beanpool-vault_<version>.qcow2`, below) and the
-UKI by URL and SHA-256 (`vault.efi`), with the panel's command line left empty. Never press "Reinstall": it replaces
-the disk with Servury's own release.
+the first release run (45912732149) refused it without `,onlink`. Servury takes the install image by URL and
+SHA-256 (`beanpool-vault_<version>.qcow2`, below) and the UKI by URL and SHA-256 (`vault.efi`), with the panel's
+command line left empty. Never press "Reinstall": it replaces the disk with Servury's own release.
 
 **Release files.** Besides `vault.efi`, `vault-root.raw` and `vault-root-verity.raw`, a build writes the install image
 compressed as `beanpool-vault_<version>.qcow2` (by the builder's pinned `qemu-img`, the same bytes on every build; the

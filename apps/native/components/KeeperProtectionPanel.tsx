@@ -86,6 +86,8 @@ export const SIGN_IN_ROW = {
 export const NO_COPIES_ROW = {
     title: word('🔑 Your 12 words are your way back here'),
     keepsNone: word("This community keeps no copies of members' accounts and doesn't use BeanPool's key vault, so no sign-in can be linked here."),
+    /** keepsNone in a build without a key vault (every build until the vault is live): the vault isn't named where it isn't running (28 Nov 2026). */
+    keepsNoneNoVault: word("This community keeps no copies of members' accounts, so no sign-in can be linked here."),
     keepWords: word('Keep your 12 words written down: without them, an admin can only move your Beans and name to a new key.'),
     noWords: word('This phone has no 12 words: if you lose it, an admin can only move your Beans and name to a new key.'),
     yoursStay: word('A copy you made before, here or in another community, is still yours until you remove it.'),
@@ -222,7 +224,7 @@ export function KeeperProtectionPanel({
             <View style={[styles.panel, styles.wordsOnly]} testID="no-copies-row">
                 <Text style={styles.heading} accessibilityRole="header">{t(NO_COPIES_ROW.title)}</Text>
                 <Text style={styles.body}>
-                    <Text>{t(NO_COPIES_ROW.keepsNone)}</Text>{' '}
+                    <Text>{hasVault() ? t(NO_COPIES_ROW.keepsNone) : t(NO_COPIES_ROW.keepsNoneNoVault)}</Text>{' '}
                     <Text>{hasWords ? t(NO_COPIES_ROW.keepWords) : t(NO_COPIES_ROW.noWords)}</Text>
                 </Text>
                 <Text style={styles.footnote}>{t(NO_COPIES_ROW.yoursStay)}</Text>

@@ -156,7 +156,7 @@ function stepRunText(step) {
         const keyIndent = m[2] ? m[1].length + m[2].length : m[1].length;
         const rest = m[3].trim();
         const block = /^([|>])(?:[+-]?[1-9]?|[1-9]?[+-]?)(?:\s+#.*)?$/.exec(rest);
-        if (block || rest === '') {
+        if (block || rest === '' || rest.startsWith('#')) {
             const out = [];
             for (const next of step.lines.slice(i + 1)) {
                 if (!next.trim()) { out.push(''); continue; }
@@ -224,7 +224,11 @@ export function workflowProblems(text) {
         for (const step of stepsOf(job)) {
             const runText = stepRunText(step);
             if (!runText) continue;
-            const active = runText.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+            const active = runText
+                .split('\n')
+                .filter((l) => !/^\s*#/.test(l))
+                .join('\n')
+                .replace(/[ \t]*\\\r?\n[ \t]*/g, ' ');
             const aptMatch = APT_COMMAND.exec(active);
             const dropIdx = active.indexOf(DROP_MICROSOFT_APT_SCRIPT);
             if (aptMatch && ![...step.comments, ...step.lines].some((l) => NEEDS_MICROSOFT_APT.test(l))) {

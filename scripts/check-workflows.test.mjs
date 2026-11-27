@@ -255,7 +255,12 @@ test('every apt-get/playwright --with-deps step in workflows must drop the Micro
         '      - run: |2\n          sudo apt-get update\n',
         '      - run: >-2\n          sudo apt-get\n          install -y expect\n',
         '      - run:\n          sudo apt-get update\n',
+        '      - run: # install expect\n          sudo apt-get update\n',
+        '      - run: # install expect\n          sudo apt-get\n          install -y expect\n',
         '      - run: sudo apt-get\n          install -y expect\n',
+        // Literal block scalars with backslash line continuations.
+        '      - run: |\n          pnpm --filter @beanpool/pwa exec playwright install \\\n            --only-shell --with-deps chromium\n',
+        '      - run: |\n          sudo apt-get \\\n            install -y expect\n',
     ]) {
         assert.match(workflowProblems(withStep(bad)).join('\n'), /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/, bad);
     }
@@ -263,6 +268,8 @@ test('every apt-get/playwright --with-deps step in workflows must drop the Micro
     for (const good of [
         `      - run: bash ${DROP_MICROSOFT_APT_SCRIPT} && sudo apt-get update && sudo apt-get install -y expect\n`,
         `      - run: |\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n          pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium\n`,
+        `      - run: |\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n          pnpm --filter @beanpool/pwa exec playwright install \\\n            --only-shell --with-deps chromium\n`,
+        '      - run: # needs-microsoft-apt\n          sudo apt-get update\n',
         `      - run: bash ${DROP_MICROSOFT_APT_SCRIPT}\n      - run: sudo apt-get update\n`,
         `      - run: |\n          # Drop flaky Microsoft source\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n      - run: sudo apt-get update\n`,
         '      - name: Install dotnet\n        # needs-microsoft-apt: installs dotnet from packages.microsoft.com\n        run: sudo apt-get update && sudo apt-get install -y dotnet-sdk-8.0\n',

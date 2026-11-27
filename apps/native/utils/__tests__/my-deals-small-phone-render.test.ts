@@ -96,7 +96,12 @@ const GLYPH = 0.56;
 
 let host: HTMLDivElement;
 let root: Root;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); db.rows = [asked('t-1'), asked('t-2')]; });
+/**
+ * t-2 is a day older than t-1, so t-1 is the first card by the sheet's own order (newest first). The two once read the clock
+ * one after the other, both "4 days ago": where a millisecond passed between the reads (a busy CI runner), t-2 was the newer
+ * and went on top, and t-1's card was measured second, 555.5 to 817 (27 Nov: PR #3391, PR #3400).
+ */
+beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); db.rows = [asked('t-1'), asked('t-2', { createdAt: ago(5 * D) })]; });
 afterEach(() => { act(() => root.unmount()); host.remove(); theme.dark = false; laid.overlay = null; setLanguage('en'); });
 
 async function render(bills = true) {
@@ -160,6 +165,8 @@ describe.each([false, true])('Your deals at 320 × 569 dp and 1.3x, dark: %s', (
         const layout = lay();
         expect(host.querySelector('[data-testid="deal-not-seen-t-1"]')?.textContent).toContain('Not seen in 4 days');
         const list = layout.at(byId('deals-list'));
+        // The card measured is the first one in the list, not the second.
+        expect(byId('deals-list-content').querySelector('[data-testid^="deal-card-"]')?.getAttribute('data-testid'), 'the first card').toBe('deal-card-t-1');
         const card = layout.at(byId('deal-card-t-1'));
         expect(card.top).toBeGreaterThanOrEqual(list.top);
         expect(card.bottom, `the list ${list.top} to ${list.bottom}`).toBeLessThanOrEqual(list.bottom);

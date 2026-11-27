@@ -66,7 +66,7 @@ This is not a way to log in. Your account is still your own key. The linked acco
 
 - If BeanPool's key vault is paused when you link an account, nothing is linked and the app says so. **Settings** then offers **Link your** (Google, Apple or Facebook) **sign-in** again, with **Link it**.
 - A sign-in account protects one BeanPool account. If it was protecting a different one, it protects this one now, and the app says so: that other account then has only its 12 words.
-- To remove it, tap **Disconnect**. Your community's server deletes its copy; copies already in that server's backups stay there (see "Who can open the copy").
+- To remove it, tap **Disconnect**. Your community's server deletes its copy, so that sign-in no longer brings your account back from that community; your other communities are not affected. Copies already in that server's backups stay there (see "Who can open the copy").
 
 ## Moving a copy your community keeps
 
@@ -84,7 +84,7 @@ A move deletes the old copy only once the new one is kept where the move meant. 
 
 Each community chooses where its members' copies go, and only its owners change it:
 
-- **BeanPool's key vault**, where every community starts. Until the key vault is live, a sign-in you link there keeps its copy on your community's own server, as below; once it is live, at the key vault.
+- **BeanPool's key vault**, where every community starts. Until the key vault is live, a sign-in you link in such a community keeps its copy on the community's own server, as below; once it is live, at the key vault.
 - **Its own server.** A sign-in you link keeps its copy on your community's server instead, and the app doesn't ask the key vault for it. The app still asks the key vault whether it has a copy of your account, so it can offer to move one to your community (see above).
 - **Nowhere.** The community keeps no copies and doesn't use the key vault. The app offers no sign-in to link there, and your 12 words are your way back there. If you joined with 12 words, **Add a sign-in** is still offered, in the app and in a browser: it lifts the new-account limits, and keeps no copy. If you lose your phone and your 12 words, an admin can move your Beans and your name to a new key (see "Lost your phone and your 12 words").
 

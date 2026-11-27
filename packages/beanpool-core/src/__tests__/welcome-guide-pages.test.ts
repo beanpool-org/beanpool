@@ -31,7 +31,8 @@ describe("the guide's joining page: the phone's three steps", () => {
         expect(joining).toContain('In the phone app the dots at the top show the steps and where you are: one dot each for your name, your photo, **Keep a way back in** and, on an iPhone or on Android 13 and later, **Hear from** your community, the last step. Android 8 to 12 has notifications on from the start, so it has no notifications step, and three dots.');
         expect(joining).not.toContain('one dot each for your name, your photo and **Keep a way back in**, the last step.');
         // Round 2 of the review of #3330: a claim is never skipped; a sign-in's copy at the vault counts, an admins' copy never.
-        expect(joining).toContain("a sign-in's copy at BeanPool's key vault, or your 12 words already noted as written down), an invite or the global community's join has no way-back step, and one dot fewer. A claim always shows it.");
+        // The vault is not live yet (28 Nov 2026, vault-words-honest): the page says a vault copy counts once it is.
+        expect(joining).toContain("(a sign-in whose copy was kept as you joined, or your 12 words already noted as written down; once BeanPool's key vault is live, a sign-in's copy there too), an invite or the global community's join has no way-back step, and one dot fewer. A claim always shows it.");
         expect(joining).toContain("**Your community's admins**, in **Account Protection**, doesn't count here either: the step and the card still show.");
         expect(joining).not.toContain('there is no way-back step, and two dots.');
         // ‹ keeps the account and its words (join-after-lost-answer.test.ts: the same key after Go Back), never a new account.

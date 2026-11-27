@@ -49,7 +49,9 @@ vi.mock('react-native', () => {
     const absolute = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 };
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
-        Image: el('img'),
+        // getSize: the Adjust screen reads the photo's shape (components/PhotoFocusAdjust.tsx), opened by itself on a photo added.
+        Image: Object.assign(el('img'), { getSize: (_uri: string, ok: (w: number, h: number) => void) => ok(600, 800) }),
+        StatusBar: { pushStackEntry: () => ({}), popStackEntry: () => {} },
         Dimensions: { get: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }) },
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), TouchableOpacity: el('button'),
         ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
@@ -251,6 +253,11 @@ describe("a keeper editing their enterprise's Offer", () => {
         await settle(4);
         // The system's photo picker: no permission asked for.
         expect(device.asked).toEqual(['picker']);
+        // The photo just added opens Choose what the card shows by itself (Marty, 28 Nov 2026); Done with nothing moved keeps
+        // the edit untouched, so it sends no focus list (the node keeps each photo's focus).
+        expect(host.textContent).toContain('Choose what the card shows');
+        await click(host.querySelector('[data-testid="photo-focus-done"]'), 'Done');
+        expect(host.textContent).not.toContain('Choose what the card shows');
 
         await click(button('💾 Save'), 'Save');
         expect(net.calls).toContain('db.updatePost');

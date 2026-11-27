@@ -178,16 +178,20 @@ export function askForPostPhoto(add: (photo: string) => void, title?: string): v
  * takes one. More picked than the room: the first ones are kept and an alert says how many were left out. A photo whose
  * redraw fails says "Photo not added", as one always did, and the others are kept. Nothing is asked of the phone until one is
  * tapped.
+ *
+ * `picked`, when given, hears once per pick, after `add` has been called for each, with the photos this pick handed over (none:
+ * not called): a post form opens Adjust on them by itself (Marty, 28 Nov 2026, use-photo-focus-list.ts `added`).
  */
-export function askForPostPhotos(room: number, add: (photo: string) => void, title?: string): void {
+export function askForPostPhotos(room: number, add: (photo: string) => void, title?: string, picked?: (photos: string[]) => void): void {
     const notAdded = (e: any) => Alert.alert(t('Photo not added'), e?.message || t('Could not open your photos.'));
     const take = (pick: (room: number) => Promise<PickedPostPhotos>) => async () => {
         try {
-            const picked = await pick(room);
-            for (const photo of picked.photos) add(photo);
-            if (picked.failed) notAdded(picked.failed);
+            const got = await pick(room);
+            for (const photo of got.photos) add(photo);
+            if (got.photos.length > 0) picked?.(got.photos.slice());
+            if (got.failed) notAdded(got.failed);
             // Short title, the words in the message (as the forum's "At most {n} photos." alert).
-            else if (picked.leftOut > 0) Alert.alert(t('Photos'), photosLeftOutLine(picked.leftOut));
+            else if (got.leftOut > 0) Alert.alert(t('Photos'), photosLeftOutLine(got.leftOut));
         } catch (e: any) {
             notAdded(e);
         }
@@ -195,7 +199,7 @@ export function askForPostPhotos(room: number, add: (photo: string) => void, tit
     const camera = async () => {
         try {
             const photo = await postPhotoFromCamera();
-            if (photo) add(photo);
+            if (photo) { add(photo); picked?.([photo]); }
         } catch (e: any) {
             Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'));
         }

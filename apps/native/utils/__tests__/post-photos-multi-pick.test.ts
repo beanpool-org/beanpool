@@ -167,3 +167,32 @@ describe('the Camera', () => {
         expect(said).toEqual([]);
     });
 });
+
+describe('`picked`: one call per pick with the photos it added, so a post form opens Adjust on them (Marty, 28 Nov 2026)', () => {
+    /** Opens the sheet with a `picked` listener, taps `door`, and gives back each `add` and each `picked` in the order heard. */
+    async function heard(room: number, door: 'Gallery' | 'Browse files' | 'Camera'): Promise<string[]> {
+        const order: string[] = [];
+        askForPostPhotos(room, (p) => order.push(`add ${p}`), undefined, (photos) => order.push(`picked ${JSON.stringify(photos)}`));
+        await alerts.calls[0].buttons!.find((b) => b.text === door)!.onPress!();
+        return order;
+    }
+
+    it('after every add, once, with the photos kept in the order picked; never the photos left out', async () => {
+        pick('a', 'b', 'c');
+        expect(await heard(2, 'Browse files')).toEqual([`add ${photo('a')}`, `add ${photo('b')}`, `picked ${JSON.stringify([photo('a'), photo('b')])}`]);
+    });
+
+    it('the Camera: its one photo', async () => {
+        expect(await heard(5, 'Camera')).toEqual(['add data:image/jpeg;base64,B64:file:///camera.jpg', `picked ${JSON.stringify(['data:image/jpeg;base64,B64:file:///camera.jpg'])}`]);
+    });
+
+    it('a photo that failed is not in it; a pick with no photo kept is never heard', async () => {
+        pick('a', 'b');
+        redraws.failOn = 'file:///a.jpg';
+        expect(await heard(3, 'Gallery')).toEqual([`add ${photo('b')}`, `picked ${JSON.stringify([photo('b')])}`]);
+        alerts.calls.length = 0;
+        redraws.failOn = null;
+        picker.canceled = true;
+        expect(await heard(3, 'Gallery')).toEqual([]);
+    });
+});

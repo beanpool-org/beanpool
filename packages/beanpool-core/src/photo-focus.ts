@@ -125,6 +125,50 @@ export function photoFocusForPhotos(photos: ReadonlyArray<string>, held: PhotoFo
     return photoFocusList(photos.map((p) => held.get(p) ?? null), photos.length);
 }
 
+/**
+ * The photo whose Adjust screen is open, and the photos it walks through (Marty, 28 Nov 2026: "when you add photo(s) it should
+ * come up with the visible area thing for each photo once you add them and maybe a next button if there are more than one").
+ * A pick of new photos opens Adjust on the first of them by itself and walks through them in order (`photos`, at `at`); a
+ * tap on one photo of the form opens it alone (`photos` is that one photo). Photos already on the form, and an edit's photos
+ * as it opens, are never in a walk: only the photos one pick added.
+ */
+export interface PhotoFocusShowing {
+    readonly photos: readonly string[];
+    readonly at: number;
+}
+
+/**
+ * Adjust opened on `photos`, from the first: the photos one pick just added (each once, in the order picked: two copies of
+ * the very same photo share its one focus), or the one photo tapped. `null` when there is none to show.
+ */
+export function photoFocusShowingOf(photos: ReadonlyArray<unknown> | null | undefined): PhotoFocusShowing | null {
+    const once: string[] = [];
+    for (const p of Array.isArray(photos) ? photos : []) {
+        if (typeof p === 'string' && p !== '' && !once.includes(p)) once.push(p);
+    }
+    return once.length > 0 ? { photos: once.slice(0, MOST_FOCUS_POINTS), at: 0 } : null;
+}
+
+/** The photo on screen, or `null` with Adjust closed. */
+export function photoFocusShowingPhoto(showing: PhotoFocusShowing | null): string | null {
+    return showing ? showing.photos[showing.at] ?? null : null;
+}
+
+/**
+ * Where a walk through several new photos stands, for its button: the photo on screen as `n` of `count`, and whether photos
+ * are still to come (the button reads Next, and Skip is offered). `null` with one photo or none: the button reads Done.
+ */
+export function photoFocusShowingStep(showing: PhotoFocusShowing | null): { n: number; count: number; more: boolean } | null {
+    if (!showing || showing.photos.length < 2) return null;
+    return { n: showing.at + 1, count: showing.photos.length, more: showing.at < showing.photos.length - 1 };
+}
+
+/** After Next or Done on the photo on screen: the next photo of the walk, or `null` (closed) after the last. */
+export function photoFocusShowingNext(showing: PhotoFocusShowing | null): PhotoFocusShowing | null {
+    if (!showing || showing.at >= showing.photos.length - 1) return null;
+    return { photos: showing.photos, at: showing.at + 1 };
+}
+
 /** A focus as two percentages, for the phone's `contentPosition` and the web's `object-position`. */
 export function photoFocusPercent(focus: PhotoFocus): { left: number; top: number } {
     return { left: round3(focus.x * 100), top: round3(focus.y * 100) };

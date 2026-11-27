@@ -1782,9 +1782,10 @@ function PostDetailModal() {
 
     const pickEditPhoto = () => {
         if (editPhotos.length >= 5) return;
+        // The photos this pick added open Adjust by themselves, one after another (Marty, 28 Nov 2026); the post's own photos never do.
         askForPostPhotos(5 - editPhotos.length, (photo) => {
             setEditPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev));
-        });
+        }, undefined, editFocus.added);
     };
 
     const goBack = () => leaveScreen(router, 'post/[id]');
@@ -2268,8 +2269,10 @@ function PostDetailModal() {
                                 visible={editFocus.adjusting !== null}
                                 uri={editFocus.adjusting}
                                 focus={editFocus.at(editFocus.adjusting)}
+                                step={editFocus.step}
                                 onCancel={editFocus.close}
-                                onDone={(f) => { if (editFocus.adjusting !== null) editFocus.setAt(editFocus.adjusting, f); editFocus.close(); }}
+                                onDone={editFocus.done}
+                                onSkip={editFocus.skip}
                             />
 
                             {/* Location — same controls as Create (My location + Drop a pin modal) */}

@@ -94,14 +94,19 @@ describe('PhotoFocusDialog', () => {
     /** An upright 3:4 photo, as a phone takes one, laid out 300 x 400 at the page's top left. */
     function open(focus: { x: number; y: number } | null, onDone = vi.fn(), onCancel = vi.fn()) {
         at320(<PhotoFocusDialog src="data:image/jpeg;base64,AAAA" focus={focus} onDone={onDone} onCancel={onCancel} />);
+        return { stage: loaded(600, 800), onDone, onCancel };
+    }
+    /** The stage's photo loads at `w` x `h`, laid out 300 x 400 at the page's top left. */
+    function loaded(w: number, h: number) {
         const stage = screen.getByTestId('photo-focus-stage');
         const photo = stage.querySelector('img')!;
-        Object.defineProperty(photo, 'naturalWidth', { value: 600 });
-        Object.defineProperty(photo, 'naturalHeight', { value: 800 });
+        Object.defineProperty(photo, 'naturalWidth', { value: w, configurable: true });
+        Object.defineProperty(photo, 'naturalHeight', { value: h, configurable: true });
         fireEvent.load(photo);
         stage.getBoundingClientRect = () => ({ left: 0, top: 0, width: 300, height: 400, right: 300, bottom: 400, x: 0, y: 0, toJSON() {} });
-        return { stage, onDone, onCancel };
+        return stage;
     }
+    const buttonWords = () => within(screen.getByRole('dialog')).getAllByRole('button').map((b) => b.textContent);
 
     it('is a labelled dialog; the frame sits where today\'s crop is with no focus; the card preview crops the same', () => {
         open(null);
@@ -159,5 +164,51 @@ describe('PhotoFocusDialog', () => {
         expect(screen.getByRole('heading').className).toContain('dark:text-white');
         expect(screen.getByRole('heading').className).toContain('break-words');
         for (const b of within(dialog).getAllByRole('button')) expect(b.className).toContain('min-h-[44px]');
+    });
+
+    it('opened by itself on several new photos: Next (n of count) and Skip while more are to come; Skip hands back this photo\'s choice', () => {
+        const onDone = vi.fn();
+        const onSkip = vi.fn();
+        at320(<PhotoFocusDialog src="data:image/jpeg;base64,AAAA" focus={null} step={{ n: 1, count: 3, more: true }} onDone={onDone} onSkip={onSkip} onCancel={vi.fn()} />);
+        const stage = loaded(600, 800);
+        expect(buttonWords()).toEqual(['Reset', 'Cancel', 'Skip', 'Next (1 of 3)']);
+        fireEvent.pointerDown(stage, { clientX: 150, clientY: 2, pointerId: 1 });
+        fireEvent.click(screen.getByText('Next (1 of 3)'));
+        expect(onDone).toHaveBeenCalledWith({ x: 0.5, y: 0 });
+        fireEvent.click(screen.getByTestId('photo-focus-skip'));
+        expect(onSkip).toHaveBeenCalledWith({ x: 0.5, y: 0 });
+    });
+
+    it('the last photo of a walk, one new photo, and a click: Done, and no Skip', () => {
+        for (const step of [{ n: 3, count: 3, more: false }, null, undefined]) {
+            const drawn = at320(<PhotoFocusDialog src="data:image/jpeg;base64,AAAA" focus={null} step={step} onDone={vi.fn()} onSkip={vi.fn()} onCancel={vi.fn()} />);
+            expect(buttonWords()).toEqual(['Reset', 'Cancel', 'Done']);
+            drawn.unmount();
+        }
+    });
+
+    it('the next photo of a walk opens on its own focus and its own shape, never the last photo\'s', () => {
+        const props = { onDone: vi.fn(), onSkip: vi.fn(), onCancel: vi.fn() };
+        const drawn = at320(<PhotoFocusDialog src="data:image/jpeg;base64,ONE" focus={{ x: 0.5, y: 1 }} step={{ n: 1, count: 2, more: true }} {...props} />);
+        loaded(600, 800);
+        expect(screen.getByTestId('photo-focus-card').style.objectPosition).toBe('50% 100%');
+        expect(screen.getByTestId('photo-focus-frame')).toBeInTheDocument();
+        drawn.rerender(<div style={{ width: 320 }}><PhotoFocusDialog src="data:image/jpeg;base64,TWO" focus={null} step={{ n: 2, count: 2, more: false }} {...props} /></div>);
+        expect(screen.getByTestId('photo-focus-card').style.objectPosition).toBe('50% 33%');
+        // Until the second photo has loaded, no frame is drawn at the first photo's shape.
+        expect(screen.queryByTestId('photo-focus-frame')).toBeNull();
+        loaded(1200, 600);
+        expect(screen.getByTestId('photo-focus-frame').style.height).toBe('100%');
+    });
+
+    it('at 320 px and 130% the four buttons wrap onto rows, each held to the row\'s width with its words wrapping', () => {
+        at320(<PhotoFocusDialog src="data:image/jpeg;base64,AAAA" focus={null} step={{ n: 1, count: 3, more: true }} onDone={vi.fn()} onSkip={vi.fn()} onCancel={vi.fn()} />);
+        const buttons = within(screen.getByRole('dialog')).getAllByRole('button');
+        expect(buttons[0].parentElement!.className).toContain('flex-wrap');
+        for (const b of buttons) {
+            expect(b.className).toContain('min-h-[44px]');
+            expect(b.className).toContain('max-w-full');
+            expect(b.className).toContain('break-words');
+        }
     });
 });

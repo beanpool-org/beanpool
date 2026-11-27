@@ -13,6 +13,11 @@
  * with a backdrop blur, and a `backdrop-filter` ancestor is the containing block of a `position: fixed` box inside it, so
  * drawn in place the dialog was laid out against the panel, clipped by it and scrolled out of sight (review of 200e812d,
  * measured in Chromium and WebKit).
+ *
+ * Opened by itself on the photos a pick just added (Marty, 28 Nov 2026), it walks through them in place: `step` says where it
+ * stands, the button reads Next (n of count) while more are to come and Done on the last, and Skip keeps this photo's choice
+ * and closes, leaving the photos not yet shown at the card's own crop. The dialog stays from photo to photo (only `src`
+ * changes), so the keyboard's place stays on the button. Cancel and Escape keep nothing for the photo on screen and stop.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -22,19 +27,28 @@ const CARD_ASPECT = MARKET_CARD_SHELL.photo.grid.aspectWidth / MARKET_CARD_SHELL
 /** How far an arrow key moves the frame, as a share of the photo. */
 const KEY_STEP = 0.05;
 
-const primary = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-base font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
-const plain = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-base font-bold text-nature-800 dark:text-nature-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
+// max-w-full and break-words: a longer word (Next (2 of 3) in another language) wraps inside its own button at 320 px and 130%.
+const primary = 'min-w-[44px] min-h-[44px] max-w-full break-words px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-base font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
+const plain = 'min-w-[44px] min-h-[44px] max-w-full break-words px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-base font-bold text-nature-800 dark:text-nature-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 
-export function PhotoFocusDialog({ src, focus, onDone, onCancel }: {
+export function PhotoFocusDialog({ src, focus, step, onDone, onSkip, onCancel }: {
     /** The photo to adjust (a data URL or the photo's address). */
     src: string;
     focus: PhotoFocus | null;
+    /** A walk through several new photos: this one is `n` of `count`; `more` while photos are still to come. */
+    step?: { n: number; count: number; more: boolean } | null;
+    /** Next or Done, with the focus chosen for this photo. */
     onDone: (focus: PhotoFocus | null) => void;
+    /** Skip (offered while a walk has photos still to come), with the focus chosen for this photo. */
+    onSkip?: (focus: PhotoFocus | null) => void;
     onCancel: () => void;
 }) {
     const titleId = useId();
     const hintId = useId();
-    const [aspect, setAspect] = useState<number | null>(null);
+    // The photo's shape, with the photo it was read from: the next photo of a walk never borrows the last one's shape while it loads.
+    const [measured, setMeasured] = useState<{ src: string; aspect: number } | null>(null);
+    const aspect = measured && measured.src === src ? measured.aspect : null;
+    const more = !!step?.more;
     const [picked, setPicked] = useState<PhotoFocus | null>(focus);
     const stageRef = useRef<HTMLDivElement | null>(null);
     const dragging = useRef(false);
@@ -108,7 +122,7 @@ export function PhotoFocusDialog({ src, focus, onDone, onCancel }: {
                         alt=""
                         draggable={false}
                         className="absolute inset-0 w-full h-full pointer-events-none"
-                        onLoad={(e) => { const i = e.currentTarget; setAspect(i.naturalWidth > 0 && i.naturalHeight > 0 ? i.naturalWidth / i.naturalHeight : 1); }}
+                        onLoad={(e) => { const i = e.currentTarget; setMeasured({ src, aspect: i.naturalWidth > 0 && i.naturalHeight > 0 ? i.naturalWidth / i.naturalHeight : 1 }); }}
                     />
                     {win ? (
                         <div
@@ -126,7 +140,12 @@ export function PhotoFocusDialog({ src, focus, onDone, onCancel }: {
                 <div className="flex flex-wrap justify-end gap-2">
                     <button type="button" onClick={() => setPicked(null)} className={plain}>{t('Reset')}</button>
                     <button type="button" onClick={onCancel} className={plain}>{t('Cancel')}</button>
-                    <button type="button" data-testid="photo-focus-done" onClick={() => onDone(picked)} className={primary}>{t('Done')}</button>
+                    {more && onSkip ? (
+                        <button type="button" data-testid="photo-focus-skip" onClick={() => onSkip(picked)} className={plain}>{t('Skip')}</button>
+                    ) : null}
+                    <button type="button" data-testid="photo-focus-done" onClick={() => onDone(picked)} className={primary}>
+                        {more && step ? t('Next ({n} of {count})', { n: step.n, count: step.count }) : t('Done')}
+                    </button>
                 </div>
             </div>
         </div>,

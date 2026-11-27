@@ -9,25 +9,33 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { t } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
-import type { SignInCopies } from '../utils/vault-config';
+import { hasVault, type SignInCopies } from '../utils/vault-config';
 
-/** What the card says for a change to `to` at `community` (its name, or its address). */
+/**
+ * What the card says for a change to `to` at `community` (its name, or its address). A build without a key vault (every
+ * build until the vault is live) is told only of a change to or from `none` (utils/copies-rule.ts), and its words never
+ * name the vault, which isn't running (28 Nov 2026).
+ */
 export function copiesRuleCardWords(to: SignInCopies, community: string): { title: string; body: string } {
     switch (to) {
         case 'none':
             return {
                 title: t('{community} keeps no copies now', { community }),
-                body: t("{community} no longer keeps copies of members' accounts, and doesn't use BeanPool's key vault. Yours stay where they are until you remove them.", { community }),
+                body: hasVault()
+                    ? t("{community} no longer keeps copies of members' accounts, and doesn't use BeanPool's key vault. Yours stay where they are until you remove them.", { community })
+                    : t("{community} no longer keeps copies of members' accounts. Yours stay where they are until you remove them.", { community }),
             };
         case 'community':
             return {
                 title: t("{community} keeps members' copies itself now", { community }),
-                body: t("A sign-in you link here keeps its copy on {community}'s own server, not at BeanPool's key vault. A copy you already have stays where it is until you move or remove it.", { community }),
+                body: hasVault()
+                    ? t("A sign-in you link here keeps its copy on {community}'s own server, not at BeanPool's key vault. A copy you already have stays where it is until you move or remove it.", { community })
+                    : t("A sign-in you link here keeps its copy on {community}'s own server. A copy you already have stays where it is until you move or remove it.", { community }),
             };
         default:
             return {
                 title: t("{community} uses BeanPool's key vault now", { community }),
-                body: t("A sign-in you link here keeps its copy at BeanPool's key vault, a small server in Iceland. A copy {community}'s server keeps for you stays there until you move or remove it.", { community }),
+                body: t("A sign-in you link here keeps its copy at BeanPool's key vault, a separate server outside any community. A copy {community}'s server keeps for you stays there until you move or remove it.", { community }),
             };
     }
 }

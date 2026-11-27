@@ -203,7 +203,7 @@ describe('KeeperProtectionPanel: an account a claim made keeps its copy at its c
 describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
     it('the sentences, word for word: BeanPool can (one person for now), the host can read memory, a court, the sign-in; the words alone keep everyone else out', () => {
         expect(VAULT_COPY_OPENERS).toBe(
-            "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
+            "BeanPool's key vault, a separate server outside any community, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
         expect(VAULT_COPY_OPENERS).not.toMatch(/community's server/);
         expect(SIGN_IN_COPY_WORDS_ONLY).toBe('If you would rather nobody but you could get in, use only your 12 words.');
     });
@@ -277,8 +277,8 @@ describe('KeeperProtectionPanel, VR0: the sign-in row names the key vault where 
             title: 'A sign-in you link',
             bringsBack: 'Google or Facebook brings your account back on a new phone.',
             bringsBackIos: 'Google, Apple or Facebook brings your account back on a new phone.',
-            vaultKeeps: "BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it.",
-            vaultKeepsKey: "BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key for it.",
+            vaultKeeps: "BeanPool's key vault, a separate server outside any community, keeps a locked copy of your key and 12 words for it.",
+            vaultKeepsKey: "BeanPool's key vault, a separate server outside any community, keeps a locked copy of your key for it.",
             whoCanOpen: 'The people who look after the vault can open that copy, and so can anyone who gets into your sign-in account.',
             wait: "It takes a day, or less if another phone of yours says it's you.",
             moreThanOne: 'Connect more than one, in case you lose one.',

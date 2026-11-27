@@ -43,7 +43,7 @@ export const SIGN_IN_COPY_WORDS_ONLY = word('If you would rather nobody but you 
  * Behind "Who can open it ›" under the sign-in row (SIGN_IN_ROW), before a sign-in is linked as well as after.
  */
 export const VAULT_COPY_OPENERS =
-    word("BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
+    word("BeanPool's key vault, a separate server outside any community, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
 
 /**
  * Above the sign-in buttons, in a build without a key vault: the community's server keeps the whole copy (single blob), so
@@ -69,8 +69,8 @@ export const SIGN_IN_ROW = {
     title: word('A sign-in you link'),
     bringsBack: word('Google or Facebook brings your account back on a new phone.'),
     bringsBackIos: word('Google, Apple or Facebook brings your account back on a new phone.'),
-    vaultKeeps: word("BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it."),
-    vaultKeepsKey: word("BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key for it."),
+    vaultKeeps: word("BeanPool's key vault, a separate server outside any community, keeps a locked copy of your key and 12 words for it."),
+    vaultKeepsKey: word("BeanPool's key vault, a separate server outside any community, keeps a locked copy of your key for it."),
     whoCanOpen: word('The people who look after the vault can open that copy, and so can anyone who gets into your sign-in account.'),
     wait: word("It takes a day, or less if another phone of yours says it's you."),
     /** Was SSO_GROUP_NOTE's first sentence; its second ("brings your account back on a new phone") is the row's first. */
@@ -86,6 +86,8 @@ export const SIGN_IN_ROW = {
 export const NO_COPIES_ROW = {
     title: word('🔑 Your 12 words are your way back here'),
     keepsNone: word("This community keeps no copies of members' accounts and doesn't use BeanPool's key vault, so no sign-in can be linked here."),
+    /** keepsNone in a build without a key vault (every build until the vault is live): the vault isn't named where it isn't running (28 Nov 2026). */
+    keepsNoneNoVault: word("This community keeps no copies of members' accounts, so no sign-in can be linked here."),
     keepWords: word('Keep your 12 words written down: without them, an admin can only move your Beans and name to a new key.'),
     noWords: word('This phone has no 12 words: if you lose it, an admin can only move your Beans and name to a new key.'),
     yoursStay: word('A copy you made before, here or in another community, is still yours until you remove it.'),
@@ -222,7 +224,7 @@ export function KeeperProtectionPanel({
             <View style={[styles.panel, styles.wordsOnly]} testID="no-copies-row">
                 <Text style={styles.heading} accessibilityRole="header">{t(NO_COPIES_ROW.title)}</Text>
                 <Text style={styles.body}>
-                    <Text>{t(NO_COPIES_ROW.keepsNone)}</Text>{' '}
+                    <Text>{hasVault() ? t(NO_COPIES_ROW.keepsNone) : t(NO_COPIES_ROW.keepsNoneNoVault)}</Text>{' '}
                     <Text>{hasWords ? t(NO_COPIES_ROW.keepWords) : t(NO_COPIES_ROW.noWords)}</Text>
                 </Text>
                 <Text style={styles.footnote}>{t(NO_COPIES_ROW.yoursStay)}</Text>

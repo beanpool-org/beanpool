@@ -200,7 +200,7 @@ function requireVault(): VaultConfig {
 
 // ─── Requests ──────────────────────────────────────────────────────────────────────────────
 
-/** How long one vault request may take. The vault is in Iceland; a phone may be on a slow link. */
+/** How long one vault request may take. The vault is one server, maybe far from the phone, which may be on a slow link. */
 export const VAULT_TIMEOUT_MS = 20_000;
 
 /** A key a vault request is signed with: the member's, or a restore's throwaway key. */

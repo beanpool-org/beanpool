@@ -23,8 +23,10 @@ vi.mock('../../components/SsoButton', () => {
 });
 
 import {
-    COMMUNITY_SSO_GROUP_NOTE, KeeperProtectionPanel, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, SIGN_IN_ROW,
+    COMMUNITY_SSO_GROUP_NOTE, KeeperProtectionPanel, NO_COPIES_ROW, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, SIGN_IN_ROW,
 } from '../../components/KeeperProtectionPanel';
+import { copiesRuleCardWords } from '../../components/CopiesRuleCardView';
+import { noVault, useVault } from './fake-vault';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { protectionFrom } from '../protection-state';
 import {
@@ -286,5 +288,44 @@ describe('NoWordsNotice', () => {
 
     it('no action, no button (a screen that cannot reach Account Protection)', () => {
         expect(findAll(render(React.createElement(NoWordsNotice, { kind: 'before-wipe' })), 'Pressable')).toEqual([]);
+    });
+});
+
+// The key vault isn't running (measured 28 Nov 2026: no build sets EXPO_PUBLIC_BEANPOOL_VAULT_URL), so a build without one
+// never names it: not where a community keeps no copies (its rule reaches every build), and not on Home's card for a change
+// to or from that rule (utils/copies-rule.ts: the one change a build without a vault is told of). A vault build keeps its words.
+describe('a build without a key vault names no vault where a community keeps no copies, or on the rule card', () => {
+    const noCopies = (hasWords: boolean) => textOf(render(React.createElement(KeeperProtectionPanel, {
+        protection: WORDS_ONLY, hasWords, copiesAt: 'none', onProtectSso: vi.fn(),
+    })));
+
+    it('Nowhere: the community keeps no copies, so no sign-in can be linked; the vault is not named', () => {
+        for (const hasWords of [true, false]) {
+            const text = noCopies(hasWords);
+            expect(text).toContain(NO_COPIES_ROW.keepsNoneNoVault);
+            expect(text).not.toContain(NO_COPIES_ROW.keepsNone);
+            expect(text).not.toMatch(/key vault|Iceland/);
+        }
+    });
+
+    it("Home's card, to Nowhere and to the community's own server: the vault is not named", () => {
+        for (const to of ['none', 'community'] as const) {
+            const w = copiesRuleCardWords(to, 'Riverside');
+            expect(`${w.title} ${w.body}`).not.toMatch(/key vault|Iceland/);
+        }
+        expect(copiesRuleCardWords('none', 'Riverside').body).toBe("Riverside no longer keeps copies of members' accounts. Yours stay where they are until you remove them.");
+        expect(copiesRuleCardWords('community', 'Riverside').body).toBe("A sign-in you link here keeps its copy on Riverside's own server. A copy you already have stays where it is until you move or remove it.");
+    });
+
+    it('a build with a vault keeps its words: the row and the card say the community does not use the vault', () => {
+        useVault();
+        try {
+            expect(noCopies(true)).toContain(NO_COPIES_ROW.keepsNone);
+            expect(copiesRuleCardWords('none', 'Riverside').body).toMatch(/doesn't use BeanPool's key vault/);
+            expect(copiesRuleCardWords('community', 'Riverside').body).toMatch(/not at BeanPool's key vault/);
+            expect(copiesRuleCardWords('vault', 'Riverside').body).toContain("BeanPool's key vault, a separate server outside any community.");
+        } finally {
+            noVault();
+        }
     });
 });

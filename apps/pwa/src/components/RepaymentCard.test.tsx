@@ -309,6 +309,9 @@ describe('a held payment ages: Try again for a day from its first sending, never
         fireEvent.change(screen.getByLabelText(/BEANS/), { target: { value: '7' } });
         fireEvent.click(screen.getByRole('button', { name: 'Pay the Commons' }));
         expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        // The card's effects have run (on a slow machine they can trail the draw): its timer is set for the moment it ages.
+        await act(async () => {});
+        expect(vi.getTimerCount(), 'the card set its timer for the moment the payment ages').toBe(1);
         act(() => { vi.advanceTimersByTime(24 * H - 60_000); });
         expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
         act(() => { vi.advanceTimersByTime(60_000); });

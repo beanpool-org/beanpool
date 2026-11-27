@@ -55,8 +55,10 @@ export default function PayCommonsScreen() {
     // Drawn again the moment a held payment ages, so a screen left open stops offering Try again (pay() reads the age too).
     const [, redraw] = useReducer((n: number) => n + 1, 0);
     useEffect(() => {
-        const left = heldAgesInMs(held, Date.now());
-        if (left === null) return;
+        const now = Date.now();
+        const left = heldAgesInMs(held, now);
+        // Aged already by the time this runs (it runs after the draw): draw again now, so the words never lag the age.
+        if (left === null) { if (heldAged(held, now)) redraw(); return; }
         const timer = setTimeout(redraw, Math.min(left, 2 ** 31 - 1));
         return () => clearTimeout(timer);
     }, [held]);

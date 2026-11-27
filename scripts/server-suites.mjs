@@ -690,6 +690,8 @@ export const SUITES = [
     'test-per-item-listings',
     'test-per-item-deals',
     'test-enterprise-take-up',
+    // Stall slice 5: an enterprise prices its own Offer for each one from its own form; the keeper's route passes the count through.
+    'test-enterprise-each-offer',
     'test-process-handlers',
     'test-shutdown-recovery',
     'test-clean-stop',

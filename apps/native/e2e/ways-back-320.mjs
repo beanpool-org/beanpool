@@ -482,7 +482,7 @@ try {
     };
     const open = async (q) => { await page.goto(`${base}/?${q}`); await page.waitForTimeout(150); };
     const whoCanOpen = () => page.getByRole('button', { name: 'Who can open it' }).first();
-    const OPENERS = /BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens/;
+    const OPENERS = /BeanPool's key vault, a separate server outside any community, keeps the copy of your account that your sign-in opens/;
 
     const CASES = [
         ['place=backup', 'Safety Backup, after an invite, no sign-in yet'],
@@ -495,7 +495,7 @@ try {
     for (const scheme of ['light', 'dark']) {
         for (const [query, label] of CASES) {
             await open(`${query}&scheme=${scheme}`);
-            await page.getByText(/BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key/).first().waitFor();
+            await page.getByText(/BeanPool's key vault, a separate server outside any community, keeps a locked copy of your key/).first().waitFor();
             if (await page.getByText(OPENERS).count()) problems.push(`${scheme} · ${label}: who can open the copy is drawn before the tap`);
             await measure(`${scheme} · ${label}`);
             await whoCanOpen().click();

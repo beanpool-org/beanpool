@@ -27,7 +27,7 @@ export function copiesRuleCardWords(to: SignInCopies, community: string): { titl
         default:
             return {
                 title: t("{community} uses BeanPool's key vault now", { community }),
-                body: t("A sign-in you link here keeps its copy at BeanPool's key vault, a small server in Iceland. A copy {community}'s server keeps for you stays there until you move or remove it.", { community }),
+                body: t("A sign-in you link here keeps its copy at BeanPool's key vault, a separate server outside any community. A copy {community}'s server keeps for you stays there until you move or remove it.", { community }),
             };
     }
 }

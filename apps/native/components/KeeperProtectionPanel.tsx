@@ -43,7 +43,7 @@ export const SIGN_IN_COPY_WORDS_ONLY = word('If you would rather nobody but you 
  * Behind "Who can open it ›" under the sign-in row (SIGN_IN_ROW), before a sign-in is linked as well as after.
  */
 export const VAULT_COPY_OPENERS =
-    word("BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
+    word("BeanPool's key vault, a separate server outside any community, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
 
 /**
  * Above the sign-in buttons, in a build without a key vault: the community's server keeps the whole copy (single blob), so
@@ -69,8 +69,8 @@ export const SIGN_IN_ROW = {
     title: word('A sign-in you link'),
     bringsBack: word('Google or Facebook brings your account back on a new phone.'),
     bringsBackIos: word('Google, Apple or Facebook brings your account back on a new phone.'),
-    vaultKeeps: word("BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it."),
-    vaultKeepsKey: word("BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key for it."),
+    vaultKeeps: word("BeanPool's key vault, a separate server outside any community, keeps a locked copy of your key and 12 words for it."),
+    vaultKeepsKey: word("BeanPool's key vault, a separate server outside any community, keeps a locked copy of your key for it."),
     whoCanOpen: word('The people who look after the vault can open that copy, and so can anyone who gets into your sign-in account.'),
     wait: word("It takes a day, or less if another phone of yours says it's you."),
     /** Was SSO_GROUP_NOTE's first sentence; its second ("brings your account back on a new phone") is the row's first. */

@@ -121,6 +121,7 @@ jobs:
           cat image.json
       - name: The data partition helper on loop devices (formats, reopens, refuses another key or a foreign file system)
         run: |
+          bash scripts/ci/drop-microsoft-apt-source.sh
           sudo apt-get install -y -qq cryptsetup-bin e2fsprogs >/dev/null
           sudo "$(command -v node)" apps/vault/image/data-test.mjs
       - name: Boot it and check its memory hygiene from inside (QEMU, UEFI, no network out)

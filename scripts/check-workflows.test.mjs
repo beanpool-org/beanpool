@@ -2,9 +2,14 @@
 // Run by test-all.sh (the `workflows` check): node --test scripts/check-workflows.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { basename } from 'node:path';
-import { workflowProblems, workflowFiles } from './check-workflows.mjs';
+import { readFileSync, mkdtempSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { basename, join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { workflowProblems, workflowFiles, DROP_MICROSOFT_APT_SCRIPT } from './check-workflows.mjs';
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const SHA = '11d5960a326750d5838078e36cf38b85af677262';
 
@@ -226,4 +231,109 @@ test('the key vault image workflow: its inputs reach no shell, the release build
     assert.doesNotMatch(text, /secrets\./);
     assert.match(text, /^permissions:\n {2}contents: read\n/m);
     assert.doesNotMatch(text, /contents: write|gh release|action-gh-release/);
+});
+
+test('every apt-get/playwright --with-deps step in workflows must drop the Microsoft apt source first', () => {
+    const withStep = (step) => wf().replace('      - run: echo hi\n', step);
+    // Missing drop fails for apt-get update, apt-get install, and playwright --with-deps / install-deps.
+    for (const bad of [
+        '      - run: sudo apt-get update && sudo apt-get install -y expect\n',
+        '      - run: sudo apt-get -qq update\n',
+        '      - run: sudo apt-get install -y cryptsetup-bin\n',
+        '      - run: pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium\n',
+        '      - run: npx playwright install-deps chromium\n',
+        // Calling the drop script AFTER apt still fails.
+        `      - run: |\n          sudo apt-get update\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n`,
+        // A conditional earlier step does not cover a later apt step.
+        `      - if: matrix.other\n        run: bash ${DROP_MICROSOFT_APT_SCRIPT}\n      - run: sudo apt-get update\n`,
+    ]) {
+        assert.match(workflowProblems(withStep(bad)).join('\n'), /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/, bad);
+    }
+    // Calling the script before apt (same step or earlier unconditional step) passes, and # needs-microsoft-apt opts out.
+    for (const good of [
+        `      - run: bash ${DROP_MICROSOFT_APT_SCRIPT} && sudo apt-get update && sudo apt-get install -y expect\n`,
+        `      - run: |\n          bash ${DROP_MICROSOFT_APT_SCRIPT}\n          pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium\n`,
+        `      - run: bash ${DROP_MICROSOFT_APT_SCRIPT}\n      - run: sudo apt-get update\n`,
+        '      - name: Install dotnet\n        # needs-microsoft-apt: installs dotnet from packages.microsoft.com\n        run: sudo apt-get update && sudo apt-get install -y dotnet-sdk-8.0\n',
+    ]) {
+        assert.deepEqual(workflowProblems(withStep(good)), [], good);
+    }
+    // Mutation check on real ci.yml and vault-image.yml: removing any drop call fails.
+    const ci = readFileSync(workflowFiles().find((f) => basename(f) === 'ci.yml'), 'utf8');
+    assert.match(workflowProblems(ci.replace(`bash ${DROP_MICROSOFT_APT_SCRIPT} && `, '')).join('\n'), /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/);
+    assert.match(workflowProblems(ci.replace(`          bash ${DROP_MICROSOFT_APT_SCRIPT}\n`, '')).join('\n'), /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/);
+    const vault = readFileSync(workflowFiles().find((f) => basename(f) === 'vault-image.yml'), 'utf8');
+    assert.match(workflowProblems(vault.replace(`          bash ${DROP_MICROSOFT_APT_SCRIPT}\n`, '')).join('\n'), /without calling scripts\/ci\/drop-microsoft-apt-source\.sh first/);
+});
+
+test('scripts/ci/drop-microsoft-apt-source.sh removes only pure packages.microsoft.com .list and .sources files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'drop-ms-apt-'));
+    const script = join(REPO_ROOT, DROP_MICROSOFT_APT_SCRIPT);
+    const put = (name, body) => writeFileSync(join(dir, name), body);
+    const has = (name) => existsSync(join(dir, name));
+    try {
+        // Pure Microsoft sources (must be removed).
+        put('microsoft-prod.list', 'deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/26.04/prod resolute main\n');
+        put('azure-cli.sources', [
+            'Types: deb',
+            'URIs: https://packages.microsoft.com/repos/azure-cli/',
+            'Suites: resolute',
+            'Components: main',
+            'Signed-By: /etc/apt/keyrings/microsoft.gpg',
+            '',
+        ].join('\n'));
+        put('microsoft-multiline.sources', [
+            '# Microsoft repos',
+            'Types: deb',
+            'URIs:',
+            '  https://packages.microsoft.com/ubuntu/26.04/prod',
+            '  http://packages.microsoft.com/repos/edge',
+            'Suites: resolute',
+            'Components: main',
+            '',
+        ].join('\n'));
+        // Ubuntu & third-party sources (must NEVER be removed).
+        put('ubuntu.sources', [
+            'Types: deb',
+            'URIs: http://archive.ubuntu.com/ubuntu/',
+            'Suites: resolute resolute-updates resolute-backports',
+            'Components: main universe restricted multiverse',
+            'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg',
+            '',
+        ].join('\n'));
+        put('ubuntu-mirrors.sources', 'Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: resolute\nComponents: main\n');
+        // Comments mentioning packages.microsoft.com inside an Ubuntu file must NEVER be removed.
+        put('ubuntu-comment.list', '# Note: packages.microsoft.com is disabled\ndeb http://archive.ubuntu.com/ubuntu/ resolute main\n');
+        // Mixed file (both Microsoft and Ubuntu URIs) must NEVER be removed.
+        put('mixed.list', 'deb https://packages.microsoft.com/ubuntu/26.04/prod resolute main\ndeb http://archive.ubuntu.com/ubuntu/ resolute main\n');
+        put('mixed.sources', 'Types: deb\nURIs: https://packages.microsoft.com/ubuntu/26.04/prod\nSuites: resolute\n\nTypes: deb\nURIs: http://archive.ubuntu.com/ubuntu/\nSuites: resolute\n');
+        // Spoofed hostname must NOT be removed.
+        put('spoofed.list', 'deb https://packages.microsoft.com.example.org/ubuntu resolute main\n');
+        // Non-.list/.sources file mentioning Microsoft must NOT be touched.
+        put('microsoft-prod.list.bak', 'deb https://packages.microsoft.com/ubuntu/26.04/prod resolute main\n');
+
+        const res = spawnSync('bash', [script], { env: { ...process.env, APT_SOURCES_DIR: dir }, encoding: 'utf8' });
+        assert.equal(res.status, 0, res.stderr);
+        assert.equal(has('microsoft-prod.list'), false, 'microsoft-prod.list removed');
+        assert.equal(has('azure-cli.sources'), false, 'azure-cli.sources removed');
+        assert.equal(has('microsoft-multiline.sources'), false, 'microsoft-multiline.sources removed');
+        assert.equal(has('ubuntu.sources'), true, 'ubuntu.sources kept');
+        assert.equal(has('ubuntu-mirrors.sources'), true, 'ubuntu-mirrors.sources kept');
+        assert.equal(has('ubuntu-comment.list'), true, 'ubuntu-comment.list kept');
+        assert.equal(has('mixed.list'), true, 'mixed.list kept');
+        assert.equal(has('mixed.sources'), true, 'mixed.sources kept');
+        assert.equal(has('spoofed.list'), true, 'spoofed.list kept');
+        assert.equal(has('microsoft-prod.list.bak'), true, 'microsoft-prod.list.bak kept');
+
+        // Second run is idempotent and exits 0.
+        const second = spawnSync('bash', [script], { env: { ...process.env, APT_SOURCES_DIR: dir }, encoding: 'utf8' });
+        assert.equal(second.status, 0, second.stderr);
+        assert.match(second.stdout, /no packages\.microsoft\.com apt sources found/);
+
+        // Missing directory exits 0 cleanly.
+        const missing = spawnSync('bash', [script], { env: { ...process.env, APT_SOURCES_DIR: join(dir, 'does-not-exist') }, encoding: 'utf8' });
+        assert.equal(missing.status, 0, missing.stderr);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 });

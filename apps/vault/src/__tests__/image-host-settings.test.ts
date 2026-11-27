@@ -78,6 +78,104 @@ describe('--network6: IPv6 set by hand', () => {
     });
 });
 
+/**
+ * A host whose IPv6 router sits OUTSIDE the vault's prefix and is reached on the link (Servury, measured on the live box
+ * 27 Nov 2026: `default via 2602:f41c::1 dev ens18 proto static metric 1024 onlink`, the address 2602:f41c:0:39c::1/64).
+ * It is said explicitly with `,onlink`: a gateway outside the prefix without it is still refused (a typo stays a
+ * refusal), and `,onlink` is refused where it does not belong (a gateway inside the prefix, or link-local). The file
+ * for every setting without `,onlink` is exactly the one it was.
+ */
+describe('--network6 with a gateway outside the prefix, reached on the link (,onlink)', () => {
+    const V4 = 'static:192.0.2.10/23,192.0.2.1';
+    // Servury's shape in documentation addresses: the gateway 2001:db8::1 is outside 2001:db8:0:39c::/64.
+    const ONLINK = 'static:2001:db8:0:39c::1/64,2001:db8::1,onlink';
+    // The file before ,onlink existed, for a gateway the old rule took (inside the prefix, or link-local).
+    const before = (v6: string, address6: string, gateway6: string) => [
+        `# Written by build.sh --network ${V4} --network6 ${v6}, over the DHCP file: the`,
+        '# host has no DHCP and sets IPv6 by hand too. The addresses are public and part of the image and its hash. The',
+        '# vault\'s own resolver and time come from its config, not from the network.',
+        '[Match]', 'Type=ether', 'Kind=!*', '',
+        '[Network]', 'Address=192.0.2.10/23', 'Gateway=192.0.2.1', `Address=${address6}`, `Gateway=${gateway6}`,
+        'IPv6AcceptRA=no', 'LinkLocalAddressing=ipv6', '',
+    ].join('\n');
+
+    it.each([
+        ['inside the prefix', 'static:2001:db8:0:39c::1/64,2001:db8:0:39c::ffff', '2001:db8:0:39c::1/64', '2001:db8:0:39c::ffff'],
+        ['inside a /48', 'static:2001:db8:0:39c::1/48,2001:db8::1', '2001:db8:0:39c::1/48', '2001:db8::1'],
+        ['link-local', 'static:2001:db8:0:39c::1/64,fe80::1', '2001:db8:0:39c::1/64', 'fe80::1'],
+        ['link-local, full form', 'static:2001:db8:0:39c::1/64,fe80::227:e3ff:feca:6447', '2001:db8:0:39c::1/64', 'fe80::227:e3ff:feca:6447'],
+    ])('a gateway %s: the same file as before, no route section, no on-link', (_what, v6, address6, gateway6) => {
+        const n6 = parseNetwork6(v6);
+        expect(n6).toEqual({ kind: 'static', value: v6, address: address6.split('/')[0], prefix: Number(address6.split('/')[1]), gateway: gateway6 });
+        expect(Object.keys(n6)).not.toContain('onLink');
+        const file = networkFile(parseNetwork(V4), n6);
+        expect(file).toBe(before(v6, address6, gateway6));
+        expect(file).not.toMatch(/\[Route\]|OnLink/);
+    });
+
+    it('a gateway outside the prefix with ,onlink: the default route through it, GatewayOnLink=yes, and no other IPv6 gateway', () => {
+        const n6 = parseNetwork6(ONLINK);
+        expect(n6).toEqual({ kind: 'static', value: ONLINK, address: '2001:db8:0:39c::1', prefix: 64, gateway: '2001:db8::1', onLink: true });
+        expect(networkFile(parseNetwork(V4), n6)).toBe([
+            `# Written by build.sh --network ${V4} --network6 ${ONLINK}, over the DHCP file: the`,
+            '# host has no DHCP and sets IPv6 by hand too. The addresses are public and part of the image and its hash. The',
+            '# vault\'s own resolver and time come from its config, not from the network.',
+            '# The IPv6 gateway is outside the prefix: the default route reaches it on the link (GatewayOnLink=yes).',
+            '[Match]', 'Type=ether', 'Kind=!*', '',
+            '[Network]', 'Address=192.0.2.10/23', 'Gateway=192.0.2.1', 'Address=2001:db8:0:39c::1/64',
+            'IPv6AcceptRA=no', 'LinkLocalAddressing=ipv6', '',
+            '[Route]', 'Destination=::/0', 'Gateway=2001:db8::1', 'GatewayOnLink=yes', '',
+        ].join('\n'));
+        // A /128 has nothing inside it but itself: its gateway is always outside, so on-link.
+        expect(parseNetwork6('static:2001:db8:0:39c::1/128,2001:db8::1,onlink')).toMatchObject({ prefix: 128, onLink: true });
+        // The CLI answers the value back exactly (build.sh goes on only then).
+        const r = run('check6', ONLINK);
+        expect(r.status).toBe(0);
+        expect(r.stdout).toBe(`${ONLINK}\n`);
+    });
+
+    it.each([
+        // Outside the prefix without ,onlink: refused, as before, and the refusal says how to say on-link.
+        ['static:2001:db8:0:39c::1/64,2001:db8::1', /not inside 2001:db8:0:39c::1\/64 \(nor link-local\).*,onlink/],
+        ['static:2602:f41c:0:39c::1/64,2602:f41c::1', /not inside .*nor link-local.*,onlink/],
+        // ,onlink where it does not belong.
+        ['static:2001:db8:0:39c::1/64,2001:db8:0:39c::ffff,onlink', /inside 2001:db8:0:39c::1\/64: drop ,onlink/],
+        ['static:2001:db8:0:39c::1/64,fe80::1,onlink', /link-local.*drop ,onlink/],
+        // Still a global unicast gateway: not ULA, multicast, unspecified, loopback, the address itself.
+        ['static:2001:db8:0:39c::1/64,fd00::1,onlink', /neither global unicast nor link-local/],
+        ['static:2001:db8:0:39c::1/64,ff02::1,onlink', /neither global unicast nor link-local/],
+        ['static:2001:db8:0:39c::1/64,::,onlink', /neither global unicast nor link-local/],
+        ['static:2001:db8:0:39c::1/64,::1,onlink', /neither global unicast nor link-local/],
+        ['static:2001:db8:0:39c::1/128,2001:db8:0:39c::1,onlink', /--network6/],
+        // Exactly ,onlink: no other spelling, nothing after it.
+        ['static:2001:db8:0:39c::1/64,2001:db8::1,ONLINK', /--network6/],
+        ['static:2001:db8:0:39c::1/64,2001:db8::1,on-link', /--network6/],
+        ['static:2001:db8:0:39c::1/64,2001:db8::1,onlink,onlink', /--network6/],
+        ['static:2001:db8:0:39c::1/64,2001:db8::1,onlink ', /--network6/],
+        ['static:2001:db8:0:39c::1/64,2001:db8::1,', /--network6/],
+        ['static:2001:db8:0:39c::1/64,onlink', /--network6/],
+        ['static:2001:db8:0:39c::1/64,2001:db8::1,onlink\n[Route]\nGateway=2001:db8::66', /--network6/],
+    ])('refuses %j', (value, why) => {
+        expect(() => parseNetwork6(value)).toThrow(/--network6/);
+        expect(() => parseNetwork6(value)).toThrow(why);
+        expect(run('check6', value).status).toBe(2);
+    });
+
+    it('IPv4 is unchanged: no on-link form, and its file is the one it always was', () => {
+        expect(() => parseNetwork('static:192.0.2.10/24,192.0.2.1,onlink')).toThrow(/--network/);
+        expect(() => parseNetwork('static:192.0.2.10/24,198.51.100.1')).toThrow(/not inside/);
+        expect(networkFile(parseNetwork(V4), parseNetwork6('ra'))).toBe(networkFile(parseNetwork(V4)));
+        expect(networkFile(parseNetwork(V4))).not.toMatch(/\[Route\]|OnLink/);
+        expect(() => networkFile(parseNetwork('dhcp'), parseNetwork6(ONLINK))).toThrow(/needs --network static/);
+    });
+
+    it('image.json records the on-link setting as given', () => {
+        const out = run('image-json', '0.0.2', H, H, H, V4, ONLINK, 'vault.example.org', 'none', '', 'acpi');
+        expect(out.status).toBe(0);
+        expect(JSON.parse(out.stdout)).toEqual({ version: '0.0.2', ukiSha256: H, roothash: H, imageHash: H, network: V4, network6: ONLINK, name: 'vault.example.org' });
+    });
+});
+
 describe('--name: the vault\'s own name', () => {
     const caddyfile = readFileSync(path.join(image, 'mkosi/mkosi.extra/etc/caddy/Caddyfile'), 'utf8');
     const apiJson = readFileSync(path.join(image, 'mkosi/mkosi.extra/etc/beanpool-vault/api.json'), 'utf8');
@@ -239,6 +337,8 @@ describe('build.sh refuses a bad setting before it does anything', () => {
     it.each([
         [['--network6', 'static:2001:db8::10/64,2001:db9::1'], /--network6/],
         [['--network6', 'static:2001:db8::10/64,fe80::1'], /needs --network static/],
+        [['--network', 'static:192.0.2.10/23,192.0.2.1', '--network6', 'static:2001:db8:0:39c::1/64,2001:db8::1'], /,onlink/],
+        [['--network', 'static:192.0.2.10/23,192.0.2.1', '--network6', 'static:2001:db8:0:39c::1/64,2001:db8:0:39c::2,onlink'], /drop ,onlink/],
         [['--name', 'Vault.Example.org'], /--name/],
         [['--host', 'nope'], /--host "nope"/],
         [['--host', '../host-profiles/servury'], /--host/],
@@ -283,5 +383,37 @@ describe('build.sh\'s network guard with IPv6 (run on a copied mkosi tree)', () 
             `import { networkFile, parseNetwork, parseNetwork6 } from ${JSON.stringify(path.join(image, 'image-settings.mjs'))};\n` +
             `const [, , , v, f, v6] = process.argv; writeFileSync(f, networkFile(parseNetwork(v), parseNetwork6(v6)) + 'DNS=2001:db8::66\\n'); console.log(v);\n`);
         expect(bash({ here: stub, extra: tree('n6-bad'), network: V4, network6: V6 })).not.toBe(0);
+    });
+
+    const ONLINK = 'static:2001:db8:0:39c::1/64,2001:db8::1,onlink';
+
+    it('passes the real module for a gateway outside the prefix, on-link', () => {
+        expect(bash({ here: image, extra: tree('n6-onlink'), network: V4, network6: ONLINK })).toBe(0);
+        const file = readFileSync(path.join(dir, 'n6-onlink', 'mkosi.extra/etc/systemd/network/80-wan.network'), 'utf8');
+        expect(file).toContain('\n[Route]\nDestination=::/0\nGateway=2001:db8::1\nGatewayOnLink=yes\n');
+        expect(file).not.toContain('Gateway=onlink');
+    });
+
+    // A module that writes the on-link file with one line more, one line fewer, or the IPv6 gateway in [Network] too.
+    // The control (the file as the real module writes it, through the same stub) passes, so each refusal is the guard's.
+    it.each([
+        ['as the real module writes it (control)', 'text', 0],
+        ['one setting more', `text + 'DNS=2001:db8::66\\n'`, 1],
+        ['without GatewayOnLink', `text.replace('GatewayOnLink=yes\\n', '')`, 1],
+        ["without the route's Destination", `text.replace('Destination=::/0\\n', '')`, 1],
+        ['the gateway in [Network] as well', `text.replace('IPv6AcceptRA=no', 'Gateway=2001:db8::1\\nIPv6AcceptRA=no')`, 1],
+        ['as the ,onlink-less file', `networkFile(parseNetwork(v), { ...parseNetwork6(v6), onLink: undefined })`, 1],
+    ])('a module that writes the on-link file %s: %s', (name, body, refused) => {
+        const stub = path.join(dir, `n6-onlink-stub-${name.replace(/[^a-z]/gi, '')}`);
+        rmSync(stub, { recursive: true, force: true });
+        mkdirSync(stub, { recursive: true });
+        spawnSync('cp', ['-R', path.join(image, 'mkosi'), path.join(stub, 'mkosi')]);
+        writeFileSync(path.join(stub, 'image-settings.mjs'),
+            `import { writeFileSync } from 'node:fs';\n` +
+            `import { networkFile, parseNetwork, parseNetwork6 } from ${JSON.stringify(path.join(image, 'image-settings.mjs'))};\n` +
+            `const [, , , v, f, v6] = process.argv; const text = networkFile(parseNetwork(v), parseNetwork6(v6)); writeFileSync(f, ${body}); console.log(v);\n`);
+        const status = bash({ here: stub, extra: tree(`n6-onlink-bad-${name.replace(/[^a-z]/gi, '')}`), network: V4, network6: ONLINK });
+        if (refused) expect(status).not.toBe(0);
+        else expect(status).toBe(0);
     });
 });

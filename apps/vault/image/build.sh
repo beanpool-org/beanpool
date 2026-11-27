@@ -39,9 +39,9 @@
 # is public, changes the image and its hash, and image.json records it: a rebuild for the comparison passes the same.
 # Anything but those two forms, strictly, refuses to build.
 #
-# `--network6 ra|static:<ipv6>/<prefix>,<gateway>` (default ra: router advertisements, the image as it always was):
-# a host that sets IPv6 by hand too (Servury) gets its address and gateway in the same file; it needs the static IPv4
-# form. `--name <dns name>` (default vault.beanpool.org, the image as it always was) is the vault's own name, in Caddy's
+# `--network6 ra|static:<ipv6>/<prefix>,<gateway>[,onlink]` (default ra: router advertisements, the image as it always
+# was): a host that sets IPv6 by hand too (Servury) gets its address and gateway in the same file; it needs the static
+# IPv4 form. `,onlink` says the gateway is outside the prefix and reached on the link (Servury's is). `--name <dns name>` (default vault.beanpool.org, the image as it always was) is the vault's own name, in Caddy's
 # site and the API's hosts. Both are checked strictly, public, change the image, and image.json records them.
 #
 # `--host <profile>` (default none: the image as it always was) builds for a confidential host
@@ -89,7 +89,7 @@ while [ $# -gt 0 ]; do
 done
 if [ -z "${keys}" ] || [ -z "${version}" ] || [ -z "${out}" ]; then
     echo "usage: $0 --custodian-keys <file> --version <x.y.z> --out <dir> [--network dhcp|static:<ipv4>/<prefix>,<gateway>]" \
-        "[--network6 ra|static:<ipv6>/<prefix>,<gateway>] [--name <dns name>] [--host <profile>] [--acpi-off]" >&2
+        "[--network6 ra|static:<ipv6>/<prefix>,<gateway>[,onlink]] [--name <dns name>] [--host <profile>] [--acpi-off]" >&2
     exit 2
 fi
 if ! printf '%s' "${version}" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
@@ -209,7 +209,8 @@ if [ "${acpi}" = acpi-off ]; then
 fi
 # The host network: nothing changes for dhcp; the static form's file replaces the DHCP one.
 # It must answer with the setting; for dhcp the image's own file must be left exactly as it is, and for static the file's
-# settings (comments and blank lines aside) must be exactly these ten lines, nothing more.
+# settings (comments and blank lines aside) must be exactly the lines below, nothing more. An IPv6 gateway outside the
+# prefix (`,onlink`) is the default route's own [Route] section with GatewayOnLink=yes, and no IPv6 Gateway= in [Network].
 wan="${extra}/etc/systemd/network/80-wan.network"
 n6="${network6:-ra}"
 wrote="$(node "${here}/image-settings.mjs" write "${network}" "${wan}" "${n6}")"
@@ -219,6 +220,12 @@ case "${network}" in
        if [ "${n6}" = ra ]; then
            want="$(printf '%s\n' '[Match]' 'Type=ether' 'Kind=!*' '[Network]' "Address=${address%%,*}" "Gateway=${network##*,}" \
                 'IPv6AcceptRA=yes' 'LinkLocalAddressing=ipv6' '[IPv6AcceptRA]' 'UseDNS=no')"
+       elif [ "${n6%,onlink}" != "${n6}" ]; then
+           gateway6="${address6#*,}"
+           gateway6="${gateway6%,onlink}"
+           want="$(printf '%s\n' '[Match]' 'Type=ether' 'Kind=!*' '[Network]' "Address=${address%%,*}" "Gateway=${network##*,}" \
+                "Address=${address6%%,*}" 'IPv6AcceptRA=no' 'LinkLocalAddressing=ipv6' \
+                '[Route]' 'Destination=::/0' "Gateway=${gateway6}" 'GatewayOnLink=yes')"
        else
            want="$(printf '%s\n' '[Match]' 'Type=ether' 'Kind=!*' '[Network]' "Address=${address%%,*}" "Gateway=${network##*,}" \
                 "Address=${address6%%,*}" "Gateway=${n6##*,}" 'IPv6AcceptRA=no' 'LinkLocalAddressing=ipv6')"

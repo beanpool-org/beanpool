@@ -46,7 +46,7 @@ on:
         default: ''
         type: string
       network6:
-        description: 'Release image only: static:<ipv6>/<prefix>,<gateway> (needs network). Empty: router advertisements'
+        description: 'Release image only: static:<ipv6>/<prefix>,<gateway>, with ,onlink after a gateway outside the prefix (needs network). Empty: router advertisements'
         required: false
         default: ''
         type: string

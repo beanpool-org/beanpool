@@ -386,7 +386,11 @@ ports, so they are harmless.
 
 **IPv6 set by hand, and the vault's name.** `--network6 static:<ipv6>/<prefix>,<gateway>` (with the static IPv4 form)
 adds the IPv6 address and gateway to the same file and stops taking router advertisements; the default, `ra`, is the
-image as it was. The gateway is inside the prefix or link-local (`fe80::/10`). `--name <dns name>` (default
+image as it was. The gateway is inside the prefix or link-local (`fe80::/10`). A global gateway outside the prefix that
+the host reaches on the link (Servury's) is said with `,onlink` after it, `static:<ipv6>/<prefix>,<gateway>,onlink`:
+the default route is then its own `[Route]` section with `GatewayOnLink=yes`. It is never assumed: a gateway outside
+the prefix without `,onlink` is refused (a typo stays a refusal), and so is `,onlink` after a gateway inside the prefix
+or a link-local one. A setting without it writes the same file as before. `--name <dns name>` (default
 `vault.beanpool.org`) is the vault's own name: Caddy's site (`etc/caddy/Caddyfile`) and the API's `hosts`
 (`etc/beanpool-vault/api.json`), which phones sign their requests for. The default leaves both files byte for byte as
 they are. Both are checked strictly and recorded in `image.json` (`network6`, `name`) only when not the default.
@@ -431,11 +435,12 @@ profile as soon as they do, and sign a release with it ("Raising the floor", bel
 
 ```
 apps/vault/image/build.sh --custodian-keys <keys.json> --version <x.y.z> --out <dir> --host servury \
-    --network static:68.164.4.44/23,68.164.4.1 --network6 static:2602:f41c:0:39c::1/64,<IPv6 gateway>
+    --network static:68.164.4.44/23,68.164.4.1 --network6 static:2602:f41c:0:39c::1/64,2602:f41c::1,onlink
 ```
 
-The IPv6 gateway is to be read off the server's own network settings before the build (the 26 Nov probe did not
-record it). Servury takes the install image by URL and SHA-256 (`beanpool-vault_<version>.qcow2`, below) and the
+Its IPv6 gateway, `2602:f41c::1`, is outside the vault's `/64` and reached on the link: read off the live box on
+27 Nov 2026 (`ip -6 route show default`: `default via 2602:f41c::1 dev ens18 proto static metric 1024 onlink`), after
+the first release run (45912732149) refused it without `,onlink`. Servury takes the install image by URL and SHA-256 (`beanpool-vault_<version>.qcow2`, below) and the
 UKI by URL and SHA-256 (`vault.efi`), with the panel's command line left empty. Never press "Reinstall": it replaces
 the disk with Servury's own release.
 

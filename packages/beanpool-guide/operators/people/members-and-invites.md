@@ -122,7 +122,7 @@ When a member links Google, Apple or Facebook as a way back into their account, 
 What changing it does, and doesn't:
 
 - **Only new copies follow it.** A copy a member already has is theirs: one key is a member of many communities, and a copy made through another community also opens this one. Copies your server already keeps stay until each member removes theirs, under **Where your account can be brought back from** (Account Protection in the app, Settings in the web app). Their status, removal and the way back from them work under every choice.
-- **Every member is told**, in a notice from the community. At its next open, the app shows a card saying what it means for them: under This server it offers to move a copy from the key vault to your server; under Nowhere it shows where their copies are.
+- **Every member is told**, in a notice from the community. At its next open, the app shows a card saying what it means for them: under This server, once the key vault is live, it offers to move a copy from the vault to your server; under Nowhere it shows where their copies are.
 - Each change is logged with who made it, and the owners get an alert.
 - **A phone app from before this setting ignores it**: a build with the key vault still puts copies there, whatever the community. Your server can't stop that, because the phone talks to the vault directly. A phone on the current app follows the rule.
 - **On a community with an open door**, the door takes a key vault ticket only under BeanPool's key vault. Under This server, a copy the joiner's app sends with the join is kept here; under Nowhere none is kept, and the join stands without one.

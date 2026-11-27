@@ -117,6 +117,6 @@ describe('asking to join (lib/knock.ts knockFormProblem)', () => {
     it('refuses an invite or a link as the name with its line, and takes a name', () => {
         expect(knockFormProblem({ callsign: HER_LINK.slice(0, 20), message: 'Hello' })).toBe(NAME_BOX_WORDS.webLink);
         expect(knockFormProblem({ callsign: 'INV-K7Q2-BSXA', message: 'Hello' })).toBe(NAME_BOX_WORDS.inviteCode);
-        expect(knockFormProblem({ callsign: 'Dee Dee', message: 'Hello' })).toBeNull();
+        expect(knockFormProblem({ callsign: 'Dee Dee', message: 'Hello, I live up the hill.' })).toBeNull();
     });
 });

@@ -57,7 +57,7 @@ const knock = () => calls.find((c) => c.url.endsWith('/api/join/knock'))?.body;
 async function openForm(forumPicker = true, withList = true) {
     render(<AskToJoin community={RIVERSIDE} identity={ASHA} asked={false} forumPicker={forumPicker} />);
     fireEvent.click(screen.getByRole('button', { name: 'Ask to join Riverside' }));
-    fireEvent.change(screen.getByLabelText('A few words about yourself'), { target: { value: 'I fix bikes.' } });
+    fireEvent.change(screen.getByLabelText('A few words about yourself'), { target: { value: 'I fix bikes in my shed.' } });
     if (withList) await screen.findByRole('group', { name: t(FORUM_ASK_PICKER_WORDS.heading) });
     else await waitFor(() => expect(asks()).toHaveLength(forumPicker ? 1 : 0));
 }
@@ -117,7 +117,7 @@ describe('what the request sends, after taps on the picker', () => {
             expect(JSON.stringify(body)).not.toContain(LONG);
             expect(JSON.stringify(body)).not.toContain('title');
         }
-        expect(body).toMatchObject({ message: 'I fix bikes.', callsign: 'Asha', toNode: 'riverside.example.org' });
+        expect(body).toMatchObject({ message: 'I fix bikes in my shed.', callsign: 'Asha', toNode: 'riverside.example.org' });
         // The list was asked of this web app's own server, once, signed (never of the community asked).
         expect(asks().map((c) => c.url)).toEqual([`${OWN_SERVER}${FORUM_ASK_POSTS_PATH}`]);
     });
@@ -191,7 +191,7 @@ describe('the picker at 320 px, light and dark', () => {
         await waitFor(() => expect(rowOf('fp-a2')).not.toBeNull());
         expect(rowOf('fp-a1')).toBeNull();
         expect(asks()).toHaveLength(2);
-        fireEvent.change(screen.getByLabelText('A few words about yourself'), { target: { value: 'I fix bikes.' } });
+        fireEvent.change(screen.getByLabelText('A few words about yourself'), { target: { value: 'I fix bikes in my shed.' } });
         expect(await send()).not.toHaveProperty('forumPosts');
     });
 });

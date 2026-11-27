@@ -255,7 +255,7 @@ describe('Find a community with no account on the phone', () => {
         await settle();
         const inputs = Array.from(byId('find-typed-community')!.querySelectorAll('input')) as HTMLInputElement[];
         await type(inputs.find((i) => i.getAttribute('aria-label') === 'Your name')!, 'River Kid');
-        await type(inputs.find((i) => i.getAttribute('aria-label') === 'A few words about yourself')!, 'Hello.');
+        await type(inputs.find((i) => i.getAttribute('aria-label') === 'A few words about yourself')!, 'Hello, I live up the road.');
         await act(async () => { button('Send')!.click(); });
         await settle();
     }
@@ -273,7 +273,7 @@ describe('Find a community with no account on the phone', () => {
         const [to, signer, req] = knocks.sendKnock.mock.calls[0];
         expect(to).toBe(RIVERSIDE);
         expect(signer.publicKey).toBe(KIM.publicKey);
-        expect(req).toMatchObject({ callsign: 'River Kid', message: 'Hello.' });
+        expect(req).toMatchObject({ callsign: 'River Kid', message: 'Hello, I live up the road.' });
         // The app is given the phone's account as it is stored: not renamed, and not the draft.
         expect(who.setIdentity).toHaveBeenCalledWith(KIM);
         expect(host.textContent).not.toContain('This phone holds a different BeanPool account');

@@ -87,6 +87,7 @@ export * from './show-on-global.js';
 export * from './beanpool-defaults.js';
 export * from './peek-ticket.js';
 export * from './find-community.js';
+export * from './knock-message.js';
 export * from './place-circle.js';
 export * from './address-lookup.js';
 export * from './feedback.js';

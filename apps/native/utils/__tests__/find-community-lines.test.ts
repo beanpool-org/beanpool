@@ -34,7 +34,7 @@ vi.mock('../../components/TotpCodeDialog', () => ({ TotpCodeDialog: () => null, 
 
 import { FIND_TOWN_SEARCH_WORDS, setLanguage } from '@beanpool/core';
 import { DIRECTORY_MESSAGES } from '../community-directory';
-import { KNOCK_CALLSIGN_CHARS, KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, knockFormProblem } from '../knock';
+import { KNOCK_CALLSIGN_CHARS, KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_MESSAGE_MIN_CHARS, knockFormProblem } from '../knock';
 import { LOCATION_NOTES, nearLine } from '../typed-place';
 import { NO_DEVICE_LOCK_MESSAGE } from '../node-admin';
 import { UNSIGNABLE_CHALLENGE_MESSAGE } from '../member-statements';
@@ -55,11 +55,12 @@ describe("Find a community's lines: the lower layers' sentences, in the member's
         knockFormProblem({ callsign: 'W'.repeat(KNOCK_CALLSIGN_CHARS + 1), message: 'Hello' }),
         knockFormProblem({ callsign: 'Wren', message: '   ' }),
         knockFormProblem({ callsign: 'Wren', message: 'x'.repeat(KNOCK_MESSAGE_CHARS + 1) }),
+        knockFormProblem({ callsign: 'Wren', message: 'x'.repeat(KNOCK_MESSAGE_MIN_CHARS - 1) }),
     ];
 
-    it('the knock form has four problems, each its own sentence', () => {
+    it('the knock form has five problems, each its own sentence', () => {
         expect(problems.every((p) => typeof p === 'string')).toBe(true);
-        expect(new Set(problems).size).toBe(4);
+        expect(new Set(problems).size).toBe(5);
     });
 
     it('each fixed sentence reads as its source writes it in English, and is found (bracketed) in the pseudo-locale', () => {
@@ -74,6 +75,7 @@ describe("Find a community's lines: the lower layers' sentences, in the member's
         // The limits are said with their numbers, in the language's own plural.
         expect(inXx(() => findLineWords(problems[1]!))).toContain(String(KNOCK_CALLSIGN_CHARS));
         expect(inXx(() => findLineWords(problems[3]!))).toContain(String(KNOCK_MESSAGE_CHARS));
+        expect(inXx(() => findLineWords(problems[4]!))).toContain(String(KNOCK_MESSAGE_MIN_CHARS));
     });
 
     it('"already a member" is the fallback utils/knock.ts writes when the community gave no words', () => {

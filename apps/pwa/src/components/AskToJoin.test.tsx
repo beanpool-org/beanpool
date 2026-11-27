@@ -85,7 +85,7 @@ describe('Ask to join on the web', () => {
         stub(() => json(201, { knock: { status: 'pending' } }));
         const { container, rerender } = render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} onAsked={() => {}} />);
         const { message, send } = openForm();
-        fireEvent.change(message, { target: { value: 'Hello' } });
+        fireEvent.change(message, { target: { value: 'Hello, I live by the river.' } });
         fireEvent.click(send);
         expect(await screen.findByRole('status')).toHaveTextContent(t(KNOCK_MESSAGES.waiting));
         // Home read its memory again (onAsked): its card says how the request fares from here.
@@ -109,13 +109,39 @@ describe('Ask to join on the web', () => {
         expect(sent).toEqual([]);
     });
 
+    // Marty, 27 Nov 2026: at least 20 characters (core's KNOCK_MESSAGE_MIN_CHARS, the node's and the phone's too).
+    it.each([
+        ['pls', 'pls'],
+        ['hello community', 'hello community'],
+        ['19 characters', 'x'.repeat(19)],
+        ['19 emoji', '🌿'.repeat(19)],
+    ])('a message of %s is too short: the fewest is said and nothing is sent', (_what, words) => {
+        const sent = stub(() => json(201, {}));
+        render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} />);
+        const { message, send } = openForm();
+        fireEvent.change(message, { target: { value: words } });
+        fireEvent.click(send);
+        expect(screen.getByRole('alert')).toHaveTextContent('Please say a little more about yourself: at least 20 characters.');
+        expect(sent).toEqual([]);
+    });
+
+    it('20 characters is enough: the request goes', async () => {
+        const sent = stub(() => json(201, { knock: { status: 'pending' } }));
+        render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} />);
+        const { message, send } = openForm();
+        fireEvent.change(message, { target: { value: '🌿'.repeat(20) } });
+        fireEvent.click(send);
+        expect(await screen.findByRole('status')).toHaveTextContent(t(KNOCK_MESSAGES.waiting));
+        expect(sent).toHaveLength(1);
+    });
+
     it('a refusal is the community\'s own words, and the form stays to try again', async () => {
         const words = 'Too many requests to join have come from this network today (5). Please try again tomorrow.';
         stub(() => json(429, { error: words, code: 'rate_limited' }));
         const onAsked = vi.fn();
         render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} onAsked={onAsked} />);
         const { message, send } = openForm();
-        fireEvent.change(message, { target: { value: 'Hello' } });
+        fireEvent.change(message, { target: { value: 'Hello, I live by the river.' } });
         fireEvent.click(send);
         expect(await screen.findByRole('alert')).toHaveTextContent(words);
         expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
@@ -127,7 +153,7 @@ describe('Ask to join on the web', () => {
         stub(() => json(409, { error: 'You are already a member of this community.', code: 'already_member' }));
         render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} />);
         const { message, send } = openForm();
-        fireEvent.change(message, { target: { value: 'Hello' } });
+        fireEvent.change(message, { target: { value: 'Hello, I live by the river.' } });
         fireEvent.click(send);
         expect(await screen.findByRole('status')).toHaveTextContent('You are already a member of this community.');
         expect(await rememberedKnocks(ME.publicKey)).toEqual([]);
@@ -137,7 +163,7 @@ describe('Ask to join on the web', () => {
         vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
         render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} />);
         const { message, send } = openForm();
-        fireEvent.change(message, { target: { value: 'Hello' } });
+        fireEvent.change(message, { target: { value: 'Hello, I live by the river.' } });
         fireEvent.click(send);
         expect(await screen.findByRole('alert')).toHaveTextContent(t(KNOCK_MESSAGES.unreachable));
     });

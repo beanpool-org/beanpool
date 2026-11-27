@@ -7,7 +7,7 @@
  * None of those files is touched. A community's or the worldwide node's own words are shown exactly as given (slice S4).
  * utils/__tests__/find-community-lines.test.ts holds each to the constant or builder it stands for.
  */
-import { FIND_TOWN_SEARCH_WORDS, NAME_BOX_WORDS, t, tn, word, type AddressSearchWords, type WordKey } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, KNOCK_MESSAGE_MIN_CHARS, NAME_BOX_WORDS, t, tn, word, type AddressSearchWords, type WordKey } from '@beanpool/core';
 import { KNOCK_CALLSIGN_CHARS, KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS } from '../utils/knock';
 import type { TypedPlace } from '../utils/typed-place';
 
@@ -18,7 +18,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'The worldwide community sent an answer this app could not read. Please try again later.': word('The worldwide community sent an answer this app could not read. Please try again later.'),
     // utils/knock.ts sendKnock: a member already, when the community said so with no words of its own.
     'You are already a member of this community.': word('You are already a member of this community.'),
-    // utils/knock.ts knockFormProblem (the two with a limit are below).
+    // utils/knock.ts knockFormProblem (the three with a limit are below).
     'Please give a name of at least 2 characters.': word('Please give a name of at least 2 characters.'),
     'Please say a few words about yourself.': word('Please say a few words about yourself.'),
     // utils/knock.ts knockFormProblem: an invite or a web address as the name (core name-box.ts).
@@ -37,6 +37,9 @@ export function findLineWords(english: string): string {
     if (said) return t(KNOCK_MESSAGES[said]);
     if (english === `Please keep your name to ${KNOCK_CALLSIGN_CHARS} characters.`) {
         return tn(KNOCK_CALLSIGN_CHARS, 'Please keep your name to {n} character.', 'Please keep your name to {n} characters.');
+    }
+    if (english === `Please say a little more about yourself: at least ${KNOCK_MESSAGE_MIN_CHARS} characters.`) {
+        return tn(KNOCK_MESSAGE_MIN_CHARS, 'Please say a little more about yourself: at least {n} character.', 'Please say a little more about yourself: at least {n} characters.');
     }
     if (english === `Please keep your message to ${KNOCK_MESSAGE_CHARS} characters.`) {
         return tn(KNOCK_MESSAGE_CHARS, 'Please keep your message to {n} character.', 'Please keep your message to {n} characters.');

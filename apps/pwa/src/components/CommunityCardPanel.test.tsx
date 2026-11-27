@@ -197,7 +197,7 @@ describe('Ask to join from the browser', () => {
         expect(container.innerHTML).not.toMatch(/beanpool\.org/);
         fireEvent.click(screen.getByTestId('community-card-ask'));
         fireEvent.change(screen.getByTestId('community-card-ask-form-name'), { target: { value: 'Sam' } });
-        fireEvent.change(screen.getByTestId('community-card-ask-form-message'), { target: { value: 'Hello.' } });
+        fireEvent.change(screen.getByTestId('community-card-ask-form-message'), { target: { value: 'Hello, I live by the river.' } });
         fireEvent.click(screen.getByTestId('community-card-ask-form-send'));
         await waitFor(() => expect(onAsked).toHaveBeenCalledTimes(1));
         expect(calls.map(c => new URL(c.url).host)).toEqual(['pool.riverbend.example']);

@@ -202,7 +202,7 @@ async function main(): Promise<void> {
     const knockOf = async (id: Id) => {
         // Every knock here comes from one address: its 3-a-day limit is not what this suite checks.
         db.prepare('UPDATE join_requests SET ip_hash = NULL').run();
-        const r = await call(id, 'POST', '/api/join/knock', { callsign: id.name, message: 'Hello, may I join?' });
+        const r = await call(id, 'POST', '/api/join/knock', { callsign: id.name, message: 'Hello, may I join you all?' });
         if (r.status !== 201) throw new Error(`knock ${r.status} ${show(r.body)}`);
         const list = await call(owner, 'GET', '/api/join/knocks?limit=50');
         return (list.body.knocks as any[]).find((k) => k.pubkey === id.pk).id as string;

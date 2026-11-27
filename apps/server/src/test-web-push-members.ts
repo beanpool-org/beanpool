@@ -211,7 +211,7 @@ async function main(): Promise<void> {
     // ── 6. An asker's row, kept after the key joined ────────────────────────────────────────────────────────────────
     const ana = newId('Ana');
     db.prepare('UPDATE join_requests SET ip_hash = NULL').run();
-    const knock = await call(ana, 'POST', '/api/join/knock', { callsign: ana.name, message: 'Hello, may I join?' });
+    const knock = await call(ana, 'POST', '/api/join/knock', { callsign: ana.name, message: 'Hello, may I join you all?' });
     const anaTab = newBrowser();
     const asked = await call(ana, 'POST', '/api/web-push', subscription(anaTab));
     assert(knock.status === 201 && asked.status === 201 && rows(ana.pk)[0]?.kind === 'asker', `an applicant's browser is an asker row (${knock.status} ${asked.status})`);

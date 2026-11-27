@@ -35,7 +35,7 @@ A community whose server stays silent for a week is no longer listed, and comes 
 ## Asking to join
 
 - Tap **Ask to join** on a community.
-- Check your name, and write a few words about yourself, up to 280 characters: where you live, what you would like to share or learn.
+- Check your name, and write a few words about yourself, from 20 to 280 characters: where you live, what you would like to share or learn.
 - Tap **Send**.
 
 Your request goes straight to that community, not through the global community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.

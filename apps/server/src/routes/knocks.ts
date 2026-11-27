@@ -100,7 +100,7 @@ import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-up
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
 import type { RouteDeps } from './types.js';
-import { word, wordsFor, CALLSIGN_LINK_CODE, notANameIn, notANameWords } from '@beanpool/core';
+import { word, wordsFor, CALLSIGN_LINK_CODE, KNOCK_MESSAGE_MIN_CHARS, notANameIn, notANameWords } from '@beanpool/core';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -172,6 +172,9 @@ function parseMessage(raw: unknown): Parsed<string> {
     if (typeof raw !== 'string') return { ok: false, error: "'message' is required: a few words about yourself." };
     const message = raw.replace(CONTROL, '').trim();
     if (!message) return { ok: false, error: word('Please say a few words about yourself.') };
+    // The fewest (Marty, 27 Nov 2026), counted as the most is: core's one constant, which both apps' forms hold to too, and
+    // core knock-message.ts counts as this does. An older app shows these words in its refusal line.
+    if (chars(message) < KNOCK_MESSAGE_MIN_CHARS) return { ok: false, error: tr('Please say a little more about yourself: at least {n} characters.', { n: KNOCK_MESSAGE_MIN_CHARS }) };
     if (chars(message) > KNOCK_RULES.messageChars) return { ok: false, error: tr('Please keep your message to {n} characters.', { n: KNOCK_RULES.messageChars }) };
     return { ok: true, value: message };
 }

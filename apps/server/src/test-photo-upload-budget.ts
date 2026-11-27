@@ -557,7 +557,7 @@ async function main(): Promise<void> {
             const applicant2 = newId();
             const k2 = await req('POST', '/api/join/knock', applicant2, {
                 callsign: 'KnockTwo',
-                message: 'Hello again.',
+                message: 'Hello again, from up the road.',
                 avatar: hugeImg,
                 fromNode: 'https://global.beanpool.org/',
             });

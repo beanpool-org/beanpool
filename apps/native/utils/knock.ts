@@ -36,7 +36,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { KNOCK_ANSWERABLE_DAYS, isPeekTicket, knockStillAnswerable, notANameIn, notANameWords, t, word, retryAfterSecondsOf, type ForumAskSend } from '@beanpool/core';
+import { KNOCK_ANSWERABLE_DAYS, KNOCK_MESSAGE_MIN_CHARS, isPeekTicket, knockMessageChars, knockStillAnswerable, notANameIn, notANameWords, t, word, retryAfterSecondsOf, type ForumAskSend } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -54,7 +54,11 @@ export const KNOCK_CANCEL_BLOCK_HOURS = 24;
  * keep their import.
  */
 export { KNOCK_ANSWERABLE_DAYS, knockStillAnswerable };
-/** The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending. */
+/**
+ * The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending. The fewest characters
+ * a message may have is core's KNOCK_MESSAGE_MIN_CHARS (knock-message.ts), the node's and the web app's too; re-exported.
+ */
+export { KNOCK_MESSAGE_MIN_CHARS };
 export const KNOCK_MESSAGE_CHARS = 280;
 export const KNOCK_CALLSIGN_CHARS = 20;
 const KNOCK_AVATAR_CHARS = 150_000;
@@ -136,9 +140,11 @@ export function knockFormProblem(req: KnockRequest): string | null {
     const notAName = notANameIn(req.callsign);
     if (notAName) return notANameWords(notAName);
     if (chars(name) > KNOCK_CALLSIGN_CHARS) return `Please keep your name to ${KNOCK_CALLSIGN_CHARS} characters.`;
-    const message = req.message.trim();
-    if (!message) return 'Please say a few words about yourself.';
-    if (chars(message) > KNOCK_MESSAGE_CHARS) return `Please keep your message to ${KNOCK_MESSAGE_CHARS} characters.`;
+    // Counted as the node counts it (core knock-message.ts): control characters out, the ends trimmed, in characters.
+    const length = knockMessageChars(req.message);
+    if (length === 0) return 'Please say a few words about yourself.';
+    if (length < KNOCK_MESSAGE_MIN_CHARS) return `Please say a little more about yourself: at least ${KNOCK_MESSAGE_MIN_CHARS} characters.`;
+    if (length > KNOCK_MESSAGE_CHARS) return `Please keep your message to ${KNOCK_MESSAGE_CHARS} characters.`;
     return null;
 }
 

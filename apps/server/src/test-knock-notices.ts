@@ -217,7 +217,7 @@ async function main() {
     putPushTokenRow(visitorAdmin.pk, 'ExponentPushToken[visitor-admin]', 'android');
     pushedBatches.length = 0;
     const knocker3 = newId('KnockerThree');
-    const knock3 = await call(knocker3, 'POST', '/api/join/knock', { callsign: 'KnockerThree', message: 'Hello from three', fromNode: 'https://global.beanpool.org/' });
+    const knock3 = await call(knocker3, 'POST', '/api/join/knock', { callsign: 'KnockerThree', message: 'Hello from three, I live nearby', fromNode: 'https://global.beanpool.org/' });
     await new Promise(r => setTimeout(r, 50));
     const told3 = pushedBatches.map(p => p.to);
     assert(knock3.status === 201 && told3.includes('ExponentPushToken[owner]') && told3.includes('ExponentPushToken[optin]')

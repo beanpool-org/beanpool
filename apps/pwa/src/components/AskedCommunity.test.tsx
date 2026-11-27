@@ -69,7 +69,7 @@ describe('the asked community on the Find card', () => {
         const onAsked = vi.fn();
         render(<AskedCommunity host="castlemaine.beanpool.org" identity={ME} asked={notAsked} onAsked={onAsked} onClose={() => {}} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Ask to join Castlemaine BeanPool' }));
-        fireEvent.change(screen.getByLabelText('A few words about yourself'), { target: { value: 'I live in Chewton.' } });
+        fireEvent.change(screen.getByLabelText('A few words about yourself'), { target: { value: 'I live in Chewton and keep hens.' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         expect(await screen.findByRole('status')).toHaveTextContent(t(KNOCK_MESSAGES.waiting));
         expect(asked.filter(p => p.endsWith('/api/join/knock'))).toEqual(['https://castlemaine.beanpool.org/api/join/knock']);

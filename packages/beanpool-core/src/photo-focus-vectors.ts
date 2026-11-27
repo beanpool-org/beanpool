@@ -145,3 +145,181 @@ export function checkPhotoFocusVectors(open: () => PhotoFocusFormDriver): string
     }
     return wrong;
 }
+
+/**
+ * Adjust opening by itself on the photos a pick just added, and walking through them (Marty, 28 Nov 2026: "when you add
+ * photo(s) it should come up with the visible area thing for each photo once you add them and maybe a next button if there
+ * are more than one"), as one table run against each app's own focus form. After each step: the photo Adjust shows (`null`:
+ * closed), its button (`next n of count` while new photos are still to come, else `done`), whether Skip is offered, and the
+ * `photoFocus` the form would send.
+ */
+export type PhotoFocusRunStep =
+    /** One pick appended these photos to the form (in the order picked, up to five). */
+    | { op: 'pick'; photos: string[] }
+    /** A tap on the photo at `index` of the form. */
+    | { op: 'tap'; index: number }
+    /** The button (Next or Done) with `focus` chosen for the photo on screen. */
+    | { op: 'done'; focus: PhotoFocus | null }
+    /** Skip with `focus` chosen for the photo on screen. */
+    | { op: 'skip'; focus: PhotoFocus | null }
+    /** Cancel (Back on the phone, Escape on the web). */
+    | { op: 'cancel' }
+    /** The list put in whole with the focus it carries: an edit opened on a post, a draft. */
+    | { op: 'putWhole'; photos: string[]; focus?: unknown };
+
+export interface PhotoFocusRunVectorStep {
+    step: PhotoFocusRunStep;
+    shows: string | null;
+    /** `next n of count` or `done`; left out when Adjust is closed. */
+    button?: string;
+    skip?: boolean;
+    sends: Array<PhotoFocus | null> | null;
+}
+
+/** The scenarios, each from an empty form. */
+export const PHOTO_FOCUS_RUN_VECTORS: ReadonlyArray<{ name: string; steps: ReadonlyArray<PhotoFocusRunVectorStep> }> = [
+    {
+        name: 'three picked at once: Next (1 of 3), Next (2 of 3), Done, each photo keeping its own focus',
+        steps: [
+            { step: { op: 'pick', photos: ['A', 'B', 'C'] }, shows: 'A', button: 'next 1 of 3', skip: true, sends: null },
+            { step: { op: 'done', focus: fA }, shows: 'B', button: 'next 2 of 3', skip: true, sends: [fA] },
+            { step: { op: 'done', focus: fB }, shows: 'C', button: 'done', skip: false, sends: [fA, fB] },
+            { step: { op: 'done', focus: fC }, shows: null, sends: [fA, fB, fC] },
+        ],
+    },
+    {
+        name: 'one picked: Done, as a tap always opened it, and no Skip',
+        steps: [
+            { step: { op: 'pick', photos: ['A'] }, shows: 'A', button: 'done', skip: false, sends: null },
+            { step: { op: 'done', focus: fA }, shows: null, sends: [fA] },
+        ],
+    },
+    {
+        name: 'Skip keeps what was chosen for the photo on screen and leaves every photo not yet shown at none',
+        steps: [
+            { step: { op: 'pick', photos: ['A', 'B', 'C', 'D'] }, shows: 'A', button: 'next 1 of 4', skip: true, sends: null },
+            { step: { op: 'done', focus: fA }, shows: 'B', button: 'next 2 of 4', skip: true, sends: [fA] },
+            { step: { op: 'skip', focus: fB }, shows: null, sends: [fA, fB] },
+        ],
+    },
+    {
+        name: 'Skip on the first photo with nothing moved leaves them all at none',
+        steps: [
+            { step: { op: 'pick', photos: ['A', 'B'] }, shows: 'A', button: 'next 1 of 2', skip: true, sends: null },
+            { step: { op: 'skip', focus: null }, shows: null, sends: null },
+        ],
+    },
+    {
+        name: 'Cancel changes nothing on the photo on screen and stops the walk; the photos before keep theirs',
+        steps: [
+            { step: { op: 'pick', photos: ['A', 'B', 'C'] }, shows: 'A', button: 'next 1 of 3', skip: true, sends: null },
+            { step: { op: 'done', focus: fA }, shows: 'B', button: 'next 2 of 3', skip: true, sends: [fA] },
+            { step: { op: 'cancel' }, shows: null, sends: [fA] },
+        ],
+    },
+    {
+        name: 'a second pick walks only the photos it added, never the ones already on the form',
+        steps: [
+            { step: { op: 'pick', photos: ['A'] }, shows: 'A', button: 'done', skip: false, sends: null },
+            { step: { op: 'done', focus: fA }, shows: null, sends: [fA] },
+            { step: { op: 'pick', photos: ['B', 'C'] }, shows: 'B', button: 'next 1 of 2', skip: true, sends: [fA] },
+            { step: { op: 'done', focus: fB }, shows: 'C', button: 'done', skip: false, sends: [fA, fB] },
+            { step: { op: 'done', focus: null }, shows: null, sends: [fA, fB] },
+        ],
+    },
+    {
+        name: 'a tap opens that one photo alone, with Done, on a form with several',
+        steps: [
+            { step: { op: 'pick', photos: ['A', 'B', 'C'] }, shows: 'A', button: 'next 1 of 3', skip: true, sends: null },
+            { step: { op: 'cancel' }, shows: null, sends: null },
+            { step: { op: 'tap', index: 1 }, shows: 'B', button: 'done', skip: false, sends: null },
+            { step: { op: 'done', focus: fB }, shows: null, sends: [null, fB] },
+        ],
+    },
+    {
+        name: 'an edit opened on a post opens nothing; a tap opens one photo; a pick in the edit walks only its new photos',
+        steps: [
+            { step: { op: 'putWhole', photos: ['U1', 'U2'], focus: [null, fU2] }, shows: null, sends: [null, fU2] },
+            { step: { op: 'tap', index: 0 }, shows: 'U1', button: 'done', skip: false, sends: [null, fU2] },
+            { step: { op: 'done', focus: fA }, shows: null, sends: [fA, fU2] },
+            { step: { op: 'pick', photos: ['N1', 'N2'] }, shows: 'N1', button: 'next 1 of 2', skip: true, sends: [fA, fU2] },
+            { step: { op: 'done', focus: fF }, shows: 'N2', button: 'done', skip: false, sends: [fA, fU2, fF] },
+            { step: { op: 'done', focus: null }, shows: null, sends: [fA, fU2, fF] },
+        ],
+    },
+    {
+        name: 'the same photo twice in one pick is shown once and shares its one focus',
+        steps: [
+            { step: { op: 'pick', photos: ['A', 'A', 'B'] }, shows: 'A', button: 'next 1 of 2', skip: true, sends: null },
+            { step: { op: 'done', focus: fA }, shows: 'B', button: 'done', skip: false, sends: [fA, fA] },
+            { step: { op: 'done', focus: fB }, shows: null, sends: [fA, fA, fB] },
+        ],
+    },
+    {
+        name: 'a pick that kept no photo opens nothing; a list put in whole closes a walk',
+        steps: [
+            { step: { op: 'pick', photos: [] }, shows: null, sends: null },
+            { step: { op: 'pick', photos: ['A', 'B'] }, shows: 'A', button: 'next 1 of 2', skip: true, sends: null },
+            { step: { op: 'putWhole', photos: ['T1'] }, shows: null, sends: null },
+        ],
+    },
+];
+
+/** One app's focus form with its Adjust walk, driven step by step. The form keeps its own photo list as its page does. */
+export interface PhotoFocusRunDriver {
+    /** The form's photo list set by a pick. */
+    setPhotos(photos: string[]): void;
+    /** What the form tells its focus form after a pick: the photos the pick added. */
+    added(photos: string[]): void;
+    /** A tap on one of the form's photos. */
+    open(photo: string): void;
+    /** The button (Next or Done) with `focus` chosen for the photo on screen. */
+    done(focus: PhotoFocus | null): void;
+    /** Skip with `focus` chosen for the photo on screen. */
+    skip(focus: PhotoFocus | null): void;
+    /** Cancel. */
+    cancel(): void;
+    /** The list put in whole with the focus it carries (`undefined`: none). */
+    putWhole(photos: string[], focus: unknown): void;
+    /** The photo Adjust shows (`null`: closed) and the walk's step (`null`: one photo). */
+    showing(): { photo: string | null; step: { n: number; count: number; more: boolean } | null };
+    /** The `photoFocus` the form would send for its photos now. */
+    sent(): Array<PhotoFocus | null> | null;
+}
+
+/** Runs every walk scenario on a fresh form from `open`; each step that is wrong, in words (none: all hold). */
+export function checkPhotoFocusRunVectors(open: () => PhotoFocusRunDriver): string[] {
+    const wrong: string[] = [];
+    for (const { name, steps } of PHOTO_FOCUS_RUN_VECTORS) {
+        const form = open();
+        let photos: string[] = [];
+        steps.forEach(({ step, shows, button, skip, sends }, i) => {
+            switch (step.op) {
+                case 'pick': {
+                    const next = photosAfterStep(photos, step);
+                    const added = next.slice(photos.length);
+                    photos = next;
+                    form.setPhotos(next);
+                    form.added(added);
+                    break;
+                }
+                case 'tap': form.open(photos[step.index]!); break;
+                case 'done': form.done(step.focus); break;
+                case 'skip': form.skip(step.focus); break;
+                case 'cancel': form.cancel(); break;
+                case 'putWhole': photos = step.photos.slice(); form.putWhole(photos, step.focus); break;
+            }
+            const now = form.showing();
+            const got = {
+                shows: now.photo,
+                ...(now.photo === null ? {} : { button: now.step?.more ? `next ${now.step.n} of ${now.step.count}` : 'done', skip: !!now.step?.more }),
+                sends: form.sent(),
+            };
+            const want = { shows, ...(shows === null ? {} : { button, skip }), sends };
+            if (JSON.stringify(got) !== JSON.stringify(want)) {
+                wrong.push(`${name}, step ${i + 1} (${step.op}): got ${JSON.stringify(got)}, should be ${JSON.stringify(want)}`);
+            }
+        });
+    }
+    return wrong;
+}

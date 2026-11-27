@@ -3,8 +3,9 @@ import {
     DEFAULT_PHOTO_FOCUS, MARKET_CARD_SHELL, photoFocusAt, photoFocusFromStored, photoFocusList, photoFocusObjectPosition, photoFocusOf,
     photoFocusPercent, photoFocusToward, photoFocusWindow, storedPhotoFocus,
     NO_PHOTO_FOCUS, photoFocusByPhoto, photoFocusForPhotos, photoFocusOfPhoto, withPhotoFocus, type PhotoFocus, type PhotoFocusByPhoto,
+    photoFocusShowingNext, photoFocusShowingOf, photoFocusShowingPhoto, photoFocusShowingStep, type PhotoFocusShowing,
 } from '../index.js';
-import { checkPhotoFocusVectors, type PhotoFocusFormDriver } from '../photo-focus-vectors.js';
+import { checkPhotoFocusRunVectors, checkPhotoFocusVectors, type PhotoFocusFormDriver, type PhotoFocusRunDriver } from '../photo-focus-vectors.js';
 
 describe('photo focus (a card crop the member picks, Marty 26 Nov 2026)', () => {
     it('no focus is the grid card\'s crop today: 50% across, 33% down', () => {
@@ -163,5 +164,58 @@ describe('a form\'s focus points are held by photo, so each goes wherever its ph
         expect(photoFocusForPhotos(['x', 'b', 'a'], after)).toEqual([null, { x: 0.123, y: 1 }, { x: 0.5, y: 0.5 }]);
         expect(photoFocusForPhotos([], after)).toBeNull();
         expect(photoFocusForPhotos(['x'], after)).toBeNull();
+    });
+});
+
+describe('Adjust opens by itself on the photos a pick adds, and walks through them (Marty, 28 Nov 2026)', () => {
+    /** A form built from core's helpers alone, as both apps' hooks are: one `showing` beside the focus held by photo. */
+    const coreRun = (overrides: Partial<{ skipKeeps: boolean; walkWhole: boolean; resetCloses: boolean }> = {}): PhotoFocusRunDriver => {
+        const o = { skipKeeps: true, walkWhole: false, resetCloses: true, ...overrides };
+        let photos: string[] = [];
+        let held: PhotoFocusByPhoto = NO_PHOTO_FOCUS;
+        let showing: PhotoFocusShowing | null = null;
+        const keep = (f: PhotoFocus | null) => { const p = photoFocusShowingPhoto(showing); if (p !== null) held = withPhotoFocus(held, p, f); };
+        return {
+            setPhotos: (next) => { photos = next; },
+            added: (added) => { showing = photoFocusShowingOf(o.walkWhole ? photos : added); },
+            open: (photo) => { showing = photoFocusShowingOf([photo]); },
+            done: (f) => { keep(f); showing = photoFocusShowingNext(showing); },
+            skip: (f) => { if (o.skipKeeps) keep(f); showing = null; },
+            cancel: () => { showing = null; },
+            putWhole: (next, focus) => { photos = next; held = photoFocusByPhoto(next, focus); if (o.resetCloses) showing = null; },
+            showing: () => ({ photo: photoFocusShowingPhoto(showing), step: photoFocusShowingStep(showing) }),
+            sent: () => photoFocusForPhotos(photos, held),
+        };
+    };
+
+    it('core\'s helpers hold every walk in the table', () => {
+        expect(checkPhotoFocusRunVectors(() => coreRun())).toEqual([]);
+    });
+
+    it('the table catches a walk over every photo on the form, a Skip that drops the photo on screen, and a list put in whole left open', () => {
+        expect(checkPhotoFocusRunVectors(() => coreRun({ walkWhole: true })).some((w) => w.startsWith('a second pick walks only the photos it added'))).toBe(true);
+        expect(checkPhotoFocusRunVectors(() => coreRun({ skipKeeps: false })).some((w) => w.startsWith('Skip keeps what was chosen'))).toBe(true);
+        expect(checkPhotoFocusRunVectors(() => coreRun({ resetCloses: false })).some((w) => w.startsWith('a pick that kept no photo opens nothing'))).toBe(true);
+    });
+
+    it('a walk: each photo once in the order picked, at most five; n of count while more are to come; closed after the last', () => {
+        expect(photoFocusShowingOf([])).toBeNull();
+        expect(photoFocusShowingOf(null)).toBeNull();
+        expect(photoFocusShowingOf(['', 7, null])).toBeNull();
+        expect(photoFocusShowingOf(['a', 'b', 'a', '', 'c'])).toEqual({ photos: ['a', 'b', 'c'], at: 0 });
+        expect(photoFocusShowingOf(['1', '2', '3', '4', '5', '6'])!.photos).toEqual(['1', '2', '3', '4', '5']);
+        const one = photoFocusShowingOf(['a']);
+        expect(photoFocusShowingPhoto(one)).toBe('a');
+        expect(photoFocusShowingStep(one)).toBeNull();
+        expect(photoFocusShowingNext(one)).toBeNull();
+        const two = photoFocusShowingOf(['a', 'b']);
+        expect(photoFocusShowingStep(two)).toEqual({ n: 1, count: 2, more: true });
+        const second = photoFocusShowingNext(two);
+        expect(photoFocusShowingPhoto(second)).toBe('b');
+        expect(photoFocusShowingStep(second)).toEqual({ n: 2, count: 2, more: false });
+        expect(photoFocusShowingNext(second)).toBeNull();
+        expect(photoFocusShowingPhoto(null)).toBeNull();
+        expect(photoFocusShowingStep(null)).toBeNull();
+        expect(photoFocusShowingNext(null)).toBeNull();
     });
 });

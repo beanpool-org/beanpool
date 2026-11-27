@@ -591,7 +591,7 @@ describe("CommunityShapeSection — where members' copies go (vault rethink VR2)
         fireEvent.click(screen.getByTestId('shape-expand-recoveryCopies'));
         const group = screen.getByRole('radiogroup', { name: "Where members' copies go" });
         expect(within(group).getAllByRole('radio')).toHaveLength(3);
-        expect(within(group).getByText("Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Where a member lets your admins bring them back, your server keeps half of a locked copy and the vault the other half, and neither can open it alone. Nothing on your server needs the vault.")).toBeInTheDocument();
+        expect(within(group).getByText("BeanPool's key vault, a separate server that BeanPool looks after and can open, will keep members' sign-in copies. It is not running yet: until it is, members' copies are kept on your server, as under This server. Once it is, where a member lets your admins bring them back, your server keeps half of a locked copy and the vault the other half, and neither can open it alone. Nothing on your server needs the vault.")).toBeInTheDocument();
         expect(within(group).getByText(/A copy a member made elsewhere is theirs: this community can't remove it\./)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 

@@ -822,9 +822,9 @@ async function main(): Promise<void> {
     assert(historyOf('sec.role').length === roles6, `6. the claim's own owner grant is no second alert (${historyOf('sec.role').length - roles6})`);
 
     // ── 7. Exhaustive table over every alert/brake word: plain "wrong sign-in codes", no "admin password" left ──
-    const mockRefuse = (reason: 'source' | 'node') => {
+    const mockRefuse = (reason: 'source' | 'node', kind: 'signin' | 'recovery' = 'signin') => {
         const ctx: any = { status: 0, body: null, headers: {} as Record<string, string>, set(k: string, v: string) { this.headers[k] = v; } };
-        brake.refuseBraked(ctx, { retryAfter: 17, reason });
+        brake.refuseBraked(ctx, { retryAfter: 17, reason }, kind);
         return String(ctx.body?.error ?? '');
     };
     const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -851,6 +851,15 @@ async function main(): Promise<void> {
         assert(
             text.length > 0 && /wrong sign-in codes?/i.test(text) && !/admin password/i.test(text) && !/wrong[^.\n]*password/i.test(text),
             `7. ${label}: says wrong sign-in code(s), no stale admin password (${JSON.stringify(text)})`,
+        );
+    }
+    for (const [label, text] of [
+        ['live refuseBraked(source, recovery)', mockRefuse('source', 'recovery')],
+        ['live refuseBraked(node, recovery)', mockRefuse('node', 'recovery')],
+    ] as const) {
+        assert(
+            text.length > 0 && /wrong recovery codes/i.test(text) && !/sign-in|sign in with your key|password/i.test(text),
+            `7. ${label}: says wrong recovery codes, never sign-in or password (${JSON.stringify(text)})`,
         );
     }
 

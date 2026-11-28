@@ -342,7 +342,10 @@ async function main() {
         if (r.status !== 200 || r.body.matches !== false) throw new Error(`wrong-code check ${k} answered ${r.status}`);
     }
     const braked = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: annaSession, body: { code: code2 }, keepBrake: true });
-    assert(braked.status === 429 && braked.body.passwordBackoff === true, `7. after 6 wrong codes the source is braked, even for the right one (got ${braked.status})`);
+    assert(braked.status === 429 && braked.body.passwordBackoff === true
+        && /wrong recovery codes/i.test(String(braked.body.error || ''))
+        && !/sign-in|sign in with your key|password/i.test(String(braked.body.error || '')),
+        `7. after 6 wrong codes the source is braked with recovery-code wording, even for the right one (got ${braked.status}: ${braked.body.error})`);
     resetPasswordBrake();
 
     // ── 8. The token ──

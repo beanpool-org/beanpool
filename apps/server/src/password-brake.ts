@@ -134,6 +134,10 @@ export const SIGNIN_CODE_BRAKE_WORDS = {
         `Too many wrong sign-in codes from your network. Try again in ${waitSec}s, or from another network (mobile data, another Wi-Fi), or sign in with your key.`,
     refuseNode: (waitSec: number) =>
         `This node is getting a lot of wrong sign-in codes from elsewhere, so it is checking fewer right now. Try again in ${waitSec}s, or from another network, or sign in with your key.`,
+    refuseRecoverySource: (waitSec: number) =>
+        `Too many wrong recovery codes from your network. Try again in ${waitSec}s, or from another network (mobile data, another Wi-Fi).`,
+    refuseRecoveryNode: (waitSec: number) =>
+        `This node is getting a lot of wrong recovery codes from elsewhere, so it is checking fewer right now. Try again in ${waitSec}s, or from another network.`,
 } as const;
 
 interface SourceState {
@@ -416,15 +420,24 @@ export function settlePasswordAttempt(key: string, ok: boolean, reset = true, no
     for (const w of wake) w();
 }
 
-/** Answer a request the brake refused. A recovery code's caller sets its own words after (the take-over, the restore). */
-export function refuseBraked(ctx: Koa.Context | any, refusal: { retryAfter: number; reason: 'source' | 'node' }): void {
+/** Answer a request the brake refused. Pass `kind: 'recovery'` on recovery-code routes so an already-signed-in owner is not told to sign in with their key. */
+export function refuseBraked(
+    ctx: Koa.Context | any,
+    refusal: { retryAfter: number; reason: 'source' | 'node' },
+    kind: 'signin' | 'recovery' = 'signin',
+): void {
     const wait = refusal.retryAfter;
     ctx.status = 429;
     if (typeof ctx.set === 'function') ctx.set('Retry-After', String(wait));
-    ctx.body = {
-        error: refusal.reason === 'source'
+    const error = kind === 'recovery'
+        ? (refusal.reason === 'source'
+            ? SIGNIN_CODE_BRAKE_WORDS.refuseRecoverySource(wait)
+            : SIGNIN_CODE_BRAKE_WORDS.refuseRecoveryNode(wait))
+        : (refusal.reason === 'source'
             ? SIGNIN_CODE_BRAKE_WORDS.refuseSource(wait)
-            : SIGNIN_CODE_BRAKE_WORDS.refuseNode(wait),
+            : SIGNIN_CODE_BRAKE_WORDS.refuseNode(wait));
+    ctx.body = {
+        error,
         retryAfter: wait,
         // Which rule held it: this source's own count, or the node-wide one (design case 18 §9 S2 reads it).
         reason: refusal.reason,

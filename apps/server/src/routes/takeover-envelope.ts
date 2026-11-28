@@ -161,7 +161,7 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
         const key = clientLimiterKey(ctx);
         const admission = await acquirePasswordAttempt(key);
         if (!admission.admitted) {
-            refuseBraked(ctx, admission);
+            refuseBraked(ctx, admission, 'recovery');
             return;
         }
         let matches = false;

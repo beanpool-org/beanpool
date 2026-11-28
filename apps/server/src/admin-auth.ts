@@ -127,7 +127,9 @@ function sentBreakGlassCode(ctx: any): string | null {
         ctx.request?.headers?.['x-break-glass-code'] ||
         ctx.headers?.['x-break-glass-code'] ||
         ctx.requestBody?.breakGlassCode || ctx.request?.body?.breakGlassCode;
-    return raw ? String(raw).trim() : null;
+    if (typeof raw !== 'string') return null;
+    if (raw.length > 256) return raw;
+    return raw.trim() || null;
 }
 
 export const TOKEN_REFUSED_CODE = 'token_not_allowed';

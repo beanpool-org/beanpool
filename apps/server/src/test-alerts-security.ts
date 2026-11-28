@@ -331,6 +331,7 @@ async function main(): Promise<void> {
     advance(16 * MIN);
     await tick();
     assert(lastHistory('sec.password-burst')?.kind === 'cleared', `2. an hour without another, then the hold: resolved (${lastHistory('sec.password-burst')?.kind})`);
+    const clearedBurstDetail = lastHistory('sec.password-burst')?.detail ?? '';
     brake.resetPasswordBrake();
 
     issueBreakGlassCode(owner, 'a test', 'app');
@@ -826,14 +827,13 @@ async function main(): Promise<void> {
         brake.refuseBraked(ctx, { retryAfter: 17, reason });
         return String(ctx.body?.error ?? '');
     };
-    const clearedBurst = historyOf('sec.password-burst').find((e) => e.kind === 'cleared');
     const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
     const readGuideLine = (rel: string, needle: string) =>
         fs.readFileSync(path.join(repoRoot, rel), 'utf8').split('\n').find((l) => l.includes(needle)) ?? '';
     const brakeWordsTable: Array<[string, string]> = [
         ['alerts.PASSWORD_BURST_ALERT_WORDS.title', alerts.PASSWORD_BURST_ALERT_WORDS.title],
         ['alerts.PASSWORD_BURST_ALERT_WORDS.cleared', alerts.PASSWORD_BURST_ALERT_WORDS.cleared],
-        ['live cleared sec.password-burst history detail', clearedBurst?.detail ?? ''],
+        ['live cleared sec.password-burst history detail', clearedBurstDetail],
         ['SIGNIN_CODE_BRAKE_WORDS.nodeCapLog', brake.SIGNIN_CODE_BRAKE_WORDS.nodeCapLog(brake.NODE_CHECKS_PER_MIN)],
         ['SIGNIN_CODE_BRAKE_WORDS.nodeCapAlert', brake.SIGNIN_CODE_BRAKE_WORDS.nodeCapAlert(brake.NODE_CHECKS_PER_MIN)],
         ['SIGNIN_CODE_BRAKE_WORDS.sourceBackoffLog', brake.SIGNIN_CODE_BRAKE_WORDS.sourceBackoffLog(6, 'ip#test1234', 60)],

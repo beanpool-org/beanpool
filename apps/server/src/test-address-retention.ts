@@ -196,7 +196,7 @@ async function main() {
         resetUntrustedForwardersForTests();
         // What the brake guards (the node has no admin password): an owner's break-glass code on the enrol route, sent
         // here wrong, through the real checkAdminAuth.
-        const enrolFrom = (ip: string) => ({ state: {}, ip, path: '/api/local/admin/auth/enrol', method: 'POST', headers: { 'x-break-glass-code': 'not-a-code' },
+        const enrolFrom = (ip: string) => ({ state: {}, ip, path: '/api/local/admin/auth/enrol', method: 'POST', headers: { 'x-break-glass-code': 'bg-0000-0000-0000-0000' },
             status: 0, body: null as unknown, set: () => { }, get: () => '' });
         const results: string[] = [];
         // The tarpit is not reset between them: resetAdminAuthTarpit() clears the brake too.
@@ -212,7 +212,7 @@ async function main() {
         for (let i = 0; i < 6; i++) notePasswordFailure('2001:db8:5:6::/64');
         const v6After = await acquirePasswordAttempt('2001:db8:5:6::/64');
         assert(!v6After.admitted, '2. …and so it does for an IPv6 /64');
-        const brakeLines = logText().split('\n').filter((l) => l.includes('[password-brake]') && l.includes('wrong admin passwords from'));
+        const brakeLines = logText().split('\n').filter((l) => l.includes('[password-brake]') && l.includes('wrong sign-in codes from'));
         assert(brakeLines.length >= 2, `2. the brake logged each source once (${brakeLines.length})`);
         const tagOf50 = logTag?.logAddressTag('203.0.113.50');
         assert(!!tagOf50 && brakeLines.some((l) => l.includes(`from ${tagOf50} `)), `2. the brake's line names the address by its daily hash (${tagOf50})`);

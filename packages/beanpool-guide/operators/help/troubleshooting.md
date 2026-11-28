@@ -40,7 +40,7 @@ Run it again: a data folder it had moved out of the way is put back before the s
 
 ## You cannot sign in
 
-- "Too many wrong admin passwords": the server counts wrong break-glass and recovery codes with that message, and signing in from the app is never slowed by it. Wait, or try from another network. See Rate limits.
+- "Too many wrong sign-in codes": the server counts wrong break-glass and recovery codes with that message, and signing in from the app is never slowed by it. Wait, or try from another network. See Rate limits.
 - Lost your phone, or no owner can sign in: see Signing in (If you are locked out).
 - Looking for the admin password or the two-factor code: a server has neither any more. Owners sign in with their phone (Signing in). A script or the fleet manager uses an automation token (Access and security).
 - Settings keeps signing you out: a sign-in from the app's Manage button ends after 15 minutes unused (press Manage again to come straight back). A computer signed in by scanning a code ends after 2 hours unused. Both end after 12 hours at most, and when the server restarts.

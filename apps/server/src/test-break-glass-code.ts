@@ -59,6 +59,8 @@ async function main(): Promise<void> {
         'bg-1234-5678-9012-345g',
         'claim-1234-5678-9012-3456',
         'bg1234567890123456',
+        `${' '.repeat(260)}${code1}`,
+        'x'.repeat(1000),
     ];
     for (const bad of badShapes) {
         assert(!isBreakGlassCodeShape(bad), `isBreakGlassCodeShape rejects invalid shape: ${JSON.stringify(bad)}`);

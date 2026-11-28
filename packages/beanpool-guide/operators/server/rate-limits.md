@@ -125,7 +125,7 @@ The message says which:
 - "You have sent a lot of reports recently": reports, 10 an hour.
 - "You've shared a lot of photos today. Try again tomorrow.": photo upload day budget exceeded (HTTP 429).
 - "This community's storage is nearly full. Tell its owner.": free-disk floor reached on the disk image store (HTTP 507).
-- "Too many wrong admin passwords from your network", or "This node is getting a lot of wrong admin passwords from elsewhere": the wrong-code brake. The words still say passwords: what they count is wrong codes.
+- "Too many wrong sign-in codes from your network", or "This node is getting a lot of wrong sign-in codes from elsewhere": the wrong-code brake.
 - "Your app has sent more requests than this community holds at once. Please wait a minute and try again." (HTTP 503): signed requests in flight, one app's share (3,000 for an established member's, 600 for a newer account's, more at a gateway number over 120).
 - "This community is very busy right now. Please try again in a minute." (HTTP 503): signed requests in flight, everyone with an account together (600,000).
 - "This community is busy with new members right now. Please try again in a minute." (HTTP 503): signed requests in flight from newer accounts (600 each, more at a gateway number over 120; 350,000 together).

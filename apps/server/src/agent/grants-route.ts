@@ -69,7 +69,7 @@ const ROLE_ERROR = 'Only an owner or an admin of this node can see its AI assist
 export const OWNER_ONLY_CODE = 'agent_owner_only';
 const OWNER_ONLY_ERROR = 'Only an owner makes an assistant token. Connect yours by adding this server\'s address as a connector in your assistant and approving on your phone.';
 const SWITCH_OFF_ERROR = 'AI assistants are turned off on this server: an owner turns them on here first';
-const NEEDS_KEY_ERROR = 'Connect an assistant from the app: sign in with your own key (Manage, or a computer signed in by scanning a code). An assistant acts for a member, and the admin password is nobody\'s.';
+const NEEDS_KEY_ERROR = 'Connect an assistant from the app: sign in with your own key (Manage, or a computer signed in by scanning a code). An assistant acts for a named member.';
 
 type Role = 'owner' | 'admin';
 

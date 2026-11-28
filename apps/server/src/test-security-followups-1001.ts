@@ -143,29 +143,33 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     const wrongPw = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-password': 'not-the-password', ...viaTunnel(freshIp()) } });
     assert(wrongPw.status === answers[0].status && wrongPw.text === answers[3].text, `the same answer as any other value, or none (${show(wrongPw)})`);
     assert(sourceClosedUntil(limiterKeyForIp(X)) <= Date.now(), 'nothing was checked, so nothing was braked: that address is not held');
-    // On the enrol routes the brake counts each wrong one: X sends five, so one more is checked and then X waits.
-    // The sixth closes the address, and the server then holds its reply about as long as the closure lasts: a seventh sent after
-    // that reply can arrive once the closure is over (2.08 s after it opened, in run 41391269443). So it goes while the sixth is held.
-    // Not code-shaped, so none of them takes the one check a held address still has for a real code (below).
-    const enrolWrong = () => req('/api/local/admin/auth/enrol', { method: 'POST', headers: asCode('x-break-glass-code', 'not-a-code'), body: { memberPubkey: target.pub, role: 'admin' } });
+    // On the enrol routes the brake counts each wrong break-glass-shaped code: X sends five, so one more is checked
+    // and then X waits (non-code-shaped junk is refused 401 before the brake without counting).
+    const enrolWrong = (i: number) => req('/api/local/admin/auth/enrol', {
+        method: 'POST',
+        headers: asCode('x-break-glass-code', `bg-0000-0000-0000-${i.toString(16).padStart(4, '0')}`),
+        body: { memberPubkey: target.pub, role: 'admin' },
+    });
     const firstFive: number[] = [];
-    for (let i = 0; i < SOURCE_FREE_FAILURES; i++) firstFive.push((await enrolWrong()).status);
-    const sixthSent = enrolWrong();
+    for (let i = 0; i < SOURCE_FREE_FAILURES; i++) firstFive.push((await enrolWrong(i)).status);
+    const sixthSent = enrolWrong(SOURCE_FREE_FAILURES);
     for (let i = 0; i < 500 && sourceClosedUntil(limiterKeyForIp(X)) <= Date.now(); i++) await new Promise((done) => setTimeout(done, 10));
-    const seventh = await enrolWrong();
+    const closedAtSixth = sourceClosedUntil(limiterKeyForIp(X)) > Date.now();
+    // While X is closed, the enrol route still allows one check of the owner's real code, then holds X (429) on further tries.
+    const other = member('BgFromBraked');
+    const fromBraked = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: asCode('x-break-glass-code'), body: { memberPubkey: other.pub, role: 'admin' } });
+    const afterHeldCheck = await enrolWrong(SOURCE_FREE_FAILURES + 1);
     const sixth = await sixthSent;
-    assert(SOURCE_FREE_FAILURES === 5 && firstFive.every((st) => st === 401) && sixth.status === 401 && seventh.status === 429 && seventh.json?.passwordBackoff === true
-        && roleOf(target.pub) === null,
-        `on the enrol route the brake counts each wrong one: the ${SOURCE_FREE_FAILURES + 1}th is checked and then that address waits (${firstFive.join(',')}; ${sixth.status}, ${seventh.status})`);
+    assert(SOURCE_FREE_FAILURES === 5 && firstFive.every((st) => st === 401) && sixth.status === 401 && closedAtSixth
+        && afterHeldCheck.status === 429 && afterHeldCheck.json?.passwordBackoff === true && roleOf(target.pub) === null,
+        `on the enrol route the brake counts each wrong break-glass code: the ${SOURCE_FREE_FAILURES + 1}th closes that address and further tries wait (${firstFive.join(',')}; ${sixth.status}, ${afterHeldCheck.status})`);
 
-    // The enrol route takes it, as the docs say: from a clean address, and from the braked one too.
+    // The enrol route takes it, as the docs say: from a clean address, and from the braked one too (checked above).
     const enrolByCode = await req('/api/local/admin/auth/break-glass/enrol', {
         method: 'POST', headers: { 'x-break-glass-code': code, ...viaTunnel(freshIp()) }, body: { memberPubkey: helper.pub, role: 'admin' },
     });
     assert(enrolByCode.status === 200 && enrolByCode.json?.alertEmitted === true && roleOf(helper.pub) === 'admin',
         `on the enrol route the code enrols a new admin key, with the public alert (${show(enrolByCode)})`);
-    const other = member('BgFromBraked');
-    const fromBraked = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: asCode('x-break-glass-code'), body: { memberPubkey: other.pub, role: 'admin' } });
     assert(fromBraked.status === 200 && roleOf(other.pub) === 'admin', `and from the braked address too, on the enrol route (${show(fromBraked)})`);
 
     // An old unsalted row: rewritten at boot (break-glass-code.ts upgradeBreakGlassHashes) ...

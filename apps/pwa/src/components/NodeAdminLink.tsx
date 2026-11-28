@@ -3,8 +3,8 @@
  * owner or admin (GET /api/node-admin/me, signed with the member key — nothing cached, nothing editable).
  *
  * A plain link to the node's /settings. No session carries over: the web app's member identity is a key in
- * this browser, and /settings accepts only its own admin session (the node password, plus the node's 2FA if
- * on) or the app's one-time key link. The web app deliberately does NOT mint that key link itself — the phone
+ * this browser, and /settings accepts only its own admin key session (Manage on the phone, or scanning a code).
+ * The web app deliberately does NOT mint that key link itself — the phone
  * gates it behind its own unlock, and a browser has no equivalent, so doing it here would turn anyone with
  * this browser profile into an admin. Instead /settings offers "Sign in with your phone": a QR the BeanPool app
  * scans and approves after the phone's unlock (apps/server/src/settings-signin-pairing.ts). The row says so.
@@ -52,8 +52,8 @@ export function NodeAdminLink() {
                             <span className="block font-bold text-[15px] break-words">{t('Manage {name}', { name })}</span>
                             <span className="block text-xs text-nature-500 dark:text-nature-300 mt-0.5 leading-relaxed">
                                 {role === 'owner'
-                                    ? t("You're an owner. Open Settings on this computer, then scan its code with the BeanPool app (Settings → Manage this community from a computer; older apps: Sign in on a computer). Or use the admin password.")
-                                    : t("You're an admin. Open Settings on this computer, then scan its code with the BeanPool app (Settings → Manage this community from a computer; older apps: Sign in on a computer). Or use the admin password.")}
+                                    ? t("You're an owner. Open Settings on this computer, then scan its code with the BeanPool app (Settings → Manage this community from a computer; older apps: Sign in on a computer).")
+                                    : t("You're an admin. Open Settings on this computer, then scan its code with the BeanPool app (Settings → Manage this community from a computer; older apps: Sign in on a computer).")}
                             </span>
                         </span>
                     </span>

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { DM_NONCE_PREFIX } from '../dm-crypto.js';
 import {
     addressCardDigest, addressCardFromText, addressCardLink, addressCardVerifies, homeTail, openOutsideLine, outsideReceiptPayload, HOME_LINE_MAX,
     sealOutsideLine, signAddressCard, OutsideLineNotVerifiedError, type AddressCard,
@@ -97,7 +98,10 @@ describe('a line across communities', () => {
         // Never match a short ASCII slice like 'Ana' against base64 ciphertext: random base64 spells it ~1 in 1,000 runs.
         const wire = JSON.parse(payload) as { v: number; c: string; n: string };
         expect(Object.keys(wire).sort()).toEqual(['c', 'n', 'v']);
-        const sealedBytes = Buffer.concat([Buffer.from(wire.c, 'base64'), Buffer.from(wire.n, 'base64')]);
+        expect(wire.n.startsWith(DM_NONCE_PREFIX)).toBe(true);
+        const nonceBytes = Buffer.from(wire.n.slice(DM_NONCE_PREFIX.length), 'base64');
+        expect(nonceBytes.length).toBe(24);
+        const sealedBytes = Buffer.concat([Buffer.from(wire.c, 'base64'), nonceBytes]);
         expect(sealedBytes.includes(Buffer.from('Ana Ríos', 'utf8'))).toBe(false);
         expect(sealedBytes.includes(Buffer.from('Hello from Riverside', 'utf8'))).toBe(false);
         expect(payload).not.toContain('Ana Ríos');

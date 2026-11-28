@@ -22,7 +22,7 @@ const SCRYPT_PREFIX = 'scrypt$';
 const CODE_SHAPE = /^bg-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/;
 const LEGACY_SHAPE = /^[0-9a-f]{64}$/;
 /** Max raw length accepted before trimming; a real code is 22 chars (`bg-xxxx-xxxx-xxxx-xxxx`), plus optional spaces. */
-const MAX_RAW_CODE_LENGTH = 256;
+export const MAX_RAW_CODE_LENGTH = 256;
 
 /** A new code, e.g. bg-a1b2-c3d4-e5f6-7890. */
 export function generateBreakGlassCode(): string {

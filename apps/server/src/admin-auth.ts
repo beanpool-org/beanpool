@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, isPhoneHandoffSession, FRESH_PROOF_WINDOW_MS, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, type AdminSessionBinding } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, refuseBraked, resetPasswordBrake, passwordBrakeNow, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
-import { isBreakGlassCodeShape } from './break-glass-code.js';
+import { isBreakGlassCodeShape, MAX_RAW_CODE_LENGTH } from './break-glass-code.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
 import { isNodeOwner, nodeRoleOf } from './engine/node-roles.js';
@@ -128,7 +128,7 @@ function sentBreakGlassCode(ctx: any): string | null {
         ctx.headers?.['x-break-glass-code'] ||
         ctx.requestBody?.breakGlassCode || ctx.request?.body?.breakGlassCode;
     if (typeof raw !== 'string') return null;
-    if (raw.length > 256) return raw;
+    if (raw.length > MAX_RAW_CODE_LENGTH) return raw;
     return raw.trim() || null;
 }
 

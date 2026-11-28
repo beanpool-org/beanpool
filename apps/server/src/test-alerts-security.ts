@@ -862,6 +862,16 @@ async function main(): Promise<void> {
             `7. ${label}: says wrong recovery codes, never sign-in or password (${JSON.stringify(text)})`,
         );
     }
+    for (const [label, rel, needle] of [
+        ['operators/server/rate-limits.md brake message line', 'packages/beanpool-guide/operators/server/rate-limits.md', 'Too many wrong sign-in codes from your network'],
+        ['operators/help/troubleshooting.md brake line', 'packages/beanpool-guide/operators/help/troubleshooting.md', 'Too many wrong sign-in codes'],
+    ] as const) {
+        const text = readGuideLine(rel, needle);
+        assert(
+            /wrong recovery codes/i.test(text),
+            `7. ${label}: also documents wrong recovery codes (${JSON.stringify(text)})`,
+        );
+    }
 
     await ntfy.close();
     console.log(`\n${testsPassed}/${testsRun} passed`);

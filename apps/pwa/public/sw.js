@@ -4,7 +4,7 @@
  *
  * Registered by the web app only at a tap ("Tell me when they answer" on the waiting page; a member's "Turn on", slice W2;
  * src/lib/web-push.ts), never on load, at scope /app/. No fetch handler and no cache: the app works exactly as without it.
- * It holds no key, signs nothing and reads no storage of the member's (src/lib/sw-rules.test.ts holds it to that).
+ * It holds no key, signs nothing and reads no storage of the member's (src/lib/web-push.test.ts holds it to that).
  *
  * What it shows is fixed: the title is always "BeanPool", never the payload's; the text is the payload's one sentence (its
  * kind's fixed words, which the community's own server encrypted to this browser; anything that is not a short plain

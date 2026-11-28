@@ -154,7 +154,7 @@ export interface SecurityNote {
      * and hour: kept as a hash, never told. Left out: the server itself.
      */
     actor?: string;
-    /** The actor's role in words for the hourly "N more changes by the same …" line: 'owner', 'admin', 'admin password'. */
+    /** The actor's role in words for the hourly "N more changes by the same …" line: 'owner', 'admin', 'sign-in code'. */
     actorRole?: string;
     /** An owner made or removed, break-glass: never folded out of the channel or the Alerts card, pushed under its own bound. */
     high?: boolean;
@@ -177,10 +177,10 @@ export interface SecurityNote {
     alsoPush?: string[];
 }
 
-/** Who acted, for the per-actor bound only (never told): a key session's member, else the admin password. */
+/** Who acted, for the per-actor bound only (never told): a key session's member, else a sign-in code. */
 export function actingAs(state: unknown, role = 'owner'): { actor: string; actorRole: string } {
     const s = state as { isKeySession?: boolean; actor?: unknown } | undefined;
-    return s?.isKeySession && s.actor ? { actor: String(s.actor), actorRole: role } : { actor: 'owner:password', actorRole: 'admin password' };
+    return s?.isKeySession && s.actor ? { actor: String(s.actor), actorRole: role } : { actor: 'owner:password', actorRole: 'sign-in code' };
 }
 
 type Handler = (note: SecurityNote) => void;

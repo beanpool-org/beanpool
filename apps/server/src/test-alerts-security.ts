@@ -128,6 +128,7 @@ async function main(): Promise<void> {
     const { deliverRecoverNotices } = await import('./recover-command.js');
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
     const alerts = await import('./services/alerts.js');
+    const { actingAs } = await import('./services/security-signal.js');
     const { initTls } = await import('./services/tls.js');
     const https = await import('./https-server.js');
 
@@ -853,6 +854,16 @@ async function main(): Promise<void> {
             `7. ${label}: says wrong sign-in code(s), no stale admin password (${JSON.stringify(text)})`,
         );
     }
+    const nonKeyActor = actingAs(undefined);
+    assert(
+        nonKeyActor.actorRole === 'sign-in code' && !/admin password/i.test(nonKeyActor.actorRole),
+        `7. actingAs(undefined) labels non-key-session actor as "sign-in code", not "admin password" (${JSON.stringify(nonKeyActor)})`,
+    );
+    const keyActor = actingAs({ isKeySession: true, actor: owner }, 'admin');
+    assert(
+        keyActor.actor === owner && keyActor.actorRole === 'admin',
+        `7. actingAs(key session) keeps member actor and role (${JSON.stringify(keyActor)})`,
+    );
     for (const [label, text] of [
         ['live refuseBraked(source, recovery)', mockRefuse('source', 'recovery')],
         ['live refuseBraked(node, recovery)', mockRefuse('node', 'recovery')],

@@ -39,7 +39,7 @@ import { generateBreakGlassCode, verifyBreakGlassCode } from './admin-key-auth.j
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { limiterKeyForIp } from './client-ip.js';
-import { SOURCE_FREE_FAILURES, sourceClosedUntil } from './password-brake.js';
+import { SOURCE_FREE_FAILURES, sourceClosedUntil, setPasswordBrakeClockForTests } from './password-brake.js';
 import { adminSigninFields, settingsSigninFields, signedHeaders } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
@@ -150,19 +150,26 @@ async function part1BreakGlass(owner: Key): Promise<void> {
         headers: asCode('x-break-glass-code', `bg-0000-0000-0000-${i.toString(16).padStart(4, '0')}`),
         body: { memberPubkey: target.pub, role: 'admin' },
     });
-    const firstFive: number[] = [];
-    for (let i = 0; i < SOURCE_FREE_FAILURES; i++) firstFive.push((await enrolWrong(i)).status);
-    const sixthSent = enrolWrong(SOURCE_FREE_FAILURES);
-    for (let i = 0; i < 500 && sourceClosedUntil(limiterKeyForIp(X)) <= Date.now(); i++) await new Promise((done) => setTimeout(done, 10));
-    const closedAtSixth = sourceClosedUntil(limiterKeyForIp(X)) > Date.now();
-    // While X is closed, the enrol route still allows one check of the owner's real code, then holds X (429) on further tries.
+    const brakeNow = Date.now();
+    setPasswordBrakeClockForTests(() => brakeNow);
     const other = member('BgFromBraked');
-    const fromBraked = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: asCode('x-break-glass-code'), body: { memberPubkey: other.pub, role: 'admin' } });
-    const afterHeldCheck = await enrolWrong(SOURCE_FREE_FAILURES + 1);
-    const sixth = await sixthSent;
-    assert(SOURCE_FREE_FAILURES === 5 && firstFive.every((st) => st === 401) && sixth.status === 401 && closedAtSixth
-        && afterHeldCheck.status === 429 && afterHeldCheck.json?.passwordBackoff === true && roleOf(target.pub) === null,
-        `on the enrol route the brake counts each wrong break-glass code: the ${SOURCE_FREE_FAILURES + 1}th closes that address and further tries wait (${firstFive.join(',')}; ${sixth.status}, ${afterHeldCheck.status})`);
+    let fromBraked: Reply;
+    try {
+        const firstFive: number[] = [];
+        for (let i = 0; i < SOURCE_FREE_FAILURES; i++) firstFive.push((await enrolWrong(i)).status);
+        const sixthSent = enrolWrong(SOURCE_FREE_FAILURES);
+        for (let i = 0; i < 500 && sourceClosedUntil(limiterKeyForIp(X)) <= brakeNow; i++) await new Promise((done) => setTimeout(done, 10));
+        const closedAtSixth = sourceClosedUntil(limiterKeyForIp(X)) > brakeNow;
+        // While X is closed, the enrol route still allows one check of the owner's real code, then holds X (429) on further tries.
+        fromBraked = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: asCode('x-break-glass-code'), body: { memberPubkey: other.pub, role: 'admin' } });
+        const afterHeldCheck = await enrolWrong(SOURCE_FREE_FAILURES + 1);
+        const sixth = await sixthSent;
+        assert(SOURCE_FREE_FAILURES === 5 && firstFive.every((st) => st === 401) && sixth.status === 401 && closedAtSixth
+            && afterHeldCheck.status === 429 && afterHeldCheck.json?.passwordBackoff === true && roleOf(target.pub) === null,
+            `on the enrol route the brake counts each wrong break-glass code: the ${SOURCE_FREE_FAILURES + 1}th closes that address and further tries wait (${firstFive.join(',')}; ${sixth.status}, ${afterHeldCheck.status})`);
+    } finally {
+        setPasswordBrakeClockForTests(null);
+    }
 
     // The enrol route takes it, as the docs say: from a clean address, and from the braked one too (checked above).
     const enrolByCode = await req('/api/local/admin/auth/break-glass/enrol', {

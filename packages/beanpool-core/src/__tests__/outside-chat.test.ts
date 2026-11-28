@@ -93,8 +93,15 @@ describe('a line across communities', () => {
     it('opens for its recipient with the words and the name inside the seal, under the conversation of the two keys', async () => {
         const opened = openOutsideLine(payload, await envelopeFor(), ben);
         expect(opened).toEqual({ messageId, conversationId: relayConversationId(anaKey, benKey), text: 'Hello from Riverside', name: 'Ana Ríos', replyToId: null });
-        expect(payload).not.toContain('Ana');
-        expect(payload).not.toContain('Riverside');
+        // Neither the name nor the words appear outside the seal or in the decoded ciphertext/nonce bytes.
+        // Never match a short ASCII slice like 'Ana' against base64 ciphertext: random base64 spells it ~1 in 1,000 runs.
+        const wire = JSON.parse(payload) as { v: number; c: string; n: string };
+        expect(Object.keys(wire).sort()).toEqual(['c', 'n', 'v']);
+        const sealedBytes = Buffer.concat([Buffer.from(wire.c, 'base64'), Buffer.from(wire.n, 'base64')]);
+        expect(sealedBytes.includes(Buffer.from('Ana Ríos', 'utf8'))).toBe(false);
+        expect(sealedBytes.includes(Buffer.from('Hello from Riverside', 'utf8'))).toBe(false);
+        expect(payload).not.toContain('Ana Ríos');
+        expect(payload).not.toContain('Hello from Riverside');
     });
 
     it('a reply is bound to the line it answers', async () => {

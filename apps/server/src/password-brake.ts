@@ -114,6 +114,32 @@ export const SHARED_SOURCE_MAX_DELAY_MS = 10 * 60_000;
 export const MAX_SOURCES = 100_000;
 export const MAX_PREFIXES = 100_000;
 
+/**
+ * Every operator- and caller-facing line the brake writes (logs, the `sec.password-burst` alert details, and the 429
+ * refusal messages). The node has no admin password any more: what this brakes is wrong sign-in codes (break-glass
+ * codes on the enrol routes, and recovery codes on the take-over / restore / check routes).
+ */
+export const SIGNIN_CODE_BRAKE_WORDS = {
+    nodeCapLog: (checksPerMin: number) =>
+        `[password-brake] wrong sign-in codes are arriving from many addresses; this node now checks at most ${checksPerMin} a minute from addresses that failed in the last day. Addresses with no failure, and key sign-in, are unaffected.`,
+    nodeCapAlert: (checksPerMin: number) =>
+        `Wrong sign-in codes are arriving from many addresses: this server now checks at most ${checksPerMin} a minute from addresses that failed. Key sign-in is unaffected.`,
+    sourceBackoffLog: (failures: number, addressTag: string, maxDelayMin: number) =>
+        `[password-brake] ${failures} wrong sign-in codes from ${addressTag} (the address, hashed with a key that changes daily); that address now backs off (up to ${maxDelayMin} min between attempts). Other addresses and key sign-in are unaffected.`,
+    sourceBackoffAlert: (failures: number) =>
+        `${failures} wrong sign-in codes came from one address, which now waits between tries. Other addresses and key sign-in are unaffected.`,
+    sharedProxyLog: (addressTag: string, maxDelayMin: number) =>
+        `[password-brake] A proxy (${addressTag}) passes on requests for other people, but it is not in TRUSTED_PROXIES, so this node sees everyone behind it as one address: wrong sign-in codes from any of them make all of them wait (up to ${maxDelayMin} min). Add your proxy's address to TRUSTED_PROXIES in the node's .env and restart the node; the restart also clears the brake.`,
+    refuseSource: (waitSec: number) =>
+        `Too many wrong sign-in codes from your network. Try again in ${waitSec}s, or from another network (mobile data, another Wi-Fi), or sign in with your key.`,
+    refuseNode: (waitSec: number) =>
+        `This node is getting a lot of wrong sign-in codes from elsewhere, so it is checking fewer right now. Try again in ${waitSec}s, or from another network, or sign in with your key.`,
+    refuseRecoverySource: (waitSec: number) =>
+        `Too many wrong recovery codes from your network. Try again in ${waitSec}s, or from another network (mobile data, another Wi-Fi).`,
+    refuseRecoveryNode: (waitSec: number) =>
+        `This node is getting a lot of wrong recovery codes from elsewhere, so it is checking fewer right now. Try again in ${waitSec}s, or from another network.`,
+} as const;
+
 interface SourceState {
     failures: number;
     lastFailureAt: number;
@@ -297,11 +323,11 @@ export function tryAdmit(key: string, now = passwordBrakeNow()): Admission | 'wa
             if (now - lastNodeCapLog > 10 * 60_000) {
                 lastNodeCapLog = now;
                 try {
-                    logger.security('AUTH', `[password-brake] wrong admin passwords are arriving from many addresses; this node now checks at most ${NODE_CHECKS_PER_MIN} a minute from addresses that failed in the last day. Addresses with no failure, and key sign-in, are unaffected.`);
+                    logger.security('AUTH', SIGNIN_CODE_BRAKE_WORDS.nodeCapLog(NODE_CHECKS_PER_MIN));
                 } catch { /* logging never blocks auth */ }
                 noteSecurityEvent({
                     key: 'sec.password-burst', state: 'seen', priority: 4,
-                    detail: `Wrong admin passwords are arriving from many addresses: this server now checks at most ${NODE_CHECKS_PER_MIN} a minute from addresses that failed. Key sign-in is unaffected.`,
+                    detail: SIGNIN_CODE_BRAKE_WORDS.nodeCapAlert(NODE_CHECKS_PER_MIN),
                 });
             }
             return { admitted: false, retryAfter: Math.min(60, Math.max(1, Math.ceil((freesAt - now) / 1000))), reason: 'node' };
@@ -352,17 +378,17 @@ export function notePasswordFailure(key: string, now = passwordBrakeNow()): void
         if (s.failures === SOURCE_FREE_FAILURES + 1) {
             try {
                 // The address by its daily keyed hash, never itself (log-address.ts).
-                logger.security('AUTH', `[password-brake] ${s.failures} wrong admin passwords from ${logAddressTag(key)} (the address, hashed with a key that changes daily); that address now backs off (up to ${(shared ? SHARED_SOURCE_MAX_DELAY_MS : MAX_DELAY_MS) / 60_000} min between attempts). Other addresses and key sign-in are unaffected.`);
+                logger.security('AUTH', SIGNIN_CODE_BRAKE_WORDS.sourceBackoffLog(s.failures, logAddressTag(key), (shared ? SHARED_SOURCE_MAX_DELAY_MS : MAX_DELAY_MS) / 60_000));
             } catch { /* logging never blocks auth */ }
             noteSecurityEvent({
                 key: 'sec.password-burst', state: 'seen', priority: 3,
-                detail: `${s.failures} wrong admin passwords came from one address, which now waits between tries. Other addresses and key sign-in are unaffected.`,
+                detail: SIGNIN_CODE_BRAKE_WORDS.sourceBackoffAlert(s.failures),
             });
         }
         if (shared && now - lastSharedLog > 10 * 60_000) {
             lastSharedLog = now;
             try {
-                logger.warn('AUTH', `[password-brake] A proxy (${logAddressTag(key)}) passes on requests for other people, but it is not in TRUSTED_PROXIES, so this node sees everyone behind it as one address: wrong admin passwords from any of them make all of them wait (up to ${SHARED_SOURCE_MAX_DELAY_MS / 60_000} min). Add your proxy's address to TRUSTED_PROXIES in the node's .env and restart the node; the restart also clears the brake.`);
+                logger.warn('AUTH', SIGNIN_CODE_BRAKE_WORDS.sharedProxyLog(logAddressTag(key), SHARED_SOURCE_MAX_DELAY_MS / 60_000));
             } catch { /* logging never blocks auth */ }
         }
     }
@@ -394,15 +420,24 @@ export function settlePasswordAttempt(key: string, ok: boolean, reset = true, no
     for (const w of wake) w();
 }
 
-/** Answer a request the brake refused. A recovery code's caller sets its own words after (the take-over, the restore). */
-export function refuseBraked(ctx: Koa.Context | any, refusal: { retryAfter: number; reason: 'source' | 'node' }): void {
+/** Answer a request the brake refused. Pass `kind: 'recovery'` on recovery-code routes so an already-signed-in owner is not told to sign in with their key. */
+export function refuseBraked(
+    ctx: Koa.Context | any,
+    refusal: { retryAfter: number; reason: 'source' | 'node' },
+    kind: 'signin' | 'recovery' = 'signin',
+): void {
     const wait = refusal.retryAfter;
     ctx.status = 429;
     if (typeof ctx.set === 'function') ctx.set('Retry-After', String(wait));
+    const error = kind === 'recovery'
+        ? (refusal.reason === 'source'
+            ? SIGNIN_CODE_BRAKE_WORDS.refuseRecoverySource(wait)
+            : SIGNIN_CODE_BRAKE_WORDS.refuseRecoveryNode(wait))
+        : (refusal.reason === 'source'
+            ? SIGNIN_CODE_BRAKE_WORDS.refuseSource(wait)
+            : SIGNIN_CODE_BRAKE_WORDS.refuseNode(wait));
     ctx.body = {
-        error: refusal.reason === 'source'
-            ? `Too many wrong admin passwords from your network. Try again in ${wait}s, or from another network (mobile data, another Wi-Fi), or sign in with your key.`
-            : `This node is getting a lot of wrong admin passwords from elsewhere, so it is checking fewer right now. Try again in ${wait}s, or from another network, or sign in with your key.`,
+        error,
         retryAfter: wait,
         // Which rule held it: this source's own count, or the node-wide one (design case 18 §9 S2 reads it).
         reason: refusal.reason,

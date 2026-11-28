@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, isPhoneHandoffSession, FRESH_PROOF_WINDOW_MS, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, type AdminSessionBinding } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, refuseBraked, resetPasswordBrake, passwordBrakeNow, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
-import { isBreakGlassCodeShape } from './break-glass-code.js';
+import { isBreakGlassCodeShape, MAX_RAW_CODE_LENGTH } from './break-glass-code.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
 import { isNodeOwner, nodeRoleOf } from './engine/node-roles.js';
@@ -127,7 +127,9 @@ function sentBreakGlassCode(ctx: any): string | null {
         ctx.request?.headers?.['x-break-glass-code'] ||
         ctx.headers?.['x-break-glass-code'] ||
         ctx.requestBody?.breakGlassCode || ctx.request?.body?.breakGlassCode;
-    return raw ? String(raw).trim() : null;
+    if (typeof raw !== 'string') return null;
+    if (raw.length > MAX_RAW_CODE_LENGTH) return raw;
+    return raw.trim() || null;
 }
 
 export const TOKEN_REFUSED_CODE = 'token_not_allowed';
@@ -223,22 +225,30 @@ async function checkBreakGlassCodeAuth(ctx: any): Promise<boolean> {
         return false;
     }
 
+    if (!isBreakGlassCodeShape(code)) {
+        // A value without a break-glass code's shape (a junk password from a bot, an old manager page, or a typo) can
+        // never match any 64-bit code and runs no scrypt or DB query. Answering 401 before the brake keeps junk from
+        // polluting the brake or firing false "wrong sign-in codes" alerts, matching how recovery-code routes reject
+        // typos before acquirePasswordAttempt (routes/takeover-envelope.ts, routes/backup.ts).
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid break-glass code' };
+        return false;
+    }
+
     const brakeKey = clientLimiterKey(ctx);
     const admission = await acquirePasswordAttempt(brakeKey);
     let refusal: Exclude<Admission, { admitted: true }> | null = admission.admitted ? null : admission;
     let owner: string | null = null;
     try {
-        if (isBreakGlassCodeShape(code)) {
-            const wait = admission.admitted ? 0 : admitBreakGlassWhileBraked(brakeKey);
-            if (wait > 0 && refusal) {
-                refusal = { ...refusal, retryAfter: wait };
-            } else {
-                const ownerMatch = await verifyBreakGlassCode(code);
-                if (ownerMatch) owner = ownerMatch.member_pubkey;
-                logger.security('AUTH', owner
-                    ? `Break-glass code of ${owner.slice(0, 12)}… accepted to enrol an admin key (${reqPath}, from ${logAddressTag(brakeKey)})`
-                    : `A wrong break-glass code was refused at ${reqPath} (from ${logAddressTag(brakeKey)})`);
-            }
+        const wait = admission.admitted ? 0 : admitBreakGlassWhileBraked(brakeKey);
+        if (wait > 0 && refusal) {
+            refusal = { ...refusal, retryAfter: wait };
+        } else {
+            const ownerMatch = await verifyBreakGlassCode(code);
+            if (ownerMatch) owner = ownerMatch.member_pubkey;
+            logger.security('AUTH', owner
+                ? `Break-glass code of ${owner.slice(0, 12)}… accepted to enrol an admin key (${reqPath}, from ${logAddressTag(brakeKey)})`
+                : `A wrong break-glass code was refused at ${reqPath} (from ${logAddressTag(brakeKey)})`);
         }
     } finally {
         if (admission.admitted) settlePasswordAttempt(brakeKey, !!owner);

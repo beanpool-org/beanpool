@@ -43,6 +43,7 @@ import { resetAdminAuthTarpit, BREAK_GLASS_WHILE_BRAKED_MS } from './admin-auth.
 import {
     SOURCE_FREE_FAILURES, BASE_DELAY_MS, MAX_DELAY_MS, FORGET_MS, NODE_CHECKS_PER_MIN, NODE_BACKOFF_CHECKS_PER_MIN, PREFIX_CLEAN_FAILURES,
     tryAdmit, settlePasswordAttempt, notePasswordFailure, prefixOf, resetPasswordBrake, setPasswordBrakeClockForTests,
+    passwordBrakeSizes, sourceClosedUntil,
 } from './password-brake.js';
 import { adminSigninFields } from './signed-request-test-helper.js';
 
@@ -260,8 +261,8 @@ async function part3Http() {
     /** A value on the enrol route (POST /auth/enrol, X-Break-Glass-Code) from `ip`, enrolling `memberPubkey` as an admin. */
     const enrol = (value: string, ip: string, memberPubkey = newHelper(), route = '/api/local/admin/auth/enrol') =>
         req(route, { method: 'POST', body: { memberPubkey, role: 'admin' }, headers: { 'x-break-glass-code': value, ...viaTunnel(ip) } });
-    /** A wrong value that is no code at all: checked against nothing, but counted, as any guess is. */
-    const junk = (i: number | string) => `wrong-${i}`;
+    /** A wrong break-glass-shaped code: a genuine guess at a 64-bit code, checked and counted by the brake. */
+    const wrongCode = (i: number) => `bg-${(i & 0xffff).toString(16).padStart(4, '0')}-0000-0000-0000`;
     /**
      * The brake's clock stands still through these parts and moves only here, to `ms` after the start. On the real clock
      * a source's first wait is BASE_DELAY_MS (2 s), the tarpit alone holds the sixth wrong value's answer for 1.5 s of it,
@@ -279,18 +280,17 @@ async function part3Http() {
     const A = '203.0.113.66';
     {
         const s: number[] = [];
-        for (let i = 0; i < 30; i++) s.push((await enrol(junk(i), A)).status);
+        for (let i = 0; i < 30; i++) s.push((await enrol(wrongCode(i), A)).status);
         const checked = s.filter(x => x === 401).length;
         assert(checked === SOURCE_FREE_FAILURES + 1 && s.slice(checked).every(x => x === 429),
-            `30 wrong values from A on the enrol route: ${SOURCE_FREE_FAILURES + 1} checked, then A is refused (${checked}×401, ${s.length - checked}×429)`);
-        // A held source still has one code checked every BREAK_GLASS_WHILE_BRAKED_MS (an owner who lost their phone, beside
-        // a guesser on the same network): a wrong one takes that check, and A then waits for the next, the right code too.
-        const wrongCode = await enrol(generateBreakGlassCode(), A);
+            `30 wrong break-glass codes from A on the enrol route: ${SOURCE_FREE_FAILURES + 1} checked, then A is refused (${checked}×401, ${s.length - checked}×429)`);
+        // The first 429 above already took A's one held check (BREAK_GLASS_WHILE_BRAKED_MS), so A's right code waits too.
         const aRight = await enrol(CODE, A);
-        assert(wrongCode.status === 429 && aRight.status === 429 && aRight.json?.passwordBackoff === true
+        assert(aRight.status === 429 && aRight.json?.passwordBackoff === true
             && Number(aRight.headers.get('retry-after')) === BREAK_GLASS_WHILE_BRAKED_MS / 1000,
-            `A itself waits: a code from it is checked at most once in ${BREAK_GLASS_WHILE_BRAKED_MS / 1000} s, the right one too (got ${wrongCode.status}, ${aRight.status}, Retry-After ${aRight.headers.get('retry-after')})`);
-        assert(/another network/.test(aRight.json?.error || ''), `and is told another network, or a key, still works ("${aRight.json?.error}")`);
+            `A itself waits: a code from it is checked at most once in ${BREAK_GLASS_WHILE_BRAKED_MS / 1000} s, the right one too (got ${aRight.status}, Retry-After ${aRight.headers.get('retry-after')})`);
+        assert(/another network/.test(aRight.json?.error || '') && /wrong sign-in codes/.test(aRight.json?.error || '') && !/admin password/i.test(aRight.json?.error || ''),
+            `and is told another network, or a key, still works, in "wrong sign-in codes" words ("${aRight.json?.error}")`);
         const b = await enrol(CODE, '198.51.100.7');
         assert(b.status === 200, `the right code from B gets in (got ${b.status}; #937 answered 429)`);
         const bOther = await enrol(CODE, '198.51.100.8', newHelper(), '/api/local/admin/auth/break-glass/enrol');
@@ -309,23 +309,68 @@ async function part3Http() {
         assert(ownWaitOver.status === 200, `once A's own ${BASE_DELAY_MS / 1000} s wait is over the brake checks it, and the right code gets in (got ${ownWaitOver.status})`);
     }
 
+    console.log('\n— HTTP: shape table (non-break-glass junk never counts; real guesses always count) —');
+    resetAdminAuthTarpit();
+    {
+        const shapeCases: Array<{ label: string; value: string; route: string; inBody?: boolean; counts: boolean }> = [
+            { label: 'old admin password in header', value: 'OldAdminPassword-1!', route: '/api/local/admin/auth/enrol', counts: false },
+            { label: 'plain junk word', value: 'not-a-code', route: '/api/local/admin/auth/enrol', counts: false },
+            { label: 'short bg prefix', value: 'bg-1234-5678-9012', route: '/api/local/admin/auth/enrol', counts: false },
+            { label: 'non-hex char in bg shape', value: 'bg-1234-5678-9012-345g', route: '/api/local/admin/auth/break-glass/enrol', counts: false },
+            { label: 'extra digit in bg shape', value: 'bg-1234-5678-9012-34567', route: '/api/local/admin/auth/enrol', inBody: true, counts: false },
+            { label: 'claim-shaped code', value: 'claim-1234-5678-9012-3456', route: '/api/local/admin/auth/break-glass/enrol', inBody: true, counts: false },
+            { label: 'oversized padded string (>256 chars)', value: `${' '.repeat(260)}${CODE}`, route: '/api/local/admin/auth/enrol', inBody: true, counts: false },
+            { label: 'oversized 10KB junk body', value: 'x'.repeat(10_000), route: '/api/local/admin/auth/enrol', inBody: true, counts: false },
+            { label: 'valid lowercase bg shape (enrol header)', value: 'bg-1111-2222-3333-4444', route: '/api/local/admin/auth/enrol', counts: true },
+            { label: 'valid uppercase padded bg shape (enrol header)', value: '  BG-AAAA-BBBB-CCCC-DDDD  ', route: '/api/local/admin/auth/enrol', counts: true },
+            { label: 'valid bg shape (break-glass/enrol header)', value: 'bg-dead-beef-cafe-babe', route: '/api/local/admin/auth/break-glass/enrol', counts: true },
+            { label: 'valid bg shape (enrol body breakGlassCode)', value: 'bg-0123-4567-89ab-cdef', route: '/api/local/admin/auth/enrol', inBody: true, counts: true },
+        ];
+        const sendCase = (c: typeof shapeCases[number], ip: string) =>
+            c.inBody
+                ? req(c.route, { method: 'POST', body: { memberPubkey: newHelper(), role: 'admin', breakGlassCode: c.value }, headers: viaTunnel(ip) })
+                : enrol(c.value, ip, newHelper(), c.route);
+
+        for (let idx = 0; idx < shapeCases.length; idx++) {
+            resetAdminAuthTarpit();
+            const c = shapeCases[idx];
+            const ip = `198.51.100.${100 + idx}`;
+            const tries = SOURCE_FREE_FAILURES + 3;
+            const statuses: number[] = [];
+            for (let t = 0; t < tries; t++) statuses.push((await sendCase(c, ip)).status);
+            if (!c.counts) {
+                assert(
+                    statuses.every((st) => st === 401) && sourceClosedUntil(ip) === 0 && passwordBrakeSizes().sources === 0,
+                    `shape table [${c.label}]: all ${tries} refused 401, brake untouched (statuses=${statuses.join(',')}, sources=${passwordBrakeSizes().sources})`,
+                );
+            } else {
+                const n401 = statuses.filter((st) => st === 401).length;
+                const n429 = statuses.filter((st) => st === 429).length;
+                assert(
+                    n401 === SOURCE_FREE_FAILURES + 1 && n429 === tries - n401 && sourceClosedUntil(ip) > 0,
+                    `shape table [${c.label}]: ${SOURCE_FREE_FAILURES + 1} counted then braked (401=${n401}, 429=${n429})`,
+                );
+            }
+        }
+    }
+
     console.log('\n— HTTP: parallel guesses from one source —');
     resetAdminAuthTarpit();
     {
         const P = '203.0.113.67';
-        const all = await Promise.all(Array.from({ length: 30 }, (_, i) => enrol(junk(`parallel-${i}`), P)));
+        const all = await Promise.all(Array.from({ length: 30 }, (_, i) => enrol(wrongCode(1000 + i), P)));
         const n401 = all.filter(r => r.status === 401).length, n429 = all.filter(r => r.status === 429).length;
         assert(n401 === SOURCE_FREE_FAILURES + 1 && n429 === 30 - n401,
-            `30 wrong values at once from one address: only ${SOURCE_FREE_FAILURES + 1} are checked (401: ${n401}, 429: ${n429})`);
+            `30 wrong break-glass codes at once from one address: only ${SOURCE_FREE_FAILURES + 1} are checked (401: ${n401}, 429: ${n429})`);
     }
 
     console.log('\n— HTTP: a flood from many sources is capped node-wide —');
     resetAdminAuthTarpit();
     {
         const srcs = Array.from({ length: 40 }, (_, i) => `198.18.${i}.9`);
-        const first = await Promise.all(srcs.map(ip => enrol(junk('spread'), ip)));
-        assert(first.every(r => r.status === 401), `40 addresses, one wrong value each: all checked (${first.filter(r => r.status === 401).length}/40)`);
-        const second = await Promise.all(srcs.map(ip => enrol(junk('spread-2'), ip)));
+        const first = await Promise.all(srcs.map((ip, i) => enrol(wrongCode(2000 + i), ip)));
+        assert(first.every(r => r.status === 401), `40 addresses, one wrong break-glass code each: all checked (${first.filter(r => r.status === 401).length}/40)`);
+        const second = await Promise.all(srcs.map((ip, i) => enrol(wrongCode(3000 + i), ip)));
         const n401 = second.filter(r => r.status === 401).length;
         assert(n401 === NODE_CHECKS_PER_MIN && second.filter(r => r.status === 429).length === 40 - NODE_CHECKS_PER_MIN,
             `their second round: only ${NODE_CHECKS_PER_MIN} checked this minute, the rest 429 (checked ${n401})`);
@@ -339,8 +384,9 @@ async function part3Http() {
         // Close K for a few minutes (the steps below take longer than a 2 s wait).
         const K = '203.0.113.70';
         for (let i = 0; i < SOURCE_FREE_FAILURES + 8; i++) notePasswordFailure(K);
-        const closed = await enrol(junk('closed'), K);
-        assert(closed.status === 429, `K is closed (got ${closed.status})`);
+        // Non-shaped junk from a braked address returns 401 immediately without consuming the held check.
+        const junkWhileBraked = await enrol('not-the-code', K);
+        assert(junkWhileBraked.status === 401, `non-shaped junk from braked K returns 401 without taking the held check (got ${junkWhileBraked.status})`);
 
         const chal = await req('/api/local/admin/auth/challenge', { method: 'POST', headers: viaTunnel(K) });
         const solved = await req('/api/local/admin/auth/verify-challenge', {
@@ -360,8 +406,8 @@ async function part3Http() {
             `the code from the braked address on any other route is not read: 401, no credential (got ${bgElsewhere.status})`);
         const bg = await enrol(CODE, K);
         assert(bg.status === 200, `a break-glass code from the braked address is still checked on the enrol route (got ${bg.status})`);
-        const bgWrong = await enrol('not-the-code', K);
-        assert(bgWrong.status === 429, `a wrong value from it gets the brake's 429 (got ${bgWrong.status})`);
+        const bgWrong = await enrol(wrongCode(9999), K);
+        assert(bgWrong.status === 429, `a wrong break-glass code from it gets the brake's 429 (got ${bgWrong.status})`);
     }
 
     // Until 2026-10-01 ?auth=<password> opened the socket with 2FA off, under this brake; that door is gone. These

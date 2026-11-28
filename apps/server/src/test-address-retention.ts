@@ -70,7 +70,7 @@ const { setNodeRole } = await import('./config/node-role.js');
 const { startP2P } = await import('./p2p.js');
 const { setReplicationToken } = await import('./config/local-config.js');
 const { checkAdminAuth, resetAdminAuthTarpit } = await import('./admin-auth.js');
-const { notePasswordFailure, acquirePasswordAttempt, settlePasswordAttempt, resetPasswordBrake } = await import('./password-brake.js');
+const { notePasswordFailure, acquirePasswordAttempt, settlePasswordAttempt, resetPasswordBrake, setPasswordBrakeClockForTests } = await import('./password-brake.js');
 const { resolveClientIp, resetUntrustedForwardersForTests } = await import('./client-ip.js');
 const { gatewayAdmit, resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
 const { createBackupRoutes } = await import('./routes/backup.js');
@@ -196,14 +196,21 @@ async function main() {
         resetUntrustedForwardersForTests();
         // What the brake guards (the node has no admin password): an owner's break-glass code on the enrol route, sent
         // here wrong, through the real checkAdminAuth.
-        const enrolFrom = (ip: string) => ({ state: {}, ip, path: '/api/local/admin/auth/enrol', method: 'POST', headers: { 'x-break-glass-code': 'not-a-code' },
+        const enrolFrom = (ip: string) => ({ state: {}, ip, path: '/api/local/admin/auth/enrol', method: 'POST', headers: { 'x-break-glass-code': 'bg-0000-0000-0000-0000' },
             status: 0, body: null as unknown, set: () => { }, get: () => '' });
         const results: string[] = [];
         // The tarpit is not reset between them: resetAdminAuthTarpit() clears the brake too.
-        for (let i = 0; i < 7; i++) {
-            const c = enrolFrom('203.0.113.50');
-            const ok = await checkAdminAuth(c);
-            results.push(ok ? 'ok' : c.status === 401 ? 'wrong' : c.status === 429 ? 'braked' : `status ${c.status}`);
+        // Freeze the brake clock so the 6th attempt's 1.5s tarpit + DB/log work cannot outrun the 2s BASE_DELAY_MS window on a busy runner.
+        const brakeNow = Date.now();
+        setPasswordBrakeClockForTests(() => brakeNow);
+        try {
+            for (let i = 0; i < 7; i++) {
+                const c = enrolFrom('203.0.113.50');
+                const ok = await checkAdminAuth(c);
+                results.push(ok ? 'ok' : c.status === 401 ? 'wrong' : c.status === 429 ? 'braked' : `status ${c.status}`);
+            }
+        } finally {
+            setPasswordBrakeClockForTests(null);
         }
         assert(results.slice(0, 6).every((r) => r === 'wrong') && results[6] === 'braked',
             `2. six wrong break-glass codes from one address, then the brake makes it wait (${results.join(', ')})`);
@@ -212,7 +219,7 @@ async function main() {
         for (let i = 0; i < 6; i++) notePasswordFailure('2001:db8:5:6::/64');
         const v6After = await acquirePasswordAttempt('2001:db8:5:6::/64');
         assert(!v6After.admitted, '2. …and so it does for an IPv6 /64');
-        const brakeLines = logText().split('\n').filter((l) => l.includes('[password-brake]') && l.includes('wrong admin passwords from'));
+        const brakeLines = logText().split('\n').filter((l) => l.includes('[password-brake]') && l.includes('wrong sign-in codes from'));
         assert(brakeLines.length >= 2, `2. the brake logged each source once (${brakeLines.length})`);
         const tagOf50 = logTag?.logAddressTag('203.0.113.50');
         assert(!!tagOf50 && brakeLines.some((l) => l.includes(`from ${tagOf50} `)), `2. the brake's line names the address by its daily hash (${tagOf50})`);

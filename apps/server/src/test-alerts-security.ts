@@ -304,7 +304,8 @@ async function main(): Promise<void> {
     for (let i = 0; i <= brake.SOURCE_FREE_FAILURES; i++) brake.notePasswordFailure('203.0.113.7');
     await settle();
     let pw = alerts.getAlertsStatus().active.find((a) => a.key === 'sec.password-burst');
-    assert(!!pw && pw.priority === 3 && /6 wrong admin passwords came from one address/.test(pw.detail), `2. one address backing off: raised, default (${pw?.priority} ${pw?.detail})`);
+    assert(!!pw && pw.priority === 3 && /6 wrong sign-in codes came from one address/.test(pw.detail), `2. one address backing off: raised, default (${pw?.priority} ${pw?.detail})`);
+    assert(pw?.title === 'wrong sign-in codes', `2. alert title says wrong sign-in codes (${pw?.title})`);
     assert(!pw!.detail.includes('203.0.113'), '2. never the address');
     const pwEvents = historyOf('sec.password-burst').length;
     brake.notePasswordFailure('203.0.113.7');
@@ -330,6 +331,7 @@ async function main(): Promise<void> {
     advance(16 * MIN);
     await tick();
     assert(lastHistory('sec.password-burst')?.kind === 'cleared', `2. an hour without another, then the hold: resolved (${lastHistory('sec.password-burst')?.kind})`);
+    const clearedBurstDetail = lastHistory('sec.password-burst')?.detail ?? '';
     brake.resetPasswordBrake();
 
     issueBreakGlassCode(owner, 'a test', 'app');
@@ -818,6 +820,58 @@ async function main(): Promise<void> {
     grantNodeRole(flipped, 'owner', 'claim:claim-test-id');
     await settle();
     assert(historyOf('sec.role').length === roles6, `6. the claim's own owner grant is no second alert (${historyOf('sec.role').length - roles6})`);
+
+    // ── 7. Exhaustive table over every alert/brake word: plain "wrong sign-in codes", no "admin password" left ──
+    const mockRefuse = (reason: 'source' | 'node', kind: 'signin' | 'recovery' = 'signin') => {
+        const ctx: any = { status: 0, body: null, headers: {} as Record<string, string>, set(k: string, v: string) { this.headers[k] = v; } };
+        brake.refuseBraked(ctx, { retryAfter: 17, reason }, kind);
+        return String(ctx.body?.error ?? '');
+    };
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+    const readGuideLine = (rel: string, needle: string) =>
+        fs.readFileSync(path.join(repoRoot, rel), 'utf8').split('\n').find((l) => l.includes(needle)) ?? '';
+    const brakeWordsTable: Array<[string, string]> = [
+        ['alerts.PASSWORD_BURST_ALERT_WORDS.title', alerts.PASSWORD_BURST_ALERT_WORDS.title],
+        ['alerts.PASSWORD_BURST_ALERT_WORDS.cleared', alerts.PASSWORD_BURST_ALERT_WORDS.cleared],
+        ['live cleared sec.password-burst history detail', clearedBurstDetail],
+        ['SIGNIN_CODE_BRAKE_WORDS.nodeCapLog', brake.SIGNIN_CODE_BRAKE_WORDS.nodeCapLog(brake.NODE_CHECKS_PER_MIN)],
+        ['SIGNIN_CODE_BRAKE_WORDS.nodeCapAlert', brake.SIGNIN_CODE_BRAKE_WORDS.nodeCapAlert(brake.NODE_CHECKS_PER_MIN)],
+        ['SIGNIN_CODE_BRAKE_WORDS.sourceBackoffLog', brake.SIGNIN_CODE_BRAKE_WORDS.sourceBackoffLog(6, 'ip#test1234', 60)],
+        ['SIGNIN_CODE_BRAKE_WORDS.sourceBackoffAlert', brake.SIGNIN_CODE_BRAKE_WORDS.sourceBackoffAlert(6)],
+        ['SIGNIN_CODE_BRAKE_WORDS.sharedProxyLog', brake.SIGNIN_CODE_BRAKE_WORDS.sharedProxyLog('ip#proxy123', 10)],
+        ['SIGNIN_CODE_BRAKE_WORDS.refuseSource', brake.SIGNIN_CODE_BRAKE_WORDS.refuseSource(17)],
+        ['SIGNIN_CODE_BRAKE_WORDS.refuseNode', brake.SIGNIN_CODE_BRAKE_WORDS.refuseNode(17)],
+        ['live refuseBraked(source)', mockRefuse('source')],
+        ['live refuseBraked(node)', mockRefuse('node')],
+        ['operators/server/updates-and-health.md alert line', readGuideLine('packages/beanpool-guide/operators/server/updates-and-health.md', 'titled "wrong sign-in codes"')],
+        ['operators/server/rate-limits.md brake message line', readGuideLine('packages/beanpool-guide/operators/server/rate-limits.md', 'Too many wrong sign-in codes from your network')],
+        ['operators/help/troubleshooting.md brake line', readGuideLine('packages/beanpool-guide/operators/help/troubleshooting.md', 'Too many wrong sign-in codes')],
+    ];
+    for (const [label, text] of brakeWordsTable) {
+        assert(
+            text.length > 0 && /wrong sign-in codes?/i.test(text) && !/admin password/i.test(text) && !/wrong[^.\n]*password/i.test(text),
+            `7. ${label}: says wrong sign-in code(s), no stale admin password (${JSON.stringify(text)})`,
+        );
+    }
+    for (const [label, text] of [
+        ['live refuseBraked(source, recovery)', mockRefuse('source', 'recovery')],
+        ['live refuseBraked(node, recovery)', mockRefuse('node', 'recovery')],
+    ] as const) {
+        assert(
+            text.length > 0 && /wrong recovery codes/i.test(text) && !/sign-in|sign in with your key|password/i.test(text),
+            `7. ${label}: says wrong recovery codes, never sign-in or password (${JSON.stringify(text)})`,
+        );
+    }
+    for (const [label, rel, needle] of [
+        ['operators/server/rate-limits.md brake message line', 'packages/beanpool-guide/operators/server/rate-limits.md', 'Too many wrong sign-in codes from your network'],
+        ['operators/help/troubleshooting.md brake line', 'packages/beanpool-guide/operators/help/troubleshooting.md', 'Too many wrong sign-in codes'],
+    ] as const) {
+        const text = readGuideLine(rel, needle);
+        assert(
+            /wrong recovery codes/i.test(text),
+            `7. ${label}: also documents wrong recovery codes (${JSON.stringify(text)})`,
+        );
+    }
 
     await ntfy.close();
     console.log(`\n${testsPassed}/${testsRun} passed`);

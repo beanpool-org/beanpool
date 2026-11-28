@@ -219,7 +219,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
             if (!(await requireFreshProof(ctx, bodyOf(ctx).code, `add ${address}`))) return;
             updateNodeConfig({ ownerAddresses: [...ownerAddressEntries(), address] });
             forgetOwnAddresses();
-            logger.security('AUTH', `App address confirmed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
+            logger.security('AUTH', `App address confirmed in Settings by ${(ctx.state as any)?.actor || 'an owner'}: ${address}`);
         }
         ctx.set('Cache-Control', 'no-store');
         ctx.body = appAddressesReport(ctx.query.host);
@@ -254,7 +254,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
             ownerAddresses: withoutOwnerAddress(ownerAddressEntries(), address), ...(alsoPublic ? { publicAddress: null } : {}), ...(wasMain ? { mainAddress: null } : {}),
         } as any);
         forgetOwnAddresses();
-        logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
+        logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'an owner'}: ${address}`);
         ctx.set('Cache-Control', 'no-store');
         ctx.body = appAddressesReport(ctx.query.host);
     });
@@ -288,7 +288,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         if (!(await requireFreshProof(ctx, body.code, `make ${address} the main address`))) return;
         const before = setMainAddress(address);
         if (before !== address) {
-            logger.security('AUTH', `Main address set in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address} (was ${before ?? 'none'})`);
+            logger.security('AUTH', `Main address set in Settings by ${(ctx.state as any)?.actor || 'an owner'}: ${address} (was ${before ?? 'none'})`);
             if (before) tellMembersOfNewMain(address);
         }
         ctx.set('Cache-Control', 'no-store');
@@ -344,7 +344,7 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
         if (!(await requireFreshProof(ctx, body.code, `${action === 'add' ? 'add' : 'remove'} ${address} as a spare`))) return;
         updateNodeConfig({ addressSpares: action === 'add' ? [...current, address] : current.filter((a) => a !== address) });
         tickAddressList();
-        logger.security('AUTH', `Spare ${action === 'add' ? 'added' : 'removed'} in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
+        logger.security('AUTH', `Spare ${action === 'add' ? 'added' : 'removed'} in Settings by ${(ctx.state as any)?.actor || 'an owner'}: ${address}`);
         ctx.set('Cache-Control', 'no-store');
         ctx.body = appAddressesReport(ctx.query.host);
     });

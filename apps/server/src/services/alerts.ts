@@ -16,7 +16,7 @@
  *
  * And who gains power on it (slice S4, services/security-signal.ts): an owner, admin or moderator role granted or taken
  * away, and how (by an owner, by the password, break-glass, with the claim code); the community claimed; a break-glass
- * code made or retired, the admin password retired, new 2FA backup codes; wrong admin passwords or claim proofs arriving
+ * code made or retired; wrong sign-in codes or claim proofs arriving
  * (ended by an hour without another); the community's address naming another community; and this server replaced by
  * another with the same keys, told urgent and daily until an owner acknowledges it. A one-shot security event counts in
  * the banner for a day, or until an owner acknowledges it. Each says what happened and how, never who.
@@ -182,6 +182,12 @@ interface Row {
     banner: boolean;
 }
 
+/** Words for the wrong sign-in codes alert (`sec.password-burst`), kept in one place for tests and docs. */
+export const PASSWORD_BURST_ALERT_WORDS = {
+    title: 'wrong sign-in codes',
+    cleared: 'No wrong sign-in code for an hour.',
+} as const;
+
 const DAY = 24 * 60 * 60_000;
 /** Pushed every time it is told, under the per-actor bound of raiseSecurity (SECURITY_PUSHES_PER_HOUR). */
 const EACH = -1;
@@ -206,7 +212,7 @@ const ROWS: Record<AlertKey, Row> = {
     /** Less than TLS_EXPIRING_MS left on a certificate this server serves: after it, apps and browsers refuse the address. */
     'tls.expiring': { title: 'certificate expires within a day', priority: 5, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.role': { title: 'a role changed', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
-    'sec.password-burst': { title: 'wrong admin passwords', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
+    'sec.password-burst': { title: PASSWORD_BURST_ALERT_WORDS.title, priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.claim': { title: 'claimed with its claim code', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     'sec.claim-guess': { title: 'wrong claim proofs', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
     'sec.keys': { title: 'a sign-in key or code changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
@@ -1163,12 +1169,12 @@ setSecurityAlertHandler((note) => {
     raiseSecurity(note).catch((e) => logger.warn('SYS', `[Alerts] A security alert could not be told: ${errorMessage(e)}`));
 });
 
-/** Wrong passwords or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is). */
+/** Wrong sign-in codes or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is). */
 function securityQuietConditions(s: BookState, t: number): Condition[] {
     const out: Condition[] = [];
     for (const key of SECURITY_SEEN) {
         if (!s.raised[key] || t - (s.seenAt[key] ?? 0) < SECURITY_QUIET_MS) continue;
-        out.push({ key, active: false, detail: key === 'sec.claim-guess' ? 'No wrong claim proof for an hour.' : 'No wrong admin password for an hour.' });
+        out.push({ key, active: false, detail: key === 'sec.claim-guess' ? 'No wrong claim proof for an hour.' : PASSWORD_BURST_ALERT_WORDS.cleared });
     }
     return out;
 }
